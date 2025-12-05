@@ -1,6 +1,7 @@
 use anyhow::{bail, Result};
 use clap::{Parser, CommandFactory, FromArgMatches};
 use cargo_subcommand::Subcommand;
+use std::env;
 
 #[derive(Parser)]
 #[command(name = "piston")] //top level command
@@ -229,8 +230,10 @@ fn main() -> Result<()> {
             //run pre build for Android
             //build the output
             //run post build for Android
+            //autoinstall on a target device?
         }else if category == "Ios"{
             println!("build orders received for IOS targeting {:?}", cmd.target());
+            //autoinstall on a target device?
         }else if category == "Linux"{
             println!("build orders received for Linux targeting {:?}", cmd.target());
         }else if category == "Windows"{
@@ -244,6 +247,7 @@ fn main() -> Result<()> {
     }
     PistonSubCmd::Run(args) =>{
         let cmd = Subcommand::new(args.common.subcommand_args)?;
+        //TODO can we auto run on a target device without forcing the user to specify a device?
         if args.device.is_none() {
             println!("run orders received with no device, run locally");
         }else{
@@ -254,24 +258,13 @@ fn main() -> Result<()> {
         println!("{}, {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
     }
  }
+ //load the .env if it exists
+ dotenv::dotenv().ok();
+ //print the test value from the .env
+ let test_value = env::var("test").unwrap_or_else(|_| "not set".to_string());
+ println!("Printing .env test key: {}", test_value);
  Ok(())
 }
-
-#[test]
-// fn test_args_parsing() {
-//     // Basic test copied from cargo-apk
-//     let common_default = CommonArgs::parse_from(std::iter::empty::<&str>());
-
-//     assert_eq!(
-//         CommonArgs::parse_from(["--quiet"]),
-//         CommonArgs {
-//             subcommand_args: cargo_subcommand::Args {
-//                 quiet: true,
-//                 ..common_default.subcommand_args.clone()
-//             },
-//         }
-//     );
-// }
 
 #[test]
 fn test_platform_from_target() {

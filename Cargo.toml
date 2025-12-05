@@ -8,3 +8,4 @@ cargo-subcommand = "0.12"
 clap = {version = "4", features = ["derive"]}
 anyhow = "1.0.57"
 env_logger = "0.10"
+dotenv = "0.15.0"
