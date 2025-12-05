@@ -70,8 +70,15 @@ fn main() -> Result<()> {
         let cmd = Subcommand::new(args.common.subcommand_args)?;
         if cmd.target() == Some("x86_64-apple-ios"){
             println!("build orders received for x86_64-apple-ios");
+            //pseudocode
+            //run pre build for x86_64-apple-ios
+            //build the output
+            //run post build for x86_64-apple-ios
         }else if cmd.target() == Some("aarch64-apple-ios"){
             println!("build orders received for aarch64-apple-ios")
+            //run pre build for aarch64-apple-ios
+            //build the output
+            //run post build for x86_64-apple-ios
         }
         else {
             bail!("build target not supported {:?}", cmd.target());
