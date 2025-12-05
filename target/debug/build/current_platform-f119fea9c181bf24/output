@@ -1,0 +1,3 @@
+cargo:rustc-env=HOST_PLATFORM=aarch64-apple-darwin
+cargo:rustc-env=TARGET_PLATFORM=aarch64-apple-darwin
+cargo:rerun-if-changed-env=TARGET
