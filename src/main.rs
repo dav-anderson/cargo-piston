@@ -255,7 +255,8 @@ fn main() -> Result<()> {
         }
     }
     //TODOs
-    //-should we even let the user specify the target?
+    //TODOs handle release flag for runner?
+    //TODO should we let the user specify the run target?
     PistonSubCmd::Run(args) =>{
         let cmd = Subcommand::new(args.common.subcommand_args)?;
 
@@ -263,8 +264,8 @@ fn main() -> Result<()> {
         //TODO map target platform category with device, ensure compatibility. I.e make sure user isn't trying to deploy an android build to an ios device
         if args.device.is_none() {
             println!("run orders received with no device, run locally");
-        }{//TODO else if device == android then AndroidRunner.new()
-            //TODO else if device == IOS then IOSRunner.new()
+        }{//TODO else if device == android then AndroidRunner::new()
+            //TODO else if device == IOS then IOSRunner::new()
             println!("run orders received for a target device: {}", args.device.unwrap())
         }
     }
@@ -272,13 +273,6 @@ fn main() -> Result<()> {
         println!("{}, {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
     }
  }
-
- //SEE HERE FOR ENV IMPLEMENTATIONS
- //load the .env if it exists
-//  dotenv::dotenv().ok();
-//  //print the test value from the .env
-//  let test_value = env::var("test").unwrap_or_else(|_| "not set".to_string());
-//  println!("Printing .env test key: {}", test_value);
  Ok(())
 }
 

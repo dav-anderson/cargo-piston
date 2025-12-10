@@ -30,6 +30,13 @@ impl IOSBuilder {
 
     //>>Postbuild
     //move binary to the app bundle and sign
+
+     //SEE HERE FOR ENV IMPLEMENTATIONS
+    //load the .env if it exists
+    //  dotenv::dotenv().ok();
+    //  //print the test value from the .env
+    //  let test_value = env::var("test").unwrap_or_else(|_| "not set".to_string());
+    //  println!("Printing .env test key: {}", test_value);
     IOSBuilder{release: false, target: "target".to_string()}
     }
 }
