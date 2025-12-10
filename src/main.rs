@@ -2,6 +2,16 @@ use anyhow::{bail, Result};
 use clap::{Parser, CommandFactory, FromArgMatches};
 use cargo_subcommand::Subcommand;
 use std::env;
+use crate::android::AndroidBuilder;
+use crate::ios::IOSBuilder;
+use crate::linux::LinuxBuilder;
+use crate::macos::MacOSBuilder;
+use crate::windows::WindowsBuilder;
+mod android;
+mod ios;
+mod linux;
+mod macos;
+mod windows;
 
 #[derive(Parser)]
 #[command(name = "piston")] //top level command
@@ -200,6 +210,7 @@ fn main() -> Result<()> {
 
  match cmd {
     PistonSubCmd::Build(args) => {
+        //TODO handle release flags
         let cmd = Subcommand::new(args.common.subcommand_args)?;
         let target_opt = cmd.target();
         let platform = match target_opt {
@@ -225,32 +236,35 @@ fn main() -> Result<()> {
         }
         if category == "Android"{
             println!("build orders received for Android targeting {:?}", cmd.target());
-            //pseudocode
-            //TODO
-            //run pre build for Android
-            //build the output
-            //run post build for Android
-            //autoinstall on a target device?
+            AndroidBuilder::new();
         }else if category == "Ios"{
             println!("build orders received for IOS targeting {:?}", cmd.target());
-            //autoinstall on a target device?
+            IOSBuilder::new();
         }else if category == "Linux"{
             println!("build orders received for Linux targeting {:?}", cmd.target());
+            LinuxBuilder::new();
         }else if category == "Windows"{
             println!("build orders received for Windows targeting {:?}", cmd.target());
+            WindowsBuilder::new();
         }else if category == "Macos"{
             println!("build orders received for Macos targeting {:?}", cmd.target());
+            MacOSBuilder::new();
         }
         else {
             bail!("build target not supported {:?}", cmd.target());
         }
     }
+    //TODOs
+    //-should we even let the user specify the target?
     PistonSubCmd::Run(args) =>{
         let cmd = Subcommand::new(args.common.subcommand_args)?;
-        //TODO can we auto run on a target device without forcing the user to specify a device?
+
+    
+        //TODO map target platform category with device, ensure compatibility. I.e make sure user isn't trying to deploy an android build to an ios device
         if args.device.is_none() {
             println!("run orders received with no device, run locally");
-        }else{
+        }{//TODO else if device == android then AndroidRunner.new()
+            //TODO else if device == IOS then IOSRunner.new()
             println!("run orders received for a target device: {}", args.device.unwrap())
         }
     }
@@ -258,11 +272,13 @@ fn main() -> Result<()> {
         println!("{}, {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
     }
  }
+
+ //SEE HERE FOR ENV IMPLEMENTATIONS
  //load the .env if it exists
- dotenv::dotenv().ok();
- //print the test value from the .env
- let test_value = env::var("test").unwrap_or_else(|_| "not set".to_string());
- println!("Printing .env test key: {}", test_value);
+//  dotenv::dotenv().ok();
+//  //print the test value from the .env
+//  let test_value = env::var("test").unwrap_or_else(|_| "not set".to_string());
+//  println!("Printing .env test key: {}", test_value);
  Ok(())
 }
 
@@ -275,3 +291,41 @@ fn test_platform_from_target() {
     assert!(matches!(Platform::from_target("aarch64-linux-android"), Platform::Android));
     assert!(matches!(Platform::from_target("some-unknown-target"), Platform::Unknown));
 }
+
+
+
+//TODO attempt to provision a devcie for an app via app store connect api
+//TODO create a builder that dynamically creates app bundles at ~/maverick_target according to cargo.toml configs
+//TODO see how much we can automate on the IOS side with app store connect API access
+
+//assume user has installed all required toolchains & external dependencies
+//assume user has properly setup keychains and signing certificates
+
+//.env should use absolute paths when possible
+//assume user has properly configured the cargo.toml in the working project repo for the target build output
+
+//.env
+//cargo path (can use default if detected included in path)
+//android toolchain paths
+//app store connect API key
+
+//cargo.toml
+//path to platform specific signing key????
+//icon path
+//android permissions
+//ios permissions
+//
+
+
+//pre_build ->
+//obtain a signing certificate if it doesn't exist
+//provision target device if it's not already provisioned
+//create app bundle at ~/maverick_targets/platform if it doesn't exist already
+//configure the icon according to the platform
+
+
+//build -> 
+
+//post build ->
+//move the binary to the appropriate app bundle
+//sign the binary or bundle depending on the platform
