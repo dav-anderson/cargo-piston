@@ -19,11 +19,11 @@ impl WindowsBuilder {
     op.pre_build();
 
     //>>build
-    //op.build()
+    op.build();
 
     //>>Postbuild
     //move binary to the app bundle and sign
-    //op.post_build()
+    op.post_build();
     }
 
     fn new(release: bool, target: String) -> Self {
@@ -31,14 +31,28 @@ impl WindowsBuilder {
     }
 
     fn pre_build(&self) -> Result<()>{
-        // Parse local Cargo.toml from current dir
+
+        // Parse local current working dir
         let cwd = match env::current_dir(){
             Ok(cwd) => cwd,
-            Err(_) => bail!("error parsing cargo.toml")
+            Err(_) => bail!("error getting working directory")
         };
-        let metadata = MetadataCommand::new()
+        //TODO create app bundle
+
+        //parse cargo.toml
+        let metadata = match MetadataCommand::new()
             .current_dir(cwd)
-            .exec()?;
+            .exec() {
+                Ok(md) => md,
+                Err(_) => bail!("error parsing cargo toml")
+            };
+
+        //TODO parse icon path from the cargo.toml
+
+        //TODO convert .png to .ico and deliver it inside of windows app bundle
+
+        //TODO create the app.rc pointing to the path to the .ico from the previous step
+
         // Read standard fields from the first package
         if let Some(package) = metadata.packages.first() {
             println!("Package name: {}", package.name);
@@ -51,11 +65,23 @@ impl WindowsBuilder {
             if let serde_json::Value::Object(meta) = &package.metadata {
                 if let Some(icon_path) = meta.get("icon_path") {
                     println!("Custom icon_path: {}", icon_path);
+                }else {
+                    println!("no icon path found")
                 }
             }
         } else {
             println!("No packages found in Cargo.toml");
         }
+        Ok(())
+    }
+
+    fn build(&self) -> Result<()> {
+        println!("building");
+        Ok(())
+    }
+
+    fn post_build(&self) -> Result<()>{
+        println!("post building");
         Ok(())
     }
 }
