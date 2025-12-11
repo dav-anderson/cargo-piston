@@ -33,7 +33,6 @@ enum PistonCmd {
 struct CommonArgs {
     #[clap(flatten)]
     subcommand_args: cargo_subcommand::Args,
-    //add custom global options here e.g. #[clap(short, long)] device: Option<String>
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Parser)]
@@ -223,35 +222,31 @@ fn main() -> Result<()> {
             }
         };
         //determine the platform category of the build target
-        let category = match platform {
-            Platform::Android => "Android",
-            Platform::Ios => "Ios",
-            Platform::Linux => "Linux",
-            Platform::Windows => "Windows",
-            Platform::Macos => "Macos",
+        match platform {
+            Platform::Android => {
+            println!("build orders received for Android targeting {:?}", cmd.target());
+            AndroidBuilder::start();
+            },
+            Platform::Ios => {
+            println!("build orders received for IOS targeting {:?}", cmd.target());
+            IOSBuilder::start();
+            },
+            Platform::Linux => {
+            println!("build orders received for Linux targeting {:?}", cmd.target());
+            LinuxBuilder::start();
+            },
+            Platform::Windows => {
+            println!("build orders received for Windows targeting {:?}", cmd.target());
+            WindowsBuilder::start();
+            },
+            Platform::Macos => {
+            println!("build orders received for Macos targeting {:?}", cmd.target());
+            MacOSBuilder::start();
+            },
             Platform::Unknown => bail!("Unknown or unsupported target: {:?}", target_opt),
         };
         if args.dry_run {
             println!("(Dry run mode enabled)");
-        }
-        if category == "Android"{
-            println!("build orders received for Android targeting {:?}", cmd.target());
-            AndroidBuilder::new();
-        }else if category == "Ios"{
-            println!("build orders received for IOS targeting {:?}", cmd.target());
-            IOSBuilder::new();
-        }else if category == "Linux"{
-            println!("build orders received for Linux targeting {:?}", cmd.target());
-            LinuxBuilder::new();
-        }else if category == "Windows"{
-            println!("build orders received for Windows targeting {:?}", cmd.target());
-            WindowsBuilder::new();
-        }else if category == "Macos"{
-            println!("build orders received for Macos targeting {:?}", cmd.target());
-            MacOSBuilder::new();
-        }
-        else {
-            bail!("build target not supported {:?}", cmd.target());
         }
     }
     //TODOs

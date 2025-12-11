@@ -5,7 +5,7 @@ pub struct AndroidBuilder {
 }
 
 impl AndroidBuilder {
-    pub fn new() -> Self{
+    pub fn start() -> Self{
     println!("building for android");
     //>>prebuild
     //-check for signing certificate

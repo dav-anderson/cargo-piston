@@ -5,7 +5,7 @@ pub struct LinuxBuilder {
 }
 
 impl LinuxBuilder {
-    pub fn new() -> Self {
+    pub fn start() -> Self {
     println!("building for linux");
     //>>prebuild
     //-check for signing certificate?

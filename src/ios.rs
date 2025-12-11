@@ -20,7 +20,7 @@ pub struct IOSBuilder {
 }
 
 impl IOSBuilder {
-    pub fn new() -> Self {
+    pub fn start() -> Self {
     println!("building for IOS");
     //>>prebuild
     //-check for signing certificate

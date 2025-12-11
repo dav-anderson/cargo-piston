@@ -5,7 +5,7 @@ pub struct MacOSBuilder {
 }
 
 impl MacOSBuilder {
-    pub fn new() -> Self {
+    pub fn start() -> Self {
     println!("Building for MacOS");
     //>>prebuild
     //-check for signing certificate

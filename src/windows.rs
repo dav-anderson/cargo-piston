@@ -5,7 +5,7 @@ pub struct WindowsBuilder {
 }
 
 impl WindowsBuilder {
-    pub fn new() -> Self {
+    pub fn start() -> Self {
     println!("Building for Windows");
     //>>prebuild
     //-check for signing certificate
