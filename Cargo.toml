@@ -9,7 +9,9 @@ clap = {version = "4", features = ["derive"]}
 anyhow = "1.0.57"
 env_logger = "0.10"
 dotenv = "0.15.0"
+cargo_metadata = "0.23.1"
+serde_json = "1.0.145"
 #reqwest = { version = "0.12.25", features = ["json", "blocking"] }
 #jsonwebtoken = "10.2.0"
-#serde = { version = "1.0.228", features = ["derive"] }
+serde = { version = "1.0.228", features = ["derive"] }
 #openssl = "0.10.75"

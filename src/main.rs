@@ -221,7 +221,7 @@ fn main() -> Result<()> {
                 _ => Platform::Unknown,  // unsupported
             }
         };
-        //determine the platform category of the build target
+        //determine the platform of the build target
         match platform {
             Platform::Android => {
             println!("build orders received for Android targeting {:?}", cmd.target());
@@ -237,7 +237,7 @@ fn main() -> Result<()> {
             },
             Platform::Windows => {
             println!("build orders received for Windows targeting {:?}", cmd.target());
-            WindowsBuilder::start();
+            WindowsBuilder::start(false, cmd.target().unwrap().to_string());
             },
             Platform::Macos => {
             println!("build orders received for Macos targeting {:?}", cmd.target());
@@ -249,20 +249,18 @@ fn main() -> Result<()> {
             println!("(Dry run mode enabled)");
         }
     }
-    //TODOs
-    //TODOs handle release flag for runner?
-    //TODO should we let the user specify the run target?
+    //TODOs handle release flag
+    //TODO let user specify target
     PistonSubCmd::Run(args) =>{
         let cmd = Subcommand::new(args.common.subcommand_args)?;
-
-    
         //TODO map target platform category with device, ensure compatibility. I.e make sure user isn't trying to deploy an android build to an ios device
         if args.device.is_none() {
             println!("run orders received with no device, run locally");
-        }{//TODO else if device == android then AndroidRunner::new()
-            //TODO else if device == IOS then IOSRunner::new()
-            println!("run orders received for a target device: {}", args.device.unwrap())
+            //TODO run locally
+        }else{
+            println!("run orders received for a target device: {}", args.device.unwrap());
         }
+        
     }
     PistonSubCmd::Version => {
         println!("{}, {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
