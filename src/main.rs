@@ -12,6 +12,7 @@ mod ios;
 mod linux;
 mod macos;
 mod windows;
+mod helper;
 
 #[derive(Parser)]
 #[command(name = "piston")] //top level command
@@ -202,6 +203,12 @@ fn main() -> Result<()> {
 //init logs
  env_logger::init();
 
+// Parse local current working dir
+let cwd = match env::current_dir(){
+    Ok(cwd) => cwd,
+    Err(_) => bail!("error getting working directory")
+};
+
  //parse command
  let Cmd {
     piston: PistonCmd::Piston { cmd },
@@ -237,7 +244,7 @@ fn main() -> Result<()> {
             },
             Platform::Windows => {
             println!("build orders received for Windows targeting {:?}", cmd.target());
-            WindowsBuilder::start(false, cmd.target().unwrap().to_string());
+            WindowsBuilder::start(false, cmd.target().unwrap().to_string(), cwd);
             },
             Platform::Macos => {
             println!("build orders received for Macos targeting {:?}", cmd.target());
