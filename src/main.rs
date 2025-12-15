@@ -203,6 +203,10 @@ fn main() -> Result<()> {
 //init logs
  env_logger::init();
 
+ //load env if it exists
+ dotenv::dotenv().ok();
+ let cargo_path: String = env::var("cargo_path").unwrap_or_else(|_| "cargo".to_string());
+
 // Parse local current working dir
 let cwd = match env::current_dir(){
     Ok(cwd) => cwd,
@@ -244,7 +248,7 @@ let cwd = match env::current_dir(){
             },
             Platform::Windows => {
             println!("build orders received for Windows targeting {:?}", cmd.target());
-            WindowsBuilder::start(false, cmd.target().unwrap().to_string(), cwd);
+            WindowsBuilder::start(false, cmd.target().unwrap().to_string(), cwd, cargo_path);
             },
             Platform::Macos => {
             println!("build orders received for Macos targeting {:?}", cmd.target());

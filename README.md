@@ -6,7 +6,17 @@ You can provide the absolute path to an icon .png file with
 `icon_path = "absolute/path/to/icon.png`
 
 ##Supported Build Targets
-*List supported build targets here*
+
+#Windows
+x86_64-pc-windows-gnu
+
+#Android
+
+#IOS
+
+#MacOS
+
+#Linux
 
 
 ##Installing locally from source
