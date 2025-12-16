@@ -1,7 +1,10 @@
 [package]
 name = "cargo-piston"
+description = "Utility tool for streamlining the configuration of rust binaries for various operating systems"
+repository = "https://github.com/dav-anderson/cargo-piston"
 version = "0.1.0"
 edition = "2024"
+license = "MIT OR Apache-2.0"
 
 [dependencies]
 cargo-subcommand = "0.12"
