@@ -2,10 +2,11 @@ use cargo_metadata::{Metadata, MetadataCommand, DependencyKind};
 use anyhow::{Context, bail, Result};
 use std::env;
 use std::path::{Path, PathBuf};
-use std::fs::{create_dir_all, write, remove_file};
+use std::fs::{create_dir_all, write, remove_file, copy};
 use std::io::Write;
 use std::fs::File;
 use std::process::{Command, Stdio};
+use serde_json::Value;
 use image::{self, imageops, DynamicImage, ImageEncoder};
 use crate::helper::Helper;
 
@@ -15,7 +16,10 @@ pub struct WindowsBuilder {
     target: String,
     cwd: PathBuf,
     output_path: Option<PathBuf>,
-    cargo_path: String
+    icon_path: Option<String>,
+    embed_resources_ok: bool,
+    cargo_path: String,
+    app_name: Option<String>,
 }
 
 impl WindowsBuilder {
@@ -23,29 +27,23 @@ impl WindowsBuilder {
     println!("Building for Windows");
     let mut op = WindowsBuilder::new(release, target, cwd, cargo_path);
     //TODO check for signing certificate
+    //>>prebuild
     op.pre_build();
 
     //>>build
     op.build();
 
     //>>Postbuild
-    //TODO move binary to the app bundle and sign
     op.post_build();
     }
 
     fn new(release: bool, target: String, cwd: PathBuf, cargo_path: String) -> Self {
         println!("creating windowsBuilder: release: {:?}, target: {:?}, cwd: {:?}", release, target.to_string(), cwd);
-        WindowsBuilder{release: release, target: target.to_string(), cwd: cwd, output_path: None, cargo_path: cargo_path}
-    }
-
-    fn pre_build(&mut self) -> Result<()>{
         //parse cargo.toml
-        let metadata: Metadata = match MetadataCommand::new()
-            .current_dir(self.cwd.clone())
-            .exec() {
-                Ok(md) => md,
-                Err(_) => bail!("error parsing cargo toml")
-        };
+        let metadata: Metadata = MetadataCommand::new()
+            .current_dir(cwd.clone())
+            .exec()
+            .expect("error parsing the cargo.toml");
 
         // check if embed resources is installed
         let embed_resources_ok: bool = if let Some(root_pkg) = metadata.root_package() {
@@ -54,31 +52,28 @@ impl WindowsBuilder {
             false
         };
         println!("Embed Resources Installed: {}", embed_resources_ok);
+        let mut icon_path: Option<String> = None;
+        let mut app_name: Option<String> = None;
         // Read standard fields from the first package
         if let Some(package) = metadata.root_package() {
             println!("Package name: {}", package.name);
+            app_name = Some(package.name.to_string());
             println!("Version: {}", package.version);
             // Read custom [package.metadata] keys (if present)
             if let serde_json::Value::Object(meta) = &package.metadata {
-                println!("testing***************");
-                //parse icon_path from the cargo.toml
-                if let Some(icon_path) = meta.get("icon_path") {
-                    println!("icon_path: {}", icon_path);
-                    // self.configure_bundle(Some(icon_path.to_string()), embed_resources_ok);
-                    //TODO comment out the icon config for now
-                    self.configure_bundle(None, false);
-                }else {
-                    println!("no icon path found");
-                    self.configure_bundle(None, embed_resources_ok);
+                if let Some(value) = meta.get("icon_path") {
+                    if let serde_json::Value::String(s) = value {
+                        icon_path = Some(s.to_string());
+                    }
                 }
             }
         } else {
             println!("No packages found in Cargo.toml");
         }
-        Ok(())
+        WindowsBuilder{release: release, target: target.to_string(), cwd: cwd, output_path: None, icon_path: icon_path, embed_resources_ok: embed_resources_ok, cargo_path: cargo_path, app_name: app_name}
     }
 
-    fn configure_bundle(&mut self, icon_path: Option<String>, embed_resources_ok: bool) -> Result <()>{
+    fn pre_build(&mut self) -> Result <()>{
         println!("building the dynamic app bundle");
         let cwd: PathBuf = self.cwd.clone();
         println!("working dir: {:?}", cwd);
@@ -102,13 +97,13 @@ impl WindowsBuilder {
         println!("created {:?} with content: {}", rc_path, content);   
         //TODO open question: Will the App.rc compiling break the bundle if the user does not provide an icon?
         //if no icon was provided
-        if !icon_path.is_none() && embed_resources_ok{
+        if !self.icon_path.is_none() && self.embed_resources_ok{
             println!("icon path provided and embed resources installed, configuring icon");
             //TODO convert the .png at the icon_path to a .ico which resides in the app bundle
             let icon_output: PathBuf = cwd.join(rc_icon);
             println!("icon output path: {}", icon_output.display());
             //TODO SOMETHING IS BREAKING BEYOND THIS LINE AND NOT GETTING HANDLED
-            let img_path_clone = icon_path.clone().unwrap();
+            let img_path_clone = self.icon_path.clone().unwrap();
             println!("image path clone: {}", &img_path_clone);
             let img_path = Path::new(&img_path_clone);
             println!("image path as path: {}", &img_path.display());
@@ -137,7 +132,7 @@ impl WindowsBuilder {
                     64,
                     image::ExtendedColorType::Rgba8,
                 )?;
-            println!("Converted {} to ICO ({}x{}) and saved as {}",icon_path.unwrap(), 64, 64, icon_output.display());
+            println!("Converted {} to ICO ({}x{}) and saved as {}", self.icon_path.as_ref().unwrap(), 64, 64, icon_output.display());
             let build_path: PathBuf = cwd.join("build.rs");
             //if a build.rs file exists, first remove it.
             if build_path.exists() {
@@ -190,7 +185,22 @@ impl WindowsBuilder {
 
     fn post_build(&self) -> Result<()>{
         println!("post building");
-        //TODO move the app binary to the proper location
+        let binary_path = self.cwd.join("target").join(self.target.clone()).join(if self.release {"release"} else {"debug"}).join(format!("{}.exe", self.app_name.as_ref().unwrap()));
+        let bundle_path = self.output_path.as_ref().unwrap().join(format!("{}.exe", self.app_name.as_ref().unwrap()));
+        //TODO bundle path should be cwd + target + <target> + <release or debug> + appname.exe
+        println!("binary path is: {}", &binary_path.display());
+        println!("bundle path is: {}", &bundle_path.display());
+        println!("copying binary to app bundle");
+        match copy(&binary_path, &bundle_path) {
+            Ok(_) => {},
+            Err(e) => {
+                println!("error with copying binary to bundle path {}", e);
+                bail!("error with copying binary to bundle path {}", e)
+            }
+        };
+        println!("app bundle available at: {}", &bundle_path.display());
+        //move the target binary into the app bundle at the proper location
+        //output the proper location in the terminal for the user to see 
         Ok(())
     }
 }
