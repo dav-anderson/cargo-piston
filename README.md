@@ -1,8 +1,9 @@
-##Configure your .ENV & Cargo.toml
-This app requires a .ENV file to work properly in most cases. In order to build your apps for a desired platform, certain configurations will be required in your .ENV and as well in the `Cargo.toml` of the project in which you wish to utilize `cargo-piston`
+##.ENV configuration
+#Path to cargo binary (if not in your local PATH) example
+`cargo_path=/Users/<username>/.cargo/bin/cargo`
 
-##Cargo.toml configuration
-You can provide the absolute path to an icon .png file with 
+##Cargo.toml configuration 
+#Path to App icon example
 `icon_path = "absolute/path/to/icon.png`
 
 ##Supported Build Targets
@@ -25,7 +26,7 @@ Run the following command within your rust project repo to install the package l
 
 ##Compiling for windows
 
-install mingw32
+<!-- install mingw32 -->
 
 #App Icon
 You must have embed-resource in your Cargo.toml as a `[build dependency]`
