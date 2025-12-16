@@ -95,14 +95,13 @@ impl WindowsBuilder {
         //create the app.rc file
         write(&rc_path, content.as_bytes())?;
         println!("created {:?} with content: {}", rc_path, content);   
-        //TODO open question: Will the App.rc compiling break the bundle if the user does not provide an icon?
-        //if no icon was provided
+        //if icon path was provided...embed
         if !self.icon_path.is_none() && self.embed_resources_ok{
             println!("icon path provided and embed resources installed, configuring icon");
             //TODO convert the .png at the icon_path to a .ico which resides in the app bundle
             let icon_output: PathBuf = cwd.join(rc_icon);
             println!("icon output path: {}", icon_output.display());
-            //TODO SOMETHING IS BREAKING BEYOND THIS LINE AND NOT GETTING HANDLED
+            //TODO SOMETHING IS BREAKING BEYOND THIS LINE AND IT IS NOT GETTING HANDLED
             let img_path_clone = self.icon_path.clone().unwrap();
             println!("image path clone: {}", &img_path_clone);
             let img_path = Path::new(&img_path_clone);
@@ -166,7 +165,7 @@ impl WindowsBuilder {
 
     fn build(&self) -> Result<()> {
         println!("building");
-        //TODO build the app binary
+        //build the binary for the specified target
         let cargo_args = format!("build --target {} {}", self.target, if self.release {"--release"} else {""});
         let cargo_cmd = format!("{} {}", self.cargo_path, cargo_args);
         let output = Command::new("bash")
@@ -187,10 +186,11 @@ impl WindowsBuilder {
         println!("post building");
         let binary_path = self.cwd.join("target").join(self.target.clone()).join(if self.release {"release"} else {"debug"}).join(format!("{}.exe", self.app_name.as_ref().unwrap()));
         let bundle_path = self.output_path.as_ref().unwrap().join(format!("{}.exe", self.app_name.as_ref().unwrap()));
-        //TODO bundle path should be cwd + target + <target> + <release or debug> + appname.exe
+        //bundle path should be cwd + target + <target output> + <--release flag or None for debug> + <appname>.exe
         println!("binary path is: {}", &binary_path.display());
         println!("bundle path is: {}", &bundle_path.display());
         println!("copying binary to app bundle");
+        //move the target binary into the app bundle at the proper location
         match copy(&binary_path, &bundle_path) {
             Ok(_) => {},
             Err(e) => {
@@ -198,9 +198,8 @@ impl WindowsBuilder {
                 bail!("error with copying binary to bundle path {}", e)
             }
         };
-        println!("app bundle available at: {}", &bundle_path.display());
-        //move the target binary into the app bundle at the proper location
         //output the proper location in the terminal for the user to see 
+        println!("app bundle available at: {}", &bundle_path.display());
         Ok(())
     }
 }

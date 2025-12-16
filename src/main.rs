@@ -53,15 +53,15 @@ struct RunArgs {
     common: CommonArgs,
     //add custom global options here e.g. #[clap(short, long)] device: Option<String>
     #[clap(long)]
-    device: Option<String> //should this be optional?
+    device: Option<String>
 }
 
 #[derive(clap::Subcommand)]
 enum PistonSubCmd {
-    //talk function
+    //Build function
     #[clap(visible_alias = "b")]
     Build(BuildArgs),
-    //listen function
+    //Run function
     #[clap(visible_alias = "r")]
     Run(RunArgs),
     Version,
@@ -220,9 +220,11 @@ let cwd = match env::current_dir(){
 
  match cmd {
     PistonSubCmd::Build(args) => {
-        //TODO handle release flags
         let cmd = Subcommand::new(args.common.subcommand_args)?;
+        //handle the target flag
         let target_opt = cmd.target();
+        //handle the release flag
+        let release: bool = cmd.args().release;
         let platform = match target_opt {
             Some(target) => Platform::from_target(target),
             //if no target flag, determine host platform as default (only macos and linux supported currently)
@@ -247,8 +249,8 @@ let cwd = match env::current_dir(){
             LinuxBuilder::start();
             },
             Platform::Windows => {
-            println!("build orders received for Windows targeting {:?}", cmd.target());
-            WindowsBuilder::start(false, cmd.target().unwrap().to_string(), cwd, cargo_path);
+            println!("build orders received for Windows targeting {:?}, release is set to {:?}", cmd.target(), cmd.args().release);
+            WindowsBuilder::start(release, cmd.target().unwrap().to_string(), cwd, cargo_path);
             },
             Platform::Macos => {
             println!("build orders received for Macos targeting {:?}", cmd.target());
@@ -260,7 +262,6 @@ let cwd = match env::current_dir(){
             println!("(Dry run mode enabled)");
         }
     }
-    //TODOs handle release flag
     //TODO let user specify target
     PistonSubCmd::Run(args) =>{
         let cmd = Subcommand::new(args.common.subcommand_args)?;
