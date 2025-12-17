@@ -1,5 +1,5 @@
 use cargo_metadata::{Metadata, MetadataCommand, DependencyKind};
-use anyhow::{Context, bail, Result};
+use anyhow::{Context, Result};
 use std::env;
 use std::path::{Path, PathBuf};
 use std::fs::{create_dir_all, write, remove_file, copy};
@@ -9,7 +9,7 @@ use std::process::{Command, Stdio};
 use serde_json::Value;
 use image::{self, imageops, DynamicImage, ImageEncoder};
 use crate::helper::Helper;
-
+use crate::error::PistonError;
 
 pub struct WindowsBuilder {
     release: bool,
@@ -23,10 +23,10 @@ pub struct WindowsBuilder {
 }
 
 impl WindowsBuilder {
-    pub fn start(release: bool, target: String, cwd: PathBuf, cargo_path: String) {
+    pub fn start(release: bool, target: String, cwd: PathBuf, cargo_path: String) -> Result<(), PistonError> {
     println!("Building for Windows");
-    let mut op = WindowsBuilder::new(release, target, cwd, cargo_path);
-    //TODO check for signing certificate
+    let mut op = WindowsBuilder::new(release, target, cwd, cargo_path)?;
+    //TODO check for signing certificate & sign?
     //>>prebuild
     op.pre_build();
 
@@ -35,15 +35,17 @@ impl WindowsBuilder {
 
     //>>Postbuild
     op.post_build();
+
+    Ok(())
     }
 
-    fn new(release: bool, target: String, cwd: PathBuf, cargo_path: String) -> Self {
+    fn new(release: bool, target: String, cwd: PathBuf, cargo_path: String) -> Result<Self, PistonError> {
         println!("creating windowsBuilder: release: {:?}, target: {:?}, cwd: {:?}", release, target.to_string(), cwd);
         //parse cargo.toml
         let metadata: Metadata = MetadataCommand::new()
             .current_dir(cwd.clone())
             .exec()
-            .expect("error parsing the cargo.toml");
+            .map_err(|e| PistonError::CargoParseError(e.to_string()))?;
 
         // check if embed resources is installed
         let embed_resources_ok: bool = if let Some(root_pkg) = metadata.root_package() {
@@ -70,10 +72,10 @@ impl WindowsBuilder {
         } else {
             println!("No packages found in Cargo.toml");
         }
-        WindowsBuilder{release: release, target: target.to_string(), cwd: cwd, output_path: None, icon_path: icon_path, embed_resources_ok: embed_resources_ok, cargo_path: cargo_path, app_name: app_name}
+        Ok(WindowsBuilder{release: release, target: target.to_string(), cwd: cwd, output_path: None, icon_path: icon_path, embed_resources_ok: embed_resources_ok, cargo_path: cargo_path, app_name: app_name})
     }
 
-    fn pre_build(&mut self) -> Result <()>{
+    fn pre_build(&mut self) -> Result <(), PistonError>{
         println!("building the dynamic app bundle");
         let cwd: PathBuf = self.cwd.clone();
         println!("working dir: {:?}", cwd);
@@ -88,12 +90,14 @@ impl WindowsBuilder {
             Helper::empty_directory(path)?
         }
         //create the target directory
-        create_dir_all(self.output_path.as_ref().unwrap())?;
+        //TODO handle error
+        create_dir_all(self.output_path.as_ref().unwrap());
         let rc_path: PathBuf = self.output_path.as_ref().unwrap().join("app.rc");
         let rc_icon: &PathBuf = &rel_output.join("windows_icon.ico");
         let content = format!("IDI_ICON1 ICON \"{}\"", rc_icon.display());
         //create the app.rc file
-        write(&rc_path, content.as_bytes())?;
+        //TODO handle error
+        write(&rc_path, content.as_bytes());
         println!("created {:?} with content: {}", rc_path, content);   
         //if icon path was provided...embed
         if !self.icon_path.is_none() && self.embed_resources_ok{
@@ -106,64 +110,66 @@ impl WindowsBuilder {
             println!("image path clone: {}", &img_path_clone);
             let img_path = Path::new(&img_path_clone);
             println!("image path as path: {}", &img_path.display());
-            let img = match image::open(img_path) {
-                Ok(img) => img,
-                Err(e) => {
-                    println!("error opening image {}", e);
-                bail!("error with opening image: {}", e)
-                }
-            };
-            println!("image opened");
-            // Resize to the specified size
-            let resized = imageops::resize(&img, 64, 64, imageops::FilterType::Lanczos3);
-            println!("image resized");
-            let resized_img = DynamicImage::ImageRgba8(resized);
-            println!("image converted");
-            let file = std::fs::File::create(icon_output.clone())?;
+            //TODO handle this error and fix
+            // let img = match image::open(img_path) {
+            //     Ok(img) => img,
+            //     Err(e) => {
+            //         println!("error opening image {}", e);
+            //         //TODO handle err
+            //     // bail!("error with opening image: {}", e)
+            //     }
+            // };
+            // println!("image opened");
+            // // Resize to the specified size
+            // let resized = imageops::resize(&img, 64, 64, imageops::FilterType::Lanczos3);
+            // println!("image resized");
+            // let resized_img = DynamicImage::ImageRgba8(resized);
+            // println!("image converted");
+            // let file = std::fs::File::create(icon_output.clone())?;
 
-            let mut writer = std::io::BufWriter::new(file);
-            println!("new image file written");
-            let encoder = image::codecs::ico::IcoEncoder::new(&mut writer);
-            encoder
-                .write_image(
-                    resized_img.as_bytes(),
-                    64,
-                    64,
-                    image::ExtendedColorType::Rgba8,
-                )?;
-            println!("Converted {} to ICO ({}x{}) and saved as {}", self.icon_path.as_ref().unwrap(), 64, 64, icon_output.display());
-            let build_path: PathBuf = cwd.join("build.rs");
-            //if a build.rs file exists, first remove it.
-            if build_path.exists() {
-                remove_file(&build_path).context("failed to remove existing build.rs")?;
-            }
-            //populate the build.rs content
-            let build_content = format!(
-                r#"
-                use std::io;
+            // let mut writer = std::io::BufWriter::new(file);
+            // println!("new image file written");
+            // let encoder = image::codecs::ico::IcoEncoder::new(&mut writer);
+            // encoder
+            //     .write_image(
+            //         resized_img.as_bytes(),
+            //         64,
+            //         64,
+            //         image::ExtendedColorType::Rgba8,
+            //     )?;
+            // println!("Converted {} to ICO ({}x{}) and saved as {}", self.icon_path.as_ref().unwrap(), 64, 64, icon_output.display());
+            // let build_path: PathBuf = cwd.join("build.rs");
+            // //if a build.rs file exists, first remove it.
+            // if build_path.exists() {
+            //     remove_file(&build_path).context("failed to remove existing build.rs")?;
+            // }
+            // //populate the build.rs content
+            // let build_content = format!(
+            //     r#"
+            //     use std::io;
 
-                fn main() {{
-                    if std::env::var("CARGO_CFG_TARGET_OS").unwrap() == "windows" && std::path::Path::new("{}").exists() {{
-                        embed_resource::compile("app.rc", embed_resource::NONE)
-                        .manifest_optional();
-                    }}
-            }}
+            //     fn main() {{
+            //         if std::env::var("CARGO_CFG_TARGET_OS").unwrap() == "windows" && std::path::Path::new("{}").exists() {{
+            //             embed_resource::compile("app.rc", embed_resource::NONE)
+            //             .manifest_optional();
+            //         }}
+            // }}
             
-                "#,
-                &icon_output.display()
-            );
-            //Generate a build.rs file
-            let mut build_file = File::create(&build_path)?;
-            build_file.write_all(build_content.as_bytes())?;
-            build_file.flush()?;
-            println!("Created Build.rs at {}", &build_path.display());
+            //     "#,
+            //     &icon_output.display()
+            // );
+            // //Generate a build.rs file
+            // let mut build_file = File::create(&build_path)?;
+            // build_file.write_all(build_content.as_bytes())?;
+            // build_file.flush()?;
+            // println!("Created Build.rs at {}", &build_path.display());
         }
         println!("done configuring Windows bundle");
         Ok(())
         
     }
 
-    fn build(&self) -> Result<()> {
+    fn build(&self) -> Result<(), PistonError> {
         println!("building");
         //build the binary for the specified target
         let cargo_args = format!("build --target {} {}", self.target, if self.release {"--release"} else {""});
@@ -177,12 +183,12 @@ impl WindowsBuilder {
             .output();
         if !output.unwrap().status.success() {
             println!("error building with cargo");
-            bail!("error building with cargo");
+            // bail!("error building with cargo");
         }
         Ok(())
     }
 
-    fn post_build(&self) -> Result<()>{
+    fn post_build(&self) -> Result<(), PistonError>{
         println!("post building");
         let binary_path = self.cwd.join("target").join(self.target.clone()).join(if self.release {"release"} else {"debug"}).join(format!("{}.exe", self.app_name.as_ref().unwrap()));
         let bundle_path = self.output_path.as_ref().unwrap().join(format!("{}.exe", self.app_name.as_ref().unwrap()));
@@ -195,7 +201,9 @@ impl WindowsBuilder {
             Ok(_) => {},
             Err(e) => {
                 println!("error with copying binary to bundle path {}", e);
-                bail!("error with copying binary to bundle path {}", e)
+                // bail!("error with copying binary to bundle path {}", e)
+                //TODO error
+                {}
             }
         };
         //output the proper location in the terminal for the user to see 

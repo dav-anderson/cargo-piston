@@ -7,12 +7,14 @@ use crate::ios::IOSBuilder;
 use crate::linux::LinuxBuilder;
 use crate::macos::MacOSBuilder;
 use crate::windows::WindowsBuilder;
+use crate::error::PistonError;
 mod android;
 mod ios;
 mod linux;
 mod macos;
 mod windows;
 mod helper;
+mod error;
 
 #[derive(Parser)]
 #[command(name = "piston")] //top level command
@@ -245,12 +247,12 @@ let cwd = match env::current_dir(){
             IOSBuilder::start();
             },
             Platform::Linux => {
-            println!("build orders received for Linux targeting {:?}", cmd.target());
-            LinuxBuilder::start();
+            println!("build orders received for Linux targeting {:?}, release is set to {:?}", cmd.target(), release);
+            LinuxBuilder::start(release, cmd.target().unwrap().to_string(), cwd, cargo_path)?;
             },
             Platform::Windows => {
-            println!("build orders received for Windows targeting {:?}, release is set to {:?}", cmd.target(), cmd.args().release);
-            WindowsBuilder::start(release, cmd.target().unwrap().to_string(), cwd, cargo_path);
+            println!("build orders received for Windows targeting {:?}, release is set to {:?}", cmd.target(), release);
+            WindowsBuilder::start(release, cmd.target().unwrap().to_string(), cwd, cargo_path)?;
             },
             Platform::Macos => {
             println!("build orders received for Macos targeting {:?}", cmd.target());
@@ -291,7 +293,8 @@ fn test_platform_from_target() {
     assert!(matches!(Platform::from_target("some-unknown-target"), Platform::Unknown));
 }
 
-
+//TODO error type enums for handling all errors
+//TODO refactor most of main into a lib.rs
 
 //TODO attempt to provision a devcie for an app via app store connect api
 //TODO create a builder that dynamically creates app bundles at ~/maverick_target according to cargo.toml configs
@@ -304,16 +307,13 @@ fn test_platform_from_target() {
 //assume user has properly configured the cargo.toml in the working project repo for the target build output
 
 //.env
-//cargo path (can use default if detected included in path)
 //android toolchain paths
 //app store connect API key
 
 //cargo.toml
 //path to platform specific signing key????
-//icon path
 //android permissions
 //ios permissions
-//
 
 
 //pre_build ->
