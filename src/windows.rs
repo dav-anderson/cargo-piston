@@ -28,13 +28,13 @@ impl WindowsBuilder {
     let mut op = WindowsBuilder::new(release, target, cwd, cargo_path)?;
     //TODO check for signing certificate & sign?
     //>>prebuild
-    op.pre_build();
+    op.pre_build()?;
 
     //>>build
-    op.build();
+    op.build()?;
 
     //>>Postbuild
-    op.post_build();
+    op.post_build()?;
 
     Ok(())
     }
@@ -71,6 +71,9 @@ impl WindowsBuilder {
             }
         } else {
             println!("No packages found in Cargo.toml");
+        }
+        if app_name == None {
+            return Err(PistonError::CargoParseError("Could not parse app name from cargo.toml".to_string()))
         }
         Ok(WindowsBuilder{release: release, target: target.to_string(), cwd: cwd, output_path: None, icon_path: icon_path, embed_resources_ok: embed_resources_ok, cargo_path: cargo_path, app_name: app_name})
     }
