@@ -88,84 +88,94 @@ impl WindowsBuilder {
         self.output_path = Some(cwd.join(&rel_output));
         println!("windows dir: {:?}", self.output_path);
         //empty the target directory if it exists
+        if self.output_path.as_ref().is_none() {
+            return Err(PistonError::Generic("output path not provided".to_string()))
+        }
         let path = self.output_path.as_ref().unwrap().as_path();
         if path.exists() && path.is_dir(){
             Helper::empty_directory(path)?
         }
         //create the target directory
-        //TODO handle error
-        create_dir_all(self.output_path.as_ref().unwrap());
+        create_dir_all(path).map_err(|e| PistonError::CreateDirAllError {
+        path: self.output_path.as_ref().unwrap().to_path_buf(),
+        source: e,
+        })?;
         let rc_path: PathBuf = self.output_path.as_ref().unwrap().join("app.rc");
         let rc_icon: &PathBuf = &rel_output.join("windows_icon.ico");
         let content = format!("IDI_ICON1 ICON \"{}\"", rc_icon.display());
         //create the app.rc file
-        //TODO handle error
-        write(&rc_path, content.as_bytes());
+        write(&rc_path, content.as_bytes()).map_err(|e| PistonError::WriteFileError(e.to_string()))?;
         println!("created {:?} with content: {}", rc_path, content);   
         //if icon path was provided...embed
         if !self.icon_path.is_none() && self.embed_resources_ok{
             println!("icon path provided and embed resources installed, configuring icon");
-            //TODO convert the .png at the icon_path to a .ico which resides in the app bundle
+            //convert the .png at icon_path to a .ico which resides in the app bundle
             let icon_output: PathBuf = cwd.join(rc_icon);
             println!("icon output path: {}", icon_output.display());
-            //TODO SOMETHING IS BREAKING BEYOND THIS LINE AND IT IS NOT GETTING HANDLED
             let img_path_clone = self.icon_path.clone().unwrap();
             println!("image path clone: {}", &img_path_clone);
             let img_path = Path::new(&img_path_clone);
             println!("image path as path: {}", &img_path.display());
-            //TODO handle this error and fix
-            // let img = match image::open(img_path) {
-            //     Ok(img) => img,
-            //     Err(e) => {
-            //         println!("error opening image {}", e);
-            //         //TODO handle err
-            //     // bail!("error with opening image: {}", e)
-            //     }
-            // };
-            // println!("image opened");
-            // // Resize to the specified size
-            // let resized = imageops::resize(&img, 64, 64, imageops::FilterType::Lanczos3);
-            // println!("image resized");
-            // let resized_img = DynamicImage::ImageRgba8(resized);
-            // println!("image converted");
-            // let file = std::fs::File::create(icon_output.clone())?;
+            //open the image
+            let img = image::open(img_path).map_err(|e| PistonError::OpenImageError {
+            path: img_path.to_path_buf(),
+            source: e,
+            })?;
+            println!("image opened");
+            // Resize to the specified size
+            let resized = imageops::resize(&img, 64, 64, imageops::FilterType::Lanczos3);
+            println!("image resized");
+            let resized_img = DynamicImage::ImageRgba8(resized);
+            println!("image converted");
+            //create the image file
+            let file = std::fs::File::create(icon_output.clone()).map_err(|e| PistonError::CreateFileError {
+                path: icon_output.clone().to_path_buf(),
+                source: e,
+            })?;
+            //write the image file
+            let mut writer = std::io::BufWriter::new(file);
+            println!("new image file written");
+            //encode the image file
+            let encoder = image::codecs::ico::IcoEncoder::new(&mut writer);
+            encoder.write_image(
+                    resized_img.as_bytes(),
+                    64,
+                    64,
+                    image::ExtendedColorType::Rgba8,
+            ).map_err(|e| PistonError::WriteImageError(e))?;
+            println!("Converted {} to ICO ({}x{}) and saved as {}", self.icon_path.as_ref().unwrap(), 64, 64, icon_output.display());
+            let build_path: PathBuf = cwd.join("build.rs");
+            //if a build.rs file exists, first remove it.
+            if build_path.exists() {
+                remove_file(&build_path).map_err(|e| PistonError::RemoveFileError {
+                    path: build_path.clone().to_path_buf(),
+                    source: e,
+                })?;
+            }
+            //populate the build.rs content
+            let build_content = format!(
+                r#"
+                use std::io;
 
-            // let mut writer = std::io::BufWriter::new(file);
-            // println!("new image file written");
-            // let encoder = image::codecs::ico::IcoEncoder::new(&mut writer);
-            // encoder
-            //     .write_image(
-            //         resized_img.as_bytes(),
-            //         64,
-            //         64,
-            //         image::ExtendedColorType::Rgba8,
-            //     )?;
-            // println!("Converted {} to ICO ({}x{}) and saved as {}", self.icon_path.as_ref().unwrap(), 64, 64, icon_output.display());
-            // let build_path: PathBuf = cwd.join("build.rs");
-            // //if a build.rs file exists, first remove it.
-            // if build_path.exists() {
-            //     remove_file(&build_path).context("failed to remove existing build.rs")?;
-            // }
-            // //populate the build.rs content
-            // let build_content = format!(
-            //     r#"
-            //     use std::io;
-
-            //     fn main() {{
-            //         if std::env::var("CARGO_CFG_TARGET_OS").unwrap() == "windows" && std::path::Path::new("{}").exists() {{
-            //             embed_resource::compile("app.rc", embed_resource::NONE)
-            //             .manifest_optional();
-            //         }}
-            // }}
+                fn main() {{
+                    if std::env::var("CARGO_CFG_TARGET_OS").unwrap() == "windows" && std::path::Path::new("{}").exists() {{
+                        embed_resource::compile("app.rc", embed_resource::NONE)
+                        .manifest_optional();
+                    }}
+            }}
             
-            //     "#,
-            //     &icon_output.display()
-            // );
-            // //Generate a build.rs file
-            // let mut build_file = File::create(&build_path)?;
-            // build_file.write_all(build_content.as_bytes())?;
-            // build_file.flush()?;
-            // println!("Created Build.rs at {}", &build_path.display());
+                "#,
+                &icon_output.display()
+            );
+            //Generate a build.rs file
+            let mut build_file = File::create(&build_path).map_err(|e| PistonError::CreateFileError {
+                path: build_path.clone().to_path_buf(),
+                source: e
+            })?;
+            //write the file and flush the buffer
+            build_file.write_all(build_content.as_bytes()).map_err(|e| PistonError::WriteFileError(e.to_string()))?;
+            build_file.flush().map_err(|e| PistonError::FileFlushError(e.to_string()))?;
+            println!("Created Build.rs at {}", &build_path.display());
         }
         println!("done configuring Windows bundle");
         Ok(())
@@ -200,15 +210,11 @@ impl WindowsBuilder {
         println!("bundle path is: {}", &bundle_path.display());
         println!("copying binary to app bundle");
         //move the target binary into the app bundle at the proper location
-        match copy(&binary_path, &bundle_path) {
-            Ok(_) => {},
-            Err(e) => {
-                println!("error with copying binary to bundle path {}", e);
-                // bail!("error with copying binary to bundle path {}", e)
-                //TODO error
-                {}
-            }
-        };
+        copy(&binary_path, &bundle_path).map_err(|e| PistonError::CopyFileError {
+            input_path: binary_path.clone().to_path_buf(),
+            output_path: bundle_path.clone().to_path_buf(),
+            source: e,
+        })?;
         //output the proper location in the terminal for the user to see 
         println!("app bundle available at: {}", &bundle_path.display());
         Ok(())

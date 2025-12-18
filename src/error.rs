@@ -2,16 +2,31 @@ use std::error::Error as StdError;
 use std::fmt;
 use std::path::PathBuf;
 use std::io::Error as IoError;
+use image::ImageError;
 
 #[derive(Debug)]
 pub enum PistonError {
     CargoParseError(String),
+
+    WriteFileError(String),
+
+    FileFlushError(String),
+
+    WriteImageError(ImageError),
+
+    CopyFileError{ input_path: PathBuf, output_path: PathBuf, source: IoError },
 
     ReadDirError{ path: PathBuf, source: IoError },
 
     RemoveSubdirError{ path: PathBuf, source: IoError },
 
     RemoveFileError{ path: PathBuf, source: IoError },
+
+    CreateFileError{ path: PathBuf, source: IoError },
+
+    CreateDirAllError{ path: PathBuf, source: IoError },
+
+    OpenImageError{ path: PathBuf, source: ImageError },
 
     Generic(String)
 }
@@ -20,9 +35,16 @@ impl fmt::Display for PistonError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             PistonError::CargoParseError(err) => write!(f, "Failed to parse the cargo.toml: {}", err),
+            PistonError::WriteFileError(err) => write!(f, "Failed to write file: {}", err),
+            PistonError::WriteImageError(err) => write!(f, "Failed to write image: {}", err),
+            PistonError::FileFlushError(err) => write!(f, "Failed to flush file: {}", err),
+            PistonError::CopyFileError { input_path, output_path, .. } => write!(f, "Failed to copy {:?} to {:?}", input_path, output_path),
             PistonError::ReadDirError { path, .. } => write!(f, "Failed to read directory {:?}", path),
             PistonError::RemoveSubdirError { path, .. } => write!(f, "Failed to remove subdirectory {:?}", path),
             PistonError::RemoveFileError { path, .. } => write!(f, "Failed to remove file {:?}", path),
+            PistonError::CreateFileError { path, .. } => write!(f, "Failed to Create file {:?}", path),
+            PistonError::CreateDirAllError { path, .. } => write!(f, "Failed to create dir all {:?}", path),
+            PistonError::OpenImageError { path, .. } => write!(f, "Failed to open image {:?}", path),
             PistonError::Generic(err) => write!(f, "Generic Error: {}", err)
         }
     }
@@ -31,9 +53,13 @@ impl fmt::Display for PistonError {
 impl StdError for PistonError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
+            PistonError::CopyFileError { source, .. } => Some(source),
             PistonError::ReadDirError { source, .. } => Some(source),
             PistonError::RemoveSubdirError { source, .. } => Some(source),
             PistonError::RemoveFileError { source, .. } => Some(source),
+            PistonError::CreateFileError { source, .. } => Some(source),
+            PistonError::CreateDirAllError { source, .. } => Some(source),
+            PistonError::OpenImageError { source, .. } => Some(source),
             _ => None,
         }
     }
