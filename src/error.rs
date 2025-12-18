@@ -14,6 +14,8 @@ pub enum PistonError {
 
     WriteImageError(ImageError),
 
+    ZigbuildMissingError(String),
+
     CopyFileError{ input_path: PathBuf, output_path: PathBuf, source: IoError },
 
     ReadDirError{ path: PathBuf, source: IoError },
@@ -38,6 +40,7 @@ impl fmt::Display for PistonError {
             PistonError::WriteFileError(err) => write!(f, "Failed to write file: {}", err),
             PistonError::WriteImageError(err) => write!(f, "Failed to write image: {}", err),
             PistonError::FileFlushError(err) => write!(f, "Failed to flush file: {}", err),
+            PistonError::ZigbuildMissingError(err) => write!(f, "Failed to find zigbuild path in .env file: {}", err),
             PistonError::CopyFileError { input_path, output_path, .. } => write!(f, "Failed to copy {:?} to {:?}", input_path, output_path),
             PistonError::ReadDirError { path, .. } => write!(f, "Failed to read directory {:?}", path),
             PistonError::RemoveSubdirError { path, .. } => write!(f, "Failed to remove subdirectory {:?}", path),

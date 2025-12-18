@@ -1,5 +1,4 @@
 use cargo_metadata::{Metadata, MetadataCommand, DependencyKind};
-use anyhow::{Context, Result};
 use std::env;
 use std::path::{Path, PathBuf};
 use std::fs::{create_dir_all, write, remove_file, copy};
@@ -106,6 +105,9 @@ impl WindowsBuilder {
         //create the app.rc file
         write(&rc_path, content.as_bytes()).map_err(|e| PistonError::WriteFileError(e.to_string()))?;
         println!("created {:?} with content: {}", rc_path, content);   
+        //TODO add a winres config check to the cargo.toml for app naming...or maybe just automate this?
+        //[package.metadata.winres]
+        //OriginalFilename = "<appname>.exe"
         //if icon path was provided...embed
         if !self.icon_path.is_none() && self.embed_resources_ok{
             println!("icon path provided and embed resources installed, configuring icon");
@@ -194,10 +196,6 @@ impl WindowsBuilder {
             .stdout(Stdio::inherit())
             .stderr(Stdio::inherit())
             .output();
-        if !output.unwrap().status.success() {
-            println!("error building with cargo");
-            // bail!("error building with cargo");
-        }
         Ok(())
     }
 
