@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use std::env;
 use std::fs::create_dir_all;
 use std::process::{Command, Stdio};
+ use std::collections::HashMap;
 use crate::error::PistonError;
 use crate::helper::Helper;
 
@@ -14,13 +15,14 @@ pub struct LinuxBuilder {
     icon_path: Option<String>,
     cargo_path: String,
     zigbuild_path: Option<String>,
+    homebrew_path: Option<String>,
     app_name: Option<String>,
 }
 
 impl LinuxBuilder {
-    pub fn start(release: bool, target: String, cwd: PathBuf, cargo_path: String) -> Result<(), PistonError> {
+    pub fn start(release: bool, target: String, cwd: PathBuf, env_vars: HashMap<String, String>) -> Result<(), PistonError> {
     println!("building for linux");
-    let mut op = LinuxBuilder::new(release, target, cwd, cargo_path)?;
+    let mut op = LinuxBuilder::new(release, target, cwd, env_vars)?;
     //TODO check for signing certificate & sign?
     //>>prebuild
     op.pre_build();
@@ -34,8 +36,11 @@ impl LinuxBuilder {
     Ok(())
     }
 
-    fn new(release: bool, target: String, cwd: PathBuf, cargo_path: String) -> Result<Self, PistonError> {
+    fn new(release: bool, target: String, cwd: PathBuf, env_vars: HashMap<String, String>) -> Result<Self, PistonError> {
         println!("creating LinuxBuilder: release: {:?}, target: {:?}, cwd: {:?}", release, target.to_string(), cwd);
+        //parse env vars
+        let cargo_path = env_vars.get("cargo_path").cloned().unwrap_or("cargo".to_string());
+        println!("Cargo path determined: {}", &cargo_path);
         //parse cargo.toml
         let metadata: Metadata = MetadataCommand::new()
             .current_dir(cwd.clone())
@@ -62,14 +67,17 @@ impl LinuxBuilder {
         }
         //parse the path to zigbuild if building on Macos
         let mut zigbuild_path: Option<String> = None;
+        let mut homebrew_path: Option<String> = None;
         //MACOS ONLY
         if std::env::consts::OS == "macos"{
-            //parse zigbuild path from .env
-            dotenv::dotenv().ok();
-            zigbuild_path = Some(env::var("zigbuild_path").map_err(|e| PistonError::ZigbuildMissingError(e.to_string()))?);
+            //parse zigbuild & homebrew path from .env
+            zigbuild_path = Some(env_vars.get("zigbuild_path").cloned().ok_or(PistonError::ZigbuildMissingError("Zigbuild key not found".to_string()))?);
+            println!("Zigbuild path determined: {}", &zigbuild_path.clone().unwrap());
+            homebrew_path = Some(env_vars.get("homebrew_path").cloned().ok_or(PistonError::HomebrewMissingError("Homebrew key not found".to_string()))?);
+            println!("Homebrew path determined: {}", &homebrew_path.clone().unwrap());
         }   
         
-        Ok(LinuxBuilder{release: release, target: target.to_string(), cwd: cwd, output_path: None, icon_path: icon_path, cargo_path: cargo_path, zigbuild_path: zigbuild_path, app_name: app_name})
+        Ok(LinuxBuilder{release: release, target: target.to_string(), cwd: cwd, output_path: None, icon_path: icon_path, cargo_path: cargo_path, zigbuild_path: zigbuild_path, homebrew_path: homebrew_path, app_name: app_name})
     }
 
     fn pre_build(&mut self) -> Result<(), PistonError>{
@@ -104,15 +112,18 @@ impl LinuxBuilder {
         //build the binary for the specified target
         let cargo_args = format!("build --target {} {}", self.target, if self.release {"--release"} else {""});
         let cargo_cmd = format!("{} {}", self.cargo_path, cargo_args);
+        let current_path = env::var("PATH").unwrap_or_default();
+        let new_path = format!("{}:{}", self.homebrew_path.as_ref().unwrap(), current_path);
         //MACOS HOST ONLY
         //TODO zigbuild linker is busted here, see ramp gui...figure out why it has a .env(new path) pass
         if std::env::consts::OS == "macos"{
+            println!("Building for Linux on Macos using Zig linker");
             let output = Command::new("bash")
                 .arg("-c")
-                .arg(format!("{} {}", self.zigbuild_path.as_ref().unwrap(), &cargo_cmd))
+                .arg(format!("{} {}", self.zigbuild_path.as_ref().unwrap(), &cargo_args))
                 .current_dir(self.cwd.clone())
                 //TODO is this the culprit for the linker error?
-                .env("PATH", self.cwd.clone())
+                .env("PATH", new_path)
                 .stdout(Stdio::inherit())
                 .stderr(Stdio::inherit())
                 .output();

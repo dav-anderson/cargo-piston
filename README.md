@@ -4,6 +4,7 @@
 
 #If Building for Linux on MacOS
 `zigbuild_path=/Users/<username>/.cargo/bin/cargo-zigbuild`
+`homebrew_path=/opt/homebrew/bin`
 
 ##Cargo.toml configuration 
 #Path to App icon example
@@ -26,7 +27,7 @@ x86_64-pc-windows-gnu
 
 ##Installing locally from source
 Run the following command within your rust project repo to install the package locally
-`cargo install --path .`
+`cargo install --path ../path/to/cargo-piston`
 
 ##Compiling for Windows
 
@@ -49,6 +50,11 @@ OriginalFilename = "<appname>.exe"
 
 ##Compiling for Linux
 
-#Install zigbuild (MACOS ONLY)
-`cargo install carg0-zigbuild`
+##Install zigbuild via (MACOS ONLY)
+`cargo install cargo-zigbuild`
+Provide a path to your cargo dependency binaries (somewhere like `~/.cargo/bin`)
+`zigbuild_path=/Users/<username>/.cargo/bin/cargo-zigbuild`
 
+##Install Zig via homebrew
+provide a path to your homebrew binaries (somewhere like `/opt/homebrew/bin`) in your .env
+`homebrew_path=/opt/homebrew/bin`

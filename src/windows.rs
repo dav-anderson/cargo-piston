@@ -7,6 +7,7 @@ use std::fs::File;
 use std::process::{Command, Stdio};
 use serde_json::Value;
 use image::{self, imageops, DynamicImage, ImageEncoder};
+ use std::collections::HashMap;
 use crate::helper::Helper;
 use crate::error::PistonError;
 
@@ -22,9 +23,9 @@ pub struct WindowsBuilder {
 }
 
 impl WindowsBuilder {
-    pub fn start(release: bool, target: String, cwd: PathBuf, cargo_path: String) -> Result<(), PistonError> {
+    pub fn start(release: bool, target: String, cwd: PathBuf, env_vars: HashMap<String, String>) -> Result<(), PistonError> {
     println!("Building for Windows");
-    let mut op = WindowsBuilder::new(release, target, cwd, cargo_path)?;
+    let mut op = WindowsBuilder::new(release, target, cwd, env_vars)?;
     //TODO check for signing certificate & sign?
     //>>prebuild
     op.pre_build()?;
@@ -38,8 +39,11 @@ impl WindowsBuilder {
     Ok(())
     }
 
-    fn new(release: bool, target: String, cwd: PathBuf, cargo_path: String) -> Result<Self, PistonError> {
+    fn new(release: bool, target: String, cwd: PathBuf, env_vars: HashMap<String, String>) -> Result<Self, PistonError> {
         println!("creating windowsBuilder: release: {:?}, target: {:?}, cwd: {:?}", release, target.to_string(), cwd);
+        //Read cargo_path with fallback
+        let cargo_path = env_vars.get("cargo_path").cloned().unwrap_or("cargo".to_string());
+        println!("Cargo path determined: {}", &cargo_path);
         //parse cargo.toml
         let metadata: Metadata = MetadataCommand::new()
             .current_dir(cwd.clone())

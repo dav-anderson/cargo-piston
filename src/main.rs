@@ -8,6 +8,7 @@ use crate::linux::LinuxBuilder;
 use crate::macos::MacOSBuilder;
 use crate::windows::WindowsBuilder;
 use crate::error::PistonError;
+use crate::helper::Helper;
 mod android;
 mod ios;
 mod linux;
@@ -205,9 +206,8 @@ fn main() -> Result<()> {
 //init logs
  env_logger::init();
 
- //load env if it exists
- dotenv::dotenv().ok();
- let cargo_path: String = env::var("cargo_path").unwrap_or_else(|_| "cargo".to_string());
+//read .env file
+let env_vars = Helper::load_env_file()?;
 
 // Parse local current working dir
 let cwd = match env::current_dir(){
@@ -248,11 +248,11 @@ let cwd = match env::current_dir(){
             },
             Platform::Linux => {
             println!("build orders received for Linux targeting {:?}, release is set to {:?}", cmd.target(), release);
-            LinuxBuilder::start(release, cmd.target().unwrap().to_string(), cwd, cargo_path)?;
+            LinuxBuilder::start(release, cmd.target().unwrap().to_string(), cwd, env_vars)?;
             },
             Platform::Windows => {
             println!("build orders received for Windows targeting {:?}, release is set to {:?}", cmd.target(), release);
-            WindowsBuilder::start(release, cmd.target().unwrap().to_string(), cwd, cargo_path)?;
+            WindowsBuilder::start(release, cmd.target().unwrap().to_string(), cwd, env_vars)?;
             },
             Platform::Macos => {
             println!("build orders received for Macos targeting {:?}", cmd.target());
