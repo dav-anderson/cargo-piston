@@ -1,7 +1,7 @@
 use cargo_metadata::{Metadata, MetadataCommand, DependencyKind};
 use std::path::PathBuf;
 use std::env;
-use std::fs::create_dir_all;
+use std::fs::{create_dir_all, copy};
 use std::process::{Command, Stdio};
  use std::collections::HashMap;
 use crate::error::PistonError;
@@ -142,6 +142,20 @@ impl LinuxBuilder {
 
     fn post_build(&mut self) -> Result<(), PistonError>{
         println!("post build for linux");
+        let binary_path = self.cwd.join("target").join(self.target.clone()).join(if self.release {"release"} else {"debug"}).join(self.app_name.as_ref().unwrap());
+        let bundle_path = self.output_path.as_ref().unwrap().join(self.app_name.as_ref().unwrap());
+        //bundle path should be cwd + target + <target output> + <--release flag or None for debug> + <appname>.exe
+        println!("binary path is: {}", &binary_path.display());
+        println!("bundle path is: {}", &bundle_path.display());
+        println!("copying binary to app bundle");
+        //move the target binary into the app bundle at the proper location
+        copy(&binary_path, &bundle_path).map_err(|e| PistonError::CopyFileError {
+            input_path: binary_path.clone().to_path_buf(),
+            output_path: bundle_path.clone().to_path_buf(),
+            source: e,
+        })?;
+        //output the proper location in the terminal for the user to see 
+        println!("app bundle available at: {}", &bundle_path.display());
         Ok(())
     }
 }
