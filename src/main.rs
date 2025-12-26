@@ -255,8 +255,8 @@ let cwd = match env::current_dir(){
             WindowsBuilder::start(release, cmd.target().unwrap().to_string(), cwd, env_vars)?;
             },
             Platform::Macos => {
-            println!("build orders received for Macos targeting {:?}", cmd.target());
-            MacOSBuilder::start();
+            println!("build orders received for Macos targeting {:?}, release is set to {:?}", cmd.target(), release);
+            MacOSBuilder::start(release, cmd.target().unwrap().to_string(), cwd, env_vars)?;
             },
             Platform::Unknown => bail!("Unknown or unsupported target: {:?}", target_opt),
         };

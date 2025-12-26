@@ -18,6 +18,8 @@ pub enum PistonError {
 
     HomebrewMissingError(String),
 
+    UnsupportedOSError{ os: String, target: String },
+
     CopyFileError{ input_path: PathBuf, output_path: PathBuf, source: IoError },
 
     ReadDirError{ path: PathBuf, source: IoError },
@@ -44,6 +46,7 @@ impl fmt::Display for PistonError {
             PistonError::FileFlushError(err) => write!(f, "Failed to flush file: {}", err),
             PistonError::ZigbuildMissingError(err) => write!(f, "Failed to find zigbuild path in .env file: {}", err),
             PistonError::HomebrewMissingError(err) => write!(f, "Failed to find homebrew bin path in .env file: {}", err),
+            PistonError::UnsupportedOSError{ os, target, .. } => write!(f, "Host system: {:?} does not support the target: {:?}", os, target),
             PistonError::CopyFileError { input_path, output_path, .. } => write!(f, "Failed to copy {:?} to {:?}", input_path, output_path),
             PistonError::ReadDirError { path, .. } => write!(f, "Failed to read directory {:?}", path),
             PistonError::RemoveSubdirError { path, .. } => write!(f, "Failed to remove subdirectory {:?}", path),
