@@ -1,3 +1,7 @@
+use std::path::PathBuf;
+use std::collections::HashMap;
+use crate::PistonError;
+
 // use anyhow::{Context, Result};
 // use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
 // use openssl::asn1::Asn1Time;
@@ -20,8 +24,16 @@ pub struct IOSBuilder {
 }
 
 impl IOSBuilder {
-    pub fn start() -> Self {
-    println!("building for IOS");
+
+    pub fn start(_release: bool, target: String, _cwd: PathBuf, _env_vars: HashMap<String, String>) -> Result<(), PistonError> {
+        println!("building for IOS");
+        if std::env::consts::OS != "macos"{
+            return Err(PistonError::UnsupportedOSError{os: std::env::consts::OS.to_string(), target: target})
+        }
+        Ok(())
+    }
+
+    fn new() -> Self {
     //>>prebuild
     //-check for signing certificate
     //setup the app bundle
@@ -46,8 +58,17 @@ device: String,
 }
 
 impl IOSRunner {
-    fn new() -> Self{
+
+    pub fn start() -> Result<(), PistonError> {
         println!("running for IOS");
+        if std::env::consts::OS != "macos"{
+            println!("error cannot run mac on linux");
+            // return Err(PistonError::UnsupportedOSError{os: std::env::consts::OS.to_string(), target: target})
+        }
+        Ok(())
+    }
+
+    fn new() -> Self{
         //>>prebuild
         //check for apple signing certificate
         //check target device for provisioning

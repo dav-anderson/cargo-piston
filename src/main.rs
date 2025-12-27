@@ -1,5 +1,5 @@
 use anyhow::{bail, Result};
-use clap::{Parser, CommandFactory, FromArgMatches};
+use clap::{Parser};
 use cargo_subcommand::Subcommand;
 use std::env;
 use crate::android::AndroidBuilder;
@@ -244,7 +244,7 @@ let cwd = match env::current_dir(){
             },
             Platform::Ios => {
             println!("build orders received for IOS targeting {:?}", cmd.target());
-            IOSBuilder::start();
+            IOSBuilder::start(release, cmd.target().unwrap().to_string(), cwd, env_vars)?;
             },
             Platform::Linux => {
             println!("build orders received for Linux targeting {:?}, release is set to {:?}", cmd.target(), release);
@@ -266,7 +266,7 @@ let cwd = match env::current_dir(){
     }
     //TODO let user specify target
     PistonSubCmd::Run(args) =>{
-        let cmd = Subcommand::new(args.common.subcommand_args)?;
+        let _cmd = Subcommand::new(args.common.subcommand_args)?;
         //TODO map target platform category with device, ensure compatibility. I.e make sure user isn't trying to deploy an android build to an ios device
         if args.device.is_none() {
             println!("run orders received with no device, run locally");

@@ -1,4 +1,4 @@
-use cargo_metadata::{Metadata, MetadataCommand, DependencyKind};
+use cargo_metadata::{Metadata, MetadataCommand};
 use std::path::PathBuf;
 use std::env;
 use std::fs::{create_dir_all, copy};
@@ -25,13 +25,13 @@ impl LinuxBuilder {
     let mut op = LinuxBuilder::new(release, target, cwd, env_vars)?;
     //TODO check for signing certificate & sign?
     //>>prebuild
-    op.pre_build();
+    op.pre_build()?;
 
     //>>build
-    op.build();
+    op.build()?;
 
     //>>Postbuild
-    op.post_build();
+    op.post_build()?;
 
     Ok(())
     }
@@ -115,19 +115,20 @@ impl LinuxBuilder {
         let current_path = env::var("PATH").unwrap_or_default();
         let new_path = format!("{}:{}", self.homebrew_path.as_ref().unwrap(), current_path);
         //MACOS HOST ONLY
-        //TODO zigbuild linker is busted here, see ramp gui...figure out why it has a .env(new path) pass
         if std::env::consts::OS == "macos"{
             println!("Building for Linux on Macos using Zig linker");
             let output = Command::new("bash")
                 .arg("-c")
                 .arg(format!("{} {}", self.zigbuild_path.as_ref().unwrap(), &cargo_args))
                 .current_dir(self.cwd.clone())
-                //TODO is this the culprit for the linker error?
                 .env("PATH", new_path)
                 .stdout(Stdio::inherit())
                 .stderr(Stdio::inherit())
                 .output();
-                //LINUX HOST
+            if !output.unwrap().status.success() {
+                return Err(PistonError::Generic("Compiler error".to_string()))
+            }
+        //LINUX HOST
         }else{
             let output = Command::new("bash")
             .arg("-c")
@@ -136,6 +137,9 @@ impl LinuxBuilder {
             .stdout(Stdio::inherit())
             .stderr(Stdio::inherit())
             .output();
+            if !output.unwrap().status.success() {
+                return Err(PistonError::Generic("Compiler error".to_string()))
+            }
         }
         Ok(())
     }

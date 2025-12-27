@@ -1,11 +1,9 @@
 use cargo_metadata::{Metadata, MetadataCommand, DependencyKind};
-use std::env;
 use std::path::{Path, PathBuf};
 use std::fs::{create_dir_all, write, remove_file, copy};
 use std::io::Write;
 use std::fs::File;
 use std::process::{Command, Stdio};
-use serde_json::Value;
 use image::{self, imageops, DynamicImage, ImageEncoder};
  use std::collections::HashMap;
 use crate::helper::Helper;
@@ -200,6 +198,9 @@ impl WindowsBuilder {
             .stdout(Stdio::inherit())
             .stderr(Stdio::inherit())
             .output();
+        if !output.unwrap().status.success() {
+            return Err(PistonError::Generic("Compiler error".to_string()))
+        }
         Ok(())
     }
 

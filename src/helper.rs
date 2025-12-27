@@ -1,4 +1,4 @@
-use std::path::{PathBuf, Path};
+use std::path::{Path};
 use std::fs::{read_dir, remove_dir_all, remove_file};
 use crate::error::PistonError;
 
