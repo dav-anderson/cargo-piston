@@ -24,6 +24,7 @@ impl LinuxBuilder {
     println!("building for linux");
     let mut op = LinuxBuilder::new(release, target, cwd, env_vars)?;
     //TODO check for signing certificate & sign?
+    //TODO embed icon image?
     //>>prebuild
     op.pre_build()?;
 

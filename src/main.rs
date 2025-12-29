@@ -54,7 +54,7 @@ struct BuildArgs {
 struct RunArgs {
     #[clap(flatten)]
     common: CommonArgs,
-    //add custom global options here e.g. #[clap(short, long)] device: Option<String>
+    //can add custom global options here e.g. #[clap(short, long)] device: Option<String>
     #[clap(long)]
     device: Option<String>
 }
@@ -293,7 +293,6 @@ fn test_platform_from_target() {
     assert!(matches!(Platform::from_target("some-unknown-target"), Platform::Unknown));
 }
 
-//TODO error type enums for handling all errors
 //TODO refactor most of main into a lib.rs
 
 //TODO attempt to provision a devcie for an app via app store connect api

@@ -64,4 +64,11 @@ impl Helper {
 
         Ok(env_map)
     }
+
+    pub fn capitalize_first(s: &str) -> String {
+        match s.get(0..1) {
+            None => String::new(),
+            Some(first) => first.to_uppercase() + &s[1..],
+        }
+    }
 }

@@ -1,6 +1,9 @@
 use std::path::PathBuf;
 use std::collections::HashMap;
 use cargo_metadata::{Metadata, MetadataCommand};
+use std::fs::{create_dir_all, copy};
+use std::process::{Command, Stdio};
+use crate::Helper;
 use crate::PistonError;
 
 pub struct MacOSBuilder {
@@ -69,33 +72,50 @@ fn new(release: bool, target: String, cwd: PathBuf, env_vars: HashMap<String, St
      fn pre_build(&mut self) -> Result <(), PistonError>{
         println!("Pre build for macos");
         println!("building the dynamic app bundle");
-        // let cwd: PathBuf = self.cwd.clone();
-        // println!("working dir: {:?}", cwd);
-        // let rel_output: PathBuf = if self.release {
-        //     "target/release/windows".into()
-        // }else {"target/debug/windows".into()};
-        // self.output_path = Some(cwd.join(&rel_output));
-        // println!("windows dir: {:?}", self.output_path);
-        // //empty the target directory if it exists
-        // if self.output_path.as_ref().is_none() {
-        //     return Err(PistonError::Generic("output path not provided".to_string()))
-        // }
-        // let path = self.output_path.as_ref().unwrap().as_path();
-        // if path.exists() && path.is_dir(){
-        //     Helper::empty_directory(path)?
-        // }
-        // //create the target directory
-        // create_dir_all(path).map_err(|e| PistonError::CreateDirAllError {
-        // path: self.output_path.as_ref().unwrap().to_path_buf(),
-        // source: e,
-        // })?;
-        // let rc_path: PathBuf = self.output_path.as_ref().unwrap().join("app.rc");
-        // let rc_icon: &PathBuf = &rel_output.join("windows_icon.ico");
-        // let content = format!("IDI_ICON1 ICON \"{}\"", rc_icon.display());
-        // //create the app.rc file
+        let cwd: PathBuf = self.cwd.clone();
+        println!("working dir: {:?}", cwd);
+        let capitalized = Helper::capitalize_first(self.app_name.as_ref().unwrap());
+        println!("capitalized app name: {}", capitalized);
+        let release = if self.release {"release"} else {"debug"};
+        let partial_path: PathBuf = if self.release {
+            format!("target/{}/macos/{}.app/Contents",release, capitalized).into()
+        }else {
+            format!("target/{}/macos/{}.app/Contents",release, capitalized).into()
+        };
+        println!("partial path: {:?}", partial_path);
+        //establish ~/macos/release/Appname.app/Contents/Info.plist
+        let plist_path: PathBuf = partial_path.join("Info.plist");
+        println!("plist path: {:?}", plist_path);
+        //establish ~/macos/release/Appname.app/Contents/Resources
+        let rel_path: PathBuf = partial_path.join("Resources");
+        println!("relative path: {:?}", rel_path);
+        self.output_path = Some(cwd.join(&partial_path));
+        println!("full path to macos dir: {:?}", self.output_path);
+        //empty the target directory if it exists
+        if self.output_path.as_ref().is_none() {
+            return Err(PistonError::Generic("output path not provided".to_string()))
+        }
+        //TODO make sure this works
+        let path = rel_path.as_path();
+        if path.exists() && path.is_dir(){
+            Helper::empty_directory(path)?
+        }
+        //create the target directory
+        create_dir_all(path).map_err(|e| PistonError::CreateDirAllError {
+        path: self.output_path.as_ref().unwrap().to_path_buf(),
+        source: e,
+        })?;
+        //create the app icon target path...TODO is this even needed?
+        let icon_path: PathBuf = self.output_path.as_ref().unwrap().join("macos_icon.icns");
+
+
+        //TODO convert and create the app icon from the provided image
+        //TODO create Info.plist and populate
+        
+        //THIS IS EXAMPLE CODE FROM WINDOWS MODULE
+        
         // write(&rc_path, content.as_bytes()).map_err(|e| PistonError::WriteFileError(e.to_string()))?;
         // println!("created {:?} with content: {}", rc_path, content);   
-        // //TODO add a winres config check to the cargo.toml for app naming...or maybe just automate this?
         // //[package.metadata.winres]
         // //OriginalFilename = "<appname>.exe"
         // //if icon path was provided...embed
@@ -176,6 +196,19 @@ fn new(release: bool, target: String, cwd: PathBuf, env_vars: HashMap<String, St
 
     fn build(&mut self) -> Result<(), PistonError>{
         println!("build for macos");
+        //build the binary for the specified target
+        let cargo_args = format!("build --target {} {}", self.target, if self.release {"--release"} else {""});
+        let cargo_cmd = format!("{} {}", self.cargo_path, cargo_args);
+        let output = Command::new("bash")
+            .arg("-c")
+            .arg(&cargo_cmd)
+            .current_dir(self.cwd.clone())
+            .stdout(Stdio::inherit())
+            .stderr(Stdio::inherit())
+            .output();
+        if !output.unwrap().status.success() {
+            return Err(PistonError::Generic("Compiler error".to_string()))
+        }
         Ok(())
     }
 
