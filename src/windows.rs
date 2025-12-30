@@ -1,8 +1,7 @@
 use cargo_metadata::{Metadata, MetadataCommand, DependencyKind};
 use std::path::{Path, PathBuf};
-use std::fs::{create_dir_all, write, remove_file, copy};
+use std::fs::{File, create_dir_all, write, remove_file, copy};
 use std::io::Write;
-use std::fs::File;
 use std::process::{Command, Stdio};
 use image::{self, imageops, DynamicImage, ImageEncoder};
  use std::collections::HashMap;
