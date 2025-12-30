@@ -1,8 +1,9 @@
-use std::path::PathBuf;
+use std::path::{ Path, PathBuf };
 use std::collections::HashMap;
-use cargo_metadata::{Metadata, MetadataCommand};
-use std::fs::{create_dir_all, copy};
-use std::process::{Command, Stdio};
+use cargo_metadata::{ Metadata, MetadataCommand };
+use std::fs::{ File, create_dir_all, copy, remove_file};
+use std::io::Write;
+use std::process::{ Command, Stdio };
 use crate::Helper;
 use crate::PistonError;
 
@@ -14,6 +15,7 @@ pub struct MacOSBuilder {
     icon_path: Option<String>,
     cargo_path: String,
     app_name: Option<String>,
+    app_version: Option<String>,
 }
 
 impl MacOSBuilder {
@@ -50,11 +52,13 @@ fn new(release: bool, target: String, cwd: PathBuf, env_vars: HashMap<String, St
 
         let mut icon_path: Option<String> = None;
         let mut app_name: Option<String> = None;
+        let mut app_version: Option<String> = None;
         // Read standard fields from the first package
         if let Some(package) = metadata.root_package() {
             println!("Package name: {}", package.name);
             app_name = Some(package.name.to_string());
             println!("Version: {}", package.version);
+            app_version = Some(package.version.to_string());
             // Read custom [package.metadata] keys (if present)
             if let serde_json::Value::Object(meta) = &package.metadata {
                 if let Some(value) = meta.get("icon_path") {
@@ -66,7 +70,7 @@ fn new(release: bool, target: String, cwd: PathBuf, env_vars: HashMap<String, St
         } else {
             println!("No packages found in Cargo.toml");
         } 
-        Ok(MacOSBuilder{release: release, target: target.to_string(), cwd: cwd, output_path: None, icon_path: icon_path, cargo_path: cargo_path, app_name: app_name})
+        Ok(MacOSBuilder{release: release, target: target.to_string(), cwd: cwd, output_path: None, icon_path: icon_path, cargo_path: cargo_path, app_name: app_name, app_version: app_version})
     }
 
      fn pre_build(&mut self) -> Result <(), PistonError>{
@@ -83,112 +87,92 @@ fn new(release: bool, target: String, cwd: PathBuf, env_vars: HashMap<String, St
             format!("target/{}/macos/{}.app/Contents",release, capitalized).into()
         };
         println!("partial path: {:?}", partial_path);
-        //establish ~/macos/release/Appname.app/Contents/Info.plist
-        let plist_path: PathBuf = partial_path.join("Info.plist");
-        println!("plist path: {:?}", plist_path);
         //establish ~/macos/release/Appname.app/Contents/Resources
-        let rel_path: PathBuf = partial_path.join("Resources");
-        println!("relative path: {:?}", rel_path);
-        self.output_path = Some(cwd.join(&partial_path));
+        let res_path: PathBuf = partial_path.join("Resources");
+        println!("res path: {:?}", res_path);
+        let macos_path = partial_path.join("MacOS");
+        self.output_path = Some(cwd.join(&macos_path));
         println!("full path to macos dir: {:?}", self.output_path);
         //empty the target directory if it exists
         if self.output_path.as_ref().is_none() {
             return Err(PistonError::Generic("output path not provided".to_string()))
         }
-        //TODO make sure this works
-        let path = rel_path.as_path();
+        //Empty the directory if it already exists
+        let path = res_path.as_path();
         if path.exists() && path.is_dir(){
             Helper::empty_directory(path)?
         }
-        //create the target directory
+        //create the target directories
         create_dir_all(path).map_err(|e| PistonError::CreateDirAllError {
         path: self.output_path.as_ref().unwrap().to_path_buf(),
         source: e,
         })?;
-        //create the app icon target path...TODO is this even needed?
-        let icon_path: PathBuf = self.output_path.as_ref().unwrap().join("macos_icon.icns");
-
-
-        //TODO convert and create the app icon from the provided image
-        //TODO create Info.plist and populate
-        
-        //THIS IS EXAMPLE CODE FROM WINDOWS MODULE
-        
-        // write(&rc_path, content.as_bytes()).map_err(|e| PistonError::WriteFileError(e.to_string()))?;
-        // println!("created {:?} with content: {}", rc_path, content);   
-        // //[package.metadata.winres]
-        // //OriginalFilename = "<appname>.exe"
-        // //if icon path was provided...embed
-        // if !self.icon_path.is_none() && self.embed_resources_ok{
-        //     println!("icon path provided and embed resources installed, configuring icon");
-        //     //convert the .png at icon_path to a .ico which resides in the app bundle
-        //     let icon_output: PathBuf = cwd.join(rc_icon);
-        //     println!("icon output path: {}", icon_output.display());
-        //     let img_path_clone = self.icon_path.clone().unwrap();
-        //     println!("image path clone: {}", &img_path_clone);
-        //     let img_path = Path::new(&img_path_clone);
-        //     println!("image path as path: {}", &img_path.display());
-        //     //open the image
-        //     let img = image::open(img_path).map_err(|e| PistonError::OpenImageError {
-        //     path: img_path.to_path_buf(),
-        //     source: e,
-        //     })?;
-        //     println!("image opened");
-        //     // Resize to the specified size
-        //     let resized = imageops::resize(&img, 64, 64, imageops::FilterType::Lanczos3);
-        //     println!("image resized");
-        //     let resized_img = DynamicImage::ImageRgba8(resized);
-        //     println!("image converted");
-        //     //create the image file
-        //     let file = std::fs::File::create(icon_output.clone()).map_err(|e| PistonError::CreateFileError {
-        //         path: icon_output.clone().to_path_buf(),
-        //         source: e,
-        //     })?;
-        //     //write the image file
-        //     let mut writer = std::io::BufWriter::new(file);
-        //     println!("new image file written");
-        //     //encode the image file
-        //     let encoder = image::codecs::ico::IcoEncoder::new(&mut writer);
-        //     encoder.write_image(
-        //             resized_img.as_bytes(),
-        //             64,
-        //             64,
-        //             image::ExtendedColorType::Rgba8,
-        //     ).map_err(|e| PistonError::WriteImageError(e))?;
-        //     println!("Converted {} to ICO ({}x{}) and saved as {}", self.icon_path.as_ref().unwrap(), 64, 64, icon_output.display());
-        //     let build_path: PathBuf = cwd.join("build.rs");
-        //     //if a build.rs file exists, first remove it.
-        //     if build_path.exists() {
-        //         remove_file(&build_path).map_err(|e| PistonError::RemoveFileError {
-        //             path: build_path.clone().to_path_buf(),
-        //             source: e,
-        //         })?;
-        //     }
-        //     //populate the build.rs content
-        //     let build_content = format!(
-        //         r#"
-        //         use std::io;
-
-        //         fn main() {{
-        //             if std::env::var("CARGO_CFG_TARGET_OS").unwrap() == "windows" && std::path::Path::new("{}").exists() {{
-        //                 embed_resource::compile("app.rc", embed_resource::NONE)
-        //                 .manifest_optional();
-        //             }}
-        //     }}
-            
-        //         "#,
-        //         &icon_output.display()
-        //     );
-        //     //Generate a build.rs file
-        //     let mut build_file = File::create(&build_path).map_err(|e| PistonError::CreateFileError {
-        //         path: build_path.clone().to_path_buf(),
-        //         source: e
-        //     })?;
-        //     //write the file and flush the buffer
-        //     build_file.write_all(build_content.as_bytes()).map_err(|e| PistonError::WriteFileError(e.to_string()))?;
-        //     build_file.flush().map_err(|e| PistonError::FileFlushError(e.to_string()))?;
-        //     println!("Created Build.rs at {}", &build_path.display());
-        // }
+        //create binary directories
+        create_dir_all(macos_path).map_err(|e| PistonError::CreateDirAllError {
+            path: self.output_path.as_ref().unwrap().to_path_buf(),
+            source: e,
+        })?;
+        //establish app icon target path ~/macos/release/Appname.app/Contents/Resources/macos_icon.icns
+        let icon_path: PathBuf = res_path.join("macos_icon.icns");
+        //establish Info.plist path ~/macos/release/Appname.app/Contents/Info.plist
+        let plist_path: PathBuf = partial_path.join("Info.plist");
+        println!("plist path: {:?}", plist_path);
+        //if a plist file exists, first remove it.
+        if plist_path.exists() {
+            remove_file(&plist_path).map_err(|e| PistonError::RemoveFileError {
+                path: plist_path.clone().to_path_buf(),
+                source: e,
+            })?;
+        }
+        //create a new Info.plist file
+        let mut plist_file = File::create(&plist_path).map_err(|e| PistonError::CreateFileError {
+                path: plist_path.clone().to_path_buf(),
+                source: e,
+            })?;
+        //populate the Info.plist file
+        let plist_content = format!(
+            r#"
+            <?xml version="1.0" encoding="UTF-8"?>
+            <!DOCTYPE plist PUBLIC "-//Apple Computer//DTD PLIST 1.0//EN"
+            "https://www.apple.com/DTDs/PropertyList-1.0.dtd">
+            <plist version="1.0">
+            <dict>
+                <key>CFBundleName</key>
+                <string>{}</string>
+                <key>CFBundleExecutable</key>
+                <string>{}</string>
+                <key>CFBundleIconFile</key>
+                <string>macos_icon</string>
+                <key>CFBundleVersion</key>
+                <string>{}</string>
+            </dict>
+            </plist>
+            "#,
+            &capitalized,
+            &self.app_name.as_ref().unwrap(),
+            &self.app_version.as_ref().unwrap(),
+        );
+        plist_file.write_all(plist_content.as_bytes()).map_err(|e| PistonError::WriteFileError(e.to_string()))?;;
+        println!("Info.plist created");
+        //if icon path was provided...convert
+        if !self.icon_path.is_none(){
+            println!("icon path provided, configuring icon");
+            //convert the .png at icon_path to an .icns which resides in the app bundle
+            println!("icon output path: {}", icon_path.display());
+            let img_path_clone = self.icon_path.clone().unwrap();
+            println!("image path clone: {}", &img_path_clone);
+            let img_path = Path::new(&img_path_clone);
+            println!("image path as path: {}", &img_path.display());
+            let macos_icon = Command::new("sips")
+                .args(["-s", "format", "icns", &img_path_clone, "--out", &icon_path.display().to_string()])
+                .output()
+                .map_err(|e| PistonError::MacOSIconError {
+                    input_path: img_path.to_path_buf(),
+                    output_path: icon_path,
+                    source: e,
+                })?;
+            println!("done configuring macos icon");
+        }
         println!("done configuring MacOS bundle");
         Ok(())
         
@@ -214,6 +198,20 @@ fn new(release: bool, target: String, cwd: PathBuf, env_vars: HashMap<String, St
 
     fn post_build(&mut self) -> Result<(), PistonError>{
         println!("post build for macos");
+        let binary_path = self.cwd.join("target").join(self.target.clone()).join(if self.release {"release"} else {"debug"}).join(self.app_name.as_ref().unwrap());
+        let bundle_path = self.output_path.as_ref().unwrap().join(self.app_name.as_ref().unwrap());
+        //bundle path should be cwd + target + <target output> + <--release flag or None for debug> + <appname>.exe
+        println!("binary path is: {}", &binary_path.display());
+        println!("bundle path is: {}", &bundle_path.display());
+        println!("copying binary to app bundle");
+        //move the target binary into the app bundle at the proper location
+        copy(&binary_path, &bundle_path).map_err(|e| PistonError::CopyFileError {
+            input_path: binary_path.clone().to_path_buf(),
+            output_path: bundle_path.clone().to_path_buf(),
+            source: e,
+        })?;
+        //output the proper location in the terminal for the user to see 
+        println!("MacOS app bundle available at: {}", &bundle_path.display());
         Ok(())
     }
 }

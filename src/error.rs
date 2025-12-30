@@ -22,6 +22,8 @@ pub enum PistonError {
 
     CopyFileError{ input_path: PathBuf, output_path: PathBuf, source: IoError },
 
+    MacOSIconError{ input_path: PathBuf, output_path: PathBuf, source: IoError },
+
     ReadDirError{ path: PathBuf, source: IoError },
 
     RemoveSubdirError{ path: PathBuf, source: IoError },
@@ -48,6 +50,7 @@ impl fmt::Display for PistonError {
             PistonError::HomebrewMissingError(err) => write!(f, "Failed to find homebrew bin path in .env file: {}", err),
             PistonError::UnsupportedOSError{ os, target, .. } => write!(f, "Host system: {:?} does not support the target: {:?}", os, target),
             PistonError::CopyFileError { input_path, output_path, .. } => write!(f, "Failed to copy {:?} to {:?}", input_path, output_path),
+            PistonError::MacOSIconError { input_path, output_path, .. } => write!(f, "Failed to format icon {:?} to {:?}", input_path, output_path),
             PistonError::ReadDirError { path, .. } => write!(f, "Failed to read directory {:?}", path),
             PistonError::RemoveSubdirError { path, .. } => write!(f, "Failed to remove subdirectory {:?}", path),
             PistonError::RemoveFileError { path, .. } => write!(f, "Failed to remove file {:?}", path),
@@ -63,6 +66,7 @@ impl StdError for PistonError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             PistonError::CopyFileError { source, .. } => Some(source),
+            PistonError::MacOSIconError { source, .. } => Some(source),
             PistonError::ReadDirError { source, .. } => Some(source),
             PistonError::RemoveSubdirError { source, .. } => Some(source),
             PistonError::RemoveFileError { source, .. } => Some(source),
