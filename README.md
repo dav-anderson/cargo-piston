@@ -1,41 +1,62 @@
-##.ENV configuration
-#Path to cargo binary (if not in your local PATH) example
+### How to Use Cargo Piston
+
+Once you have cargo-piston installed (either locally within a repo or globally) and your .env and Cargo.toml are properly configured, you can use cargo-piston to build and run for various targets.
+
+# Example command for building a MacOS app
+
+`cargo piston build --target aarch64-apple-darwin`
+
+This command will build a Macos binary within a dynamically created app bundle derived from the information contained within your cargo.toml. This includes ordinarily tedious minutia such as an Info.plist and app icon configuration.
+
+## Supported Build Targets
+
+In theory this tool should support build targets for all of the supported Opearting Systems, but they will only be added explicitly after being tested
+
+# Windows
+x86_64-pc-windows-gnu
+
+# Android
+
+# IOS
+
+# MacOS
+
+aarch64-apple-darwin
+
+x86_64-apple-darwin
+
+
+# Linux
+
+aarch64-unknown-linux-gnu
+
+### Configuration
+
+## .ENV configuration
+
+# Path to cargo binary (if not in your local PATH) example
 `cargo_path=/Users/<username>/.cargo/bin/cargo`
 
-#If Building for Linux on MacOS
+# If Building for Linux on MacOS
 `zigbuild_path=/Users/<username>/.cargo/bin/cargo-zigbuild`
 `homebrew_path=/opt/homebrew/bin`
 
-##Cargo.toml configuration 
-#Path to App icon example
+## Cargo.toml configuration 
+# Path to App icon example
+
 `icon_path = "absolute/path/to/icon.png`
 
-##Supported Build Targets
-
-#Windows
-x86_64-pc-windows-gnu
-
-#Android
-
-#IOS
-
-#MacOS
-
-#Linux
-
-
-
-##Installing locally from source
+## Installing locally from source
 Run the following command within your rust project repo to install the package locally
 `cargo install --path ../path/to/cargo-piston`
 
-##Compiling for Windows
+## Windows Specific Configuration
 
 <!-- install mingw32 -->
 
 <!-- winres? -->
 
-#App Icon
+# App Icon
 You must have embed-resource in your Cargo.toml as a `[build dependency]`
 ```
 [build dependency]
@@ -48,13 +69,16 @@ You should have your desired output filename designated in your Cargo.toml as
 OriginalFilename = "<appname>.exe"
 ```
 
-##Compiling for Linux
+## Linux Specific Configuration
 
-##Install zigbuild via (MACOS ONLY)
+# Install zigbuild via (required on MACOS ONLY)
 `cargo install cargo-zigbuild`
 Provide a path to your cargo dependency binaries (somewhere like `~/.cargo/bin`)
 `zigbuild_path=/Users/<username>/.cargo/bin/cargo-zigbuild`
 
-##Install Zig via homebrew
+# Install Zig via homebrew (required on MACOS ONLY)
 provide a path to your homebrew binaries (somewhere like `/opt/homebrew/bin`) in your .env
 `homebrew_path=/opt/homebrew/bin`
+
+## MacOS Specific Configuration
+
