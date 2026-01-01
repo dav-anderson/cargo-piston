@@ -1,8 +1,8 @@
-### How to Use Cargo Piston
+# How to Use Cargo Piston
 
 Once you have cargo-piston installed (either locally within a repo or globally) and your .env and Cargo.toml are properly configured, you can use cargo-piston to build and run for various targets.
 
-# Example command for building a MacOS app
+## Example command for building a MacOS app
 
 `cargo piston build --target aarch64-apple-darwin`
 
@@ -12,37 +12,37 @@ This command will build a Macos binary within a dynamically created app bundle d
 
 In theory this tool should support build targets for all of the supported Opearting Systems, but they will only be added explicitly after being tested
 
-# Windows
+### Windows
 x86_64-pc-windows-gnu
 
-# Android
+### Android
 
-# IOS
+### IOS
 
-# MacOS
+### MacOS
 
 aarch64-apple-darwin
 
 x86_64-apple-darwin
 
 
-# Linux
+### Linux
 
 aarch64-unknown-linux-gnu
 
-### Configuration
+# Configuration
 
 ## .ENV configuration
 
-# Path to cargo binary (if not in your local PATH) example
+### Path to cargo binary (if not in your local PATH) example
 `cargo_path=/Users/<username>/.cargo/bin/cargo`
 
-# If Building for Linux on MacOS
+### If Building for Linux on MacOS
 `zigbuild_path=/Users/<username>/.cargo/bin/cargo-zigbuild`
 `homebrew_path=/opt/homebrew/bin`
 
 ## Cargo.toml configuration 
-# Path to App icon example
+### Path to App icon example
 
 `icon_path = "absolute/path/to/icon.png`
 
@@ -56,7 +56,7 @@ Run the following command within your rust project repo to install the package l
 
 <!-- winres? -->
 
-# App Icon
+### App Icon
 You must have embed-resource in your Cargo.toml as a `[build dependency]`
 ```
 [build dependency]
@@ -71,12 +71,12 @@ OriginalFilename = "<appname>.exe"
 
 ## Linux Specific Configuration
 
-# Install zigbuild via (required on MACOS ONLY)
+### Install zigbuild via (required on MACOS ONLY)
 `cargo install cargo-zigbuild`
 Provide a path to your cargo dependency binaries (somewhere like `~/.cargo/bin`)
 `zigbuild_path=/Users/<username>/.cargo/bin/cargo-zigbuild`
 
-# Install Zig via homebrew (required on MACOS ONLY)
+### Install Zig via homebrew (required on MACOS ONLY)
 provide a path to your homebrew binaries (somewhere like `/opt/homebrew/bin`) in your .env
 `homebrew_path=/opt/homebrew/bin`
 
