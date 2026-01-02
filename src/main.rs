@@ -258,11 +258,11 @@ let cwd = match env::current_dir(){
         //determine the platform of the build target
         match platform {
             Platform::Android => {
-            println!("build orders received for Android targeting {:?}", cmd.target());
-            AndroidBuilder::start();
+            println!("build orders received for Android targeting {:?}, release is set to {:?}", cmd.target(), release);
+            AndroidBuilder::start(release, cmd.target().unwrap().to_string(), cwd, env_vars)?;
             },
             Platform::Ios => {
-            println!("build orders received for IOS targeting {:?}", cmd.target());
+            println!("build orders received for IOS targeting {:?}, release is set to {:?}", cmd.target(), release);
             IOSBuilder::start(release, cmd.target().unwrap().to_string(), cwd, env_vars)?;
             },
             Platform::Linux => {
@@ -311,6 +311,9 @@ fn test_platform_from_target() {
     assert!(matches!(Platform::from_target("aarch64-linux-android"), Platform::Android));
     assert!(matches!(Platform::from_target("some-unknown-target"), Platform::Unknown));
 }
+
+
+//TODO add a `cargo piston list-devices` command used to query relevant info on all connected compatible mobile devices
 
 //TODO refactor most of main into a lib.rs
 
