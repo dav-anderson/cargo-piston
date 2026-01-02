@@ -52,7 +52,16 @@ Run the following command within your rust project repo to install the package l
 
 ## Windows Specific Configuration
 
-<!-- install mingw32 -->
+### Install mingw-w64 via homebrew (required on MACOS only)
+
+`brew install mingw-w64`
+
+After installing mingw-w64, add the path to the linker to your global `~/.cargo.config.toml`
+
+```
+[target.x86_64-pc-windows-gnu]
+linker = path/to/homebrew/bin/x86_64-w64-mingw32-gcc
+```
 
 <!-- winres? -->
 
