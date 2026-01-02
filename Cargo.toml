@@ -2,7 +2,7 @@
 name = "cargo-piston"
 description = "Utility tool for streamlining the configuration of rust binaries for various operating systems"
 repository = "https://github.com/dav-anderson/cargo-piston"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 
