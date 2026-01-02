@@ -85,11 +85,13 @@ You must have embed-resource in your Cargo.toml as a `[build dependency]`
 embed-resource = "3.0.2"
 ```
 
+<!-- 
+TODO can probably remove this, not sure if needed for linux host?
 You should have your desired output filename designated in your Cargo.toml as 
 ```
 [package.metadata.winres]
 OriginalFilename = "<appname>.exe"
-```
+``` -->
 
 ## Linux Specific Configuration
 
