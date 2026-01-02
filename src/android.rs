@@ -24,13 +24,15 @@ impl AndroidBuilder {
     let mut op = AndroidBuilder::new(release, target, cwd, env_vars)?;
 
     //>>prebuild
-    //-check for signing certificate
-    //setup the app bundle
+    //TODO check for signing certificate
+    op.pre_build()?;
 
     //>>build
+    op.build()?;
 
     //>>Postbuild
-    //move binary to the app bundle and sign
+    op.post_build()?;
+
     Ok(())
     }
 
@@ -67,6 +69,22 @@ impl AndroidBuilder {
         } 
         Ok(AndroidBuilder{release: release, target: target.to_string(), cwd: cwd, output_path: None, icon_path: icon_path, cargo_path: cargo_path, app_name: app_name, app_version: app_version})
     }
+
+    fn pre_build(&mut self) -> Result <(), PistonError>{
+        println!("pre build for android");
+        Ok(())
+    }
+
+    fn build(&mut self) -> Result <(), PistonError>{
+        println!("building for android");
+        Ok(())
+    }
+
+    fn post_build(&mut self) -> Result <(), PistonError>{
+        println!("post build for android");
+        Ok(())
+    }
+
 }
 
 
