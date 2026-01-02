@@ -1,6 +1,10 @@
 # How to Use Cargo Piston
 
-Once you have cargo-piston installed (either locally within a repo or globally) and your .env and Cargo.toml are properly configured, you can use cargo-piston to build and run for various targets.
+Once you have cargo-piston installed (either locally within a repo or globally) and your .env and Cargo.toml are properly configured, you can use cargo-piston to build and run for various targets. Your desired targets should be installed via rustup and should match your host system's architecture.
+
+Example
+
+`rustup target add aarch64-apple-darwin`
 
 ## Example command for building a MacOS app
 
@@ -8,16 +12,25 @@ Once you have cargo-piston installed (either locally within a repo or globally) 
 
 This command will build a Macos binary within a dynamically created app bundle derived from the information contained within your cargo.toml. This includes ordinarily tedious minutia such as an Info.plist and app icon configuration.
 
-## Supported Build Targets
+## Tested & Supported Build Targets
 
-In theory this tool should support build targets for all of the supported Opearting Systems, but they will only be added explicitly after being tested
+In theory this tool should support build targets for all of the supported Operting Systems, but they will only be added explicitly after being tested. If you test any of the unsupported targets in main.rs please let me know by opening an issue on the github repo.
 
 ### Windows
+
 x86_64-pc-windows-gnu
 
 ### Android
 
+aarch64-linux-android
+
+x86_64-linux-android
+
 ### IOS
+
+aarch64-apple-ios
+
+x86_64-apple-ios
 
 ### MacOS
 
@@ -30,9 +43,11 @@ x86_64-apple-darwin
 
 aarch64-unknown-linux-gnu
 
+x86_64-unknown-linux-gnu
+
 # Configuration
 
-## .ENV configuration
+## General .ENV configuration
 
 ### Path to cargo binary (if not in your local PATH) example
 `cargo_path=/Users/<username>/.cargo/bin/cargo`
@@ -41,7 +56,7 @@ aarch64-unknown-linux-gnu
 `zigbuild_path=/Users/<username>/.cargo/bin/cargo-zigbuild`
 `homebrew_path=/opt/homebrew/bin`
 
-## Cargo.toml configuration 
+## General Cargo.toml configuration 
 ### Path to App icon example
 
 `icon_path = "absolute/path/to/icon.png`
@@ -62,8 +77,6 @@ After installing mingw-w64, add the path to the linker to your global `~/.cargo.
 [target.x86_64-pc-windows-gnu]
 linker = path/to/homebrew/bin/x86_64-w64-mingw32-gcc
 ```
-
-<!-- winres? -->
 
 ### App Icon
 You must have embed-resource in your Cargo.toml as a `[build dependency]`

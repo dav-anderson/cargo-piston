@@ -88,113 +88,132 @@ impl Platform {
         match lower_target.as_str() {
             // MacOS targets
             "aarch64-apple-darwin" |
-            "x86_64-apple-darwin" |
-            "arm64e-apple-darwin" |
-            "x86_64h-apple-darwin" => Platform::Macos,
+            "x86_64-apple-darwin" 
+
+            // MacOS untested/unsupported
+            // "arm64e-apple-darwin" |
+            // "x86_64h-apple-darwin" 
+
+            => Platform::Macos,
 
             // iOS targets
             "aarch64-apple-ios" |
-            "aarch64-apple-ios-macabi" |
-            "aarch64-apple-ios-sim" |
-            "x86_64-apple-ios" |
-            "arm64e-apple-ios" |
-            "armv7s-apple-ios" |
-            "i386-apple-ios" => Platform::Ios,
+            "x86_64-apple-ios" 
+
+            // IOS untested/unsupported
+            // "aarch64-apple-ios-macabi" |
+            // "aarch64-apple-ios-sim" |
+            // "arm64e-apple-ios" |
+            // "armv7s-apple-ios" |
+            // "i386-apple-ios" 
+            
+            => Platform::Ios,
 
             // Linux targets
             "aarch64-unknown-linux-gnu" |
-            "i686-unknown-linux-gnu" |
-            "x86_64-unknown-linux-gnu" |
-            "aarch64-unknown-linux-musl" |
-            "arm-unknown-linux-gnueabi" |
-            "arm-unknown-linux-gnueabihf" |
-            "armv7-unknown-linux-gnueabihf" |
-            "i586-unknown-linux-gnu" |
-            "i686-unknown-linux-musl" |
-            "loongarch64-unknown-linux-gnu" |
-            "loongarch64-unknown-linux-musl" |
-            "powerpc-unknown-linux-gnu" |
-            "powerpc64-unknown-linux-gnu" |
-            "powerpc64le-unknown-linux-gnu" |
-            "powerpc64le-unknown-linux-musl" |
-            "riscv64gc-unknown-linux-gnu" |
-            "s390x-unknown-linux-gnu" |
-            "x86_64-unknown-linux-musl" |
-            "arm-unknown-linux-musleabi" |
-            "arm-unknown-linux-musleabihf" |
-            "armv5te-unknown-linux-gnueabi" |
-            "armv7-unknown-linux-gnueabi" |
-            "armv7-unknown-linux-musleabi" |
-            "armv7-unknown-linux-musleabihf" |
-            "i586-unknown-linux-musl" |
-            "riscv64gc-unknown-linux-musl" |
-            "sparc64-unknown-linux-gnu" |
-            "thumbv7neon-unknown-linux-gnueabihf" |
-            "x86_64-unknown-linux-gnux32" |
-            "aarch64-unknown-linux-gnu_ilp32" |
-            "aarch64_be-unknown-linux-gnu" |
-            "aarch64_be-unknown-linux-gnu_ilp32" |
-            "aarch64_be-unknown-linux-musl" |
-            "armeb-unknown-linux-gnueabi" |
-            "csky-unknown-linux-gnuabiv2" |
-            "csky-unknown-linux-gnuabiv2hf" |
-            "hexagon-unknown-linux-musl" |
-            "i686-unknown-haiku" |
-            "loongarch64-unknown-linux-ohos" |
-            "mips-unknown-linux-gnu" |
-            "mips-unknown-linux-musl" |
-            "mips-unknown-linux-uclibc" |
-            "mips64-unknown-linux-gnuabi64" |
-            "mips64-unknown-linux-muslabi64" |
-            "mips64el-unknown-linux-gnuabi64" |
-            "mips64el-unknown-linux-muslabi64" |
-            "mipsel-unknown-linux-gnu" |
-            "mipsel-unknown-linux-musl" |
-            "mipsel-unknown-linux-uclibc" |
-            "powerpc-unknown-linux-gnuspe" |
-            "powerpc-unknown-linux-musl" |
-            "powerpc-unknown-linux-muslspe" |
-            "riscv32gc-unknown-linux-gnu" |
-            "riscv32gc-unknown-linux-musl" |
-            "riscv64a23-unknown-linux-gnu" |
-            "s390x-unknown-linux-musl" |
-            "sparc-unknown-linux-gnu" |
-            "thumbv7neon-unknown-linux-musleabihf" |
-            "x86_64-unknown-dragonfly" |
-            "x86_64-unknown-haiku" |
-            "x86_64-unknown-linux-none" |
-            "x86_64-unikraft-linux-musl" => Platform::Linux,
+            "x86_64-unknown-linux-gnu" 
+
+            // Linux untested/unsupported
+            // "i686-unknown-linux-gnu" |
+            // "aarch64-unknown-linux-musl" |
+            // "arm-unknown-linux-gnueabi" |
+            // "arm-unknown-linux-gnueabihf" |
+            // "armv7-unknown-linux-gnueabihf" |
+            // "i586-unknown-linux-gnu" |
+            // "i686-unknown-linux-musl" |
+            // "loongarch64-unknown-linux-gnu" |
+            // "loongarch64-unknown-linux-musl" |
+            // "powerpc-unknown-linux-gnu" |
+            // "powerpc64-unknown-linux-gnu" |
+            // "powerpc64le-unknown-linux-gnu" |
+            // "powerpc64le-unknown-linux-musl" |
+            // "riscv64gc-unknown-linux-gnu" |
+            // "s390x-unknown-linux-gnu" |
+            // "x86_64-unknown-linux-musl" |
+            // "arm-unknown-linux-musleabi" |
+            // "arm-unknown-linux-musleabihf" |
+            // "armv5te-unknown-linux-gnueabi" |
+            // "armv7-unknown-linux-gnueabi" |
+            // "armv7-unknown-linux-musleabi" |
+            // "armv7-unknown-linux-musleabihf" |
+            // "i586-unknown-linux-musl" |
+            // "riscv64gc-unknown-linux-musl" |
+            // "sparc64-unknown-linux-gnu" |
+            // "thumbv7neon-unknown-linux-gnueabihf" |
+            // "x86_64-unknown-linux-gnux32" |
+            // "aarch64-unknown-linux-gnu_ilp32" |
+            // "aarch64_be-unknown-linux-gnu" |
+            // "aarch64_be-unknown-linux-gnu_ilp32" |
+            // "aarch64_be-unknown-linux-musl" |
+            // "armeb-unknown-linux-gnueabi" |
+            // "csky-unknown-linux-gnuabiv2" |
+            // "csky-unknown-linux-gnuabiv2hf" |
+            // "hexagon-unknown-linux-musl" |
+            // "i686-unknown-haiku" |
+            // "loongarch64-unknown-linux-ohos" |
+            // "mips-unknown-linux-gnu" |
+            // "mips-unknown-linux-musl" |
+            // "mips-unknown-linux-uclibc" |
+            // "mips64-unknown-linux-gnuabi64" |
+            // "mips64-unknown-linux-muslabi64" |
+            // "mips64el-unknown-linux-gnuabi64" |
+            // "mips64el-unknown-linux-muslabi64" |
+            // "mipsel-unknown-linux-gnu" |
+            // "mipsel-unknown-linux-musl" |
+            // "mipsel-unknown-linux-uclibc" |
+            // "powerpc-unknown-linux-gnuspe" |
+            // "powerpc-unknown-linux-musl" |
+            // "powerpc-unknown-linux-muslspe" |
+            // "riscv32gc-unknown-linux-gnu" |
+            // "riscv32gc-unknown-linux-musl" |
+            // "riscv64a23-unknown-linux-gnu" |
+            // "s390x-unknown-linux-musl" |
+            // "sparc-unknown-linux-gnu" |
+            // "thumbv7neon-unknown-linux-musleabihf" |
+            // "x86_64-unknown-dragonfly" |
+            // "x86_64-unknown-haiku" |
+            // "x86_64-unknown-linux-none" |
+            // "x86_64-unikraft-linux-musl" 
+
+            => Platform::Linux,
 
             // Windows targets
-            "aarch64-pc-windows-msvc" |
-            "i686-pc-windows-msvc" |
-            "x86_64-pc-windows-gnu" |
-            "x86_64-pc-windows-msvc" |
-            "aarch64-pc-windows-gnullvm" |
-            "i686-pc-windows-gnu" |
-            "x86_64-pc-windows-gnullvm" |
-            "arm64ec-pc-windows-msvc" |
-            "i686-pc-nto-qnx700" |
-            "i686-uwp-windows-gnu" |
-            "i686-win7-windows-gnu" |
-            "i686-win7-windows-msvc" |
-            "thumbv7a-pc-windows-msvc" |
-            "thumbv7a-uwp-windows-msvc" |
-            "x86_64-pc-nto-qnx710" |
-            "x86_64-pc-nto-qnx710_iosock" |
-            "x86_64-pc-nto-qnx800" |
-            "x86_64-uwp-windows-gnu" |
-            "x86_64-uwp-windows-msvc" |
-            "x86_64-win7-windows-gnu" |
-            "x86_64-win7-windows-msvc" => Platform::Windows,
+            "x86_64-pc-windows-gnu" 
+
+            // Windows untested/unsupported
+            // "aarch64-pc-windows-msvc" |
+            // "i686-pc-windows-msvc" |
+            // "x86_64-pc-windows-msvc" |
+            // "aarch64-pc-windows-gnullvm" |
+            // "i686-pc-windows-gnu" |
+            // "x86_64-pc-windows-gnullvm" |
+            // "arm64ec-pc-windows-msvc" |
+            // "i686-pc-nto-qnx700" |
+            // "i686-uwp-windows-gnu" |
+            // "i686-win7-windows-gnu" |
+            // "i686-win7-windows-msvc" |
+            // "thumbv7a-pc-windows-msvc" |
+            // "thumbv7a-uwp-windows-msvc" |
+            // "x86_64-pc-nto-qnx710" |
+            // "x86_64-pc-nto-qnx710_iosock" |
+            // "x86_64-pc-nto-qnx800" |
+            // "x86_64-uwp-windows-gnu" |
+            // "x86_64-uwp-windows-msvc" |
+            // "x86_64-win7-windows-gnu" |
+            // "x86_64-win7-windows-msvc" 
+
+            => Platform::Windows,
 
             // Android targets
             "aarch64-linux-android" |
-            "arm-linux-androideabi" |
-            "armv7-linux-androideabi" |
-            "i686-linux-android" |
-            "x86_64-linux-android" |
-            "riscv64-linux-android" => Platform::Android,
+            "x86_64-linux-android" 
+            // Android untested/unsupported
+            // "arm-linux-androideabi" |
+            // "armv7-linux-androideabi" |
+            // "i686-linux-android" |
+            // "riscv64-linux-android" 
+            
+            => Platform::Android,
 
             // All others are Unknown
             _ => Platform::Unknown,
