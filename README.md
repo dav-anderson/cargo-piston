@@ -106,3 +106,9 @@ provide a path to your homebrew binaries (somewhere like `/opt/homebrew/bin`) in
 
 ## MacOS Specific Configuration
 
+## Android Specific Configuration
+
+### Install Android NDK & SDK
+
+Install the android NDK & SDK and provide the paths to the installation in your .env file.
+
