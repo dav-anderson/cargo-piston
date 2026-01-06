@@ -83,13 +83,10 @@ impl AndroidBuilder {
             format!("target/{}/android/app/src/main/res",release).into()
         };
         println!("bundle path: {:?}", bundle_path);
-        //establish mipmap dirs
-        let hdpi_path: PathBuf = bundle_path.join("mipmap-hdpi");
         let mdpi_path: PathBuf = bundle_path.join("mipmap-mdpi");
         let xhdpi_path: PathBuf = bundle_path.join("mipmap-xhdpi");
         let xxhdpi_path: PathBuf = bundle_path.join("mipmap-xxhdpi");
         let xxxhdpi_path: PathBuf = bundle_path.join("mipmap-xxxhdpi");
-        println!("mipmap paths: hdpi: {:?}, mdpi: {:?}, xhdpi: {:?}, xxhdpi: {:?}, xxxhdpi: {:?}", hdpi_path, mdpi_path, xhdpi_path, xxhdpi_path, xxxhdpi_path);
         //set the output path
         self.output_path = Some(cwd.join(&bundle_path));
         //check for a valid output path
@@ -106,31 +103,32 @@ impl AndroidBuilder {
         path: self.output_path.as_ref().unwrap().to_path_buf(),
         source: e,
         })?;
-        //absolute paths for mipmaps
-        let full_hdpi: PathBuf = cwd.join(hdpi_path);
-        let full_mdpi: PathBuf = cwd.join(mdpi_path);
-        let full_xhdpi: PathBuf = cwd.join(xhdpi_path);
-        let full_xxhdpi: PathBuf = cwd.join(xxhdpi_path);
-        let full_xxxhdpi: PathBuf = cwd.join(xxxhdpi_path);
+        //establish absolute paths for  mipmap dirs
+        let hdpi_path: PathBuf = cwd.join(&bundle_path).join("mipmap-hdpi");
+        let mdpi_path: PathBuf = cwd.join(&bundle_path).join("mipmap-mdpi");
+        let xhdpi_path: PathBuf = cwd.join(&bundle_path).join("mipmap-xhdpi");
+        let xxhdpi_path: PathBuf = cwd.join(&bundle_path).join("mipmap-xxhdpi");
+        let xxxhdpi_path: PathBuf = cwd.join(&bundle_path).join("mipmap-xxxhdpi");
+        println!("mipmap paths: hdpi: {:?}, mdpi: {:?}, xhdpi: {:?}, xxhdpi: {:?}, xxxhdpi: {:?}", hdpi_path, mdpi_path, xhdpi_path, xxhdpi_path, xxxhdpi_path);
         //create mipmap dirs
-        create_dir_all(&full_hdpi).map_err(|e| PistonError::CreateDirAllError {
-        path: full_hdpi,
+        create_dir_all(&hdpi_path).map_err(|e| PistonError::CreateDirAllError {
+        path: hdpi_path,
         source: e,
         })?;
-        create_dir_all(&full_mdpi).map_err(|e| PistonError::CreateDirAllError {
-        path: full_mdpi,
+        create_dir_all(&mdpi_path).map_err(|e| PistonError::CreateDirAllError {
+        path: mdpi_path,
         source: e,
         })?;
-        create_dir_all(&full_xhdpi).map_err(|e| PistonError::CreateDirAllError {
-        path: full_xhdpi,
+        create_dir_all(&xhdpi_path).map_err(|e| PistonError::CreateDirAllError {
+        path: xhdpi_path,
         source: e,
         })?;
-        create_dir_all(&full_xxhdpi).map_err(|e| PistonError::CreateDirAllError {
-        path: full_xxhdpi,
+        create_dir_all(&xxhdpi_path).map_err(|e| PistonError::CreateDirAllError {
+        path: xxhdpi_path,
         source: e,
         })?;
-        create_dir_all(&full_xxxhdpi).map_err(|e| PistonError::CreateDirAllError {
-        path: full_xxxhdpi,
+        create_dir_all(&xxxhdpi_path).map_err(|e| PistonError::CreateDirAllError {
+        path: xxxhdpi_path,
         source: e,
         })?;
 
