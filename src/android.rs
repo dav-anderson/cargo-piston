@@ -83,11 +83,7 @@ impl AndroidBuilder {
             format!("target/{}/android/app/src/main/res",release).into()
         };
         println!("bundle path: {:?}", bundle_path);
-        let mdpi_path: PathBuf = bundle_path.join("mipmap-mdpi");
-        let xhdpi_path: PathBuf = bundle_path.join("mipmap-xhdpi");
-        let xxhdpi_path: PathBuf = bundle_path.join("mipmap-xxhdpi");
-        let xxxhdpi_path: PathBuf = bundle_path.join("mipmap-xxxhdpi");
-        //set the output path
+        //set the absolute output path
         self.output_path = Some(cwd.join(&bundle_path));
         //check for a valid output path
         if self.output_path.as_ref().is_none() {
