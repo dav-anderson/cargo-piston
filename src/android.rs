@@ -106,20 +106,40 @@ impl AndroidBuilder {
         path: self.output_path.as_ref().unwrap().to_path_buf(),
         source: e,
         })?;
-
+        //absolute paths for mipmaps
+        let full_hdpi: PathBuf = cwd.join(hdpi_path);
+        let full_mdpi: PathBuf = cwd.join(mdpi_path);
+        let full_xhdpi: PathBuf = cwd.join(xhdpi_path);
+        let full_xxhdpi: PathBuf = cwd.join(xxhdpi_path);
+        let full_xxxhdpi: PathBuf = cwd.join(xxxhdpi_path);
+        //create mipmap dirs
+        create_dir_all(&full_hdpi).map_err(|e| PistonError::CreateDirAllError {
+        path: full_hdpi,
+        source: e,
+        })?;
+        create_dir_all(&full_mdpi).map_err(|e| PistonError::CreateDirAllError {
+        path: full_mdpi,
+        source: e,
+        })?;
+        create_dir_all(&full_xhdpi).map_err(|e| PistonError::CreateDirAllError {
+        path: full_xhdpi,
+        source: e,
+        })?;
+        create_dir_all(&full_xxhdpi).map_err(|e| PistonError::CreateDirAllError {
+        path: full_xxhdpi,
+        source: e,
+        })?;
+        create_dir_all(&full_xxxhdpi).map_err(|e| PistonError::CreateDirAllError {
+        path: full_xxxhdpi,
+        source: e,
+        })?;
 
         //TODO
-        //create mipmap-hdpi mipmap-mdpi mipmap-xhdpi mipmap-xxhdpi mipmap-xxxhdpi
         //convert icon to various mipmaps
 
         //reverse engineer cargo-apk
 
 
-        // //create binary directories
-        // create_dir_all(macos_path).map_err(|e| PistonError::CreateDirAllError {
-        //     path: self.output_path.as_ref().unwrap().to_path_buf(),
-        //     source: e,
-        // })?;
         // //establish app icon target path ~/macos/release/Appname.app/Contents/Resources/macos_icon.icns
         // let icon_path: PathBuf = res_path.join("macos_icon.icns");
         // //establish Info.plist path ~/macos/release/Appname.app/Contents/Info.plist
