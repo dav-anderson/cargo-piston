@@ -13,6 +13,8 @@ pub enum PistonError {
     FileFlushError(String),
 
     WriteImageError(ImageError),
+    
+    SaveImageError(String),
 
     ZigbuildMissingError(String),
 
@@ -36,6 +38,8 @@ pub enum PistonError {
 
     OpenImageError{ path: PathBuf, source: ImageError },
 
+    RemoveImageError{ path: PathBuf, source: IoError },
+
     Generic(String)
 }
 
@@ -45,6 +49,7 @@ impl fmt::Display for PistonError {
             PistonError::CargoParseError(err) => write!(f, "Failed to parse the cargo.toml: {}", err),
             PistonError::WriteFileError(err) => write!(f, "Failed to write file: {}", err),
             PistonError::WriteImageError(err) => write!(f, "Failed to write image: {}", err),
+            PistonError::SaveImageError(err) => write!(f, "Failed to save image: {}", err),
             PistonError::FileFlushError(err) => write!(f, "Failed to flush file: {}", err),
             PistonError::ZigbuildMissingError(err) => write!(f, "Failed to find zigbuild path in .env file: {}", err),
             PistonError::HomebrewMissingError(err) => write!(f, "Failed to find homebrew bin path in .env file: {}", err),
@@ -57,6 +62,7 @@ impl fmt::Display for PistonError {
             PistonError::CreateFileError { path, .. } => write!(f, "Failed to Create file {:?}", path),
             PistonError::CreateDirAllError { path, .. } => write!(f, "Failed to create dir all {:?}", path),
             PistonError::OpenImageError { path, .. } => write!(f, "Failed to open image {:?}", path),
+            PistonError::RemoveImageError { path, .. } => write!(f, "Failed to remove image {:?}", path),
             PistonError::Generic(err) => write!(f, "Generic Error: {}", err)
         }
     }
@@ -73,6 +79,7 @@ impl StdError for PistonError {
             PistonError::CreateFileError { source, .. } => Some(source),
             PistonError::CreateDirAllError { source, .. } => Some(source),
             PistonError::OpenImageError { source, .. } => Some(source),
+            PistonError::RemoveImageError { source, .. } => Some(source),
             _ => None,
         }
     }

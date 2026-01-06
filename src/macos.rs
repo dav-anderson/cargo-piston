@@ -152,7 +152,7 @@ fn new(release: bool, target: String, cwd: PathBuf, env_vars: HashMap<String, St
             &self.app_name.as_ref().unwrap(),
             &self.app_version.as_ref().unwrap(),
         );
-        plist_file.write_all(plist_content.as_bytes()).map_err(|e| PistonError::WriteFileError(e.to_string()))?;;
+        plist_file.write_all(plist_content.as_bytes()).map_err(|e| PistonError::WriteFileError(e.to_string()));
         println!("Info.plist created");
         //if icon path was provided...convert
         if !self.icon_path.is_none(){
