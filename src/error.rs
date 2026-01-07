@@ -20,6 +20,8 @@ pub enum PistonError {
 
     HomebrewMissingError(String),
 
+    ParseManifestError(String),
+
     UnsupportedOSError{ os: String, target: String },
 
     CopyFileError{ input_path: PathBuf, output_path: PathBuf, source: IoError },
@@ -53,6 +55,7 @@ impl fmt::Display for PistonError {
             PistonError::FileFlushError(err) => write!(f, "Failed to flush file: {}", err),
             PistonError::ZigbuildMissingError(err) => write!(f, "Failed to find zigbuild path in .env file: {}", err),
             PistonError::HomebrewMissingError(err) => write!(f, "Failed to find homebrew bin path in .env file: {}", err),
+            PistonError::ParseManifestError(err) => write!(f, "Failed to parse package.metadata.android value: {}", err),
             PistonError::UnsupportedOSError{ os, target, .. } => write!(f, "Host system: {:?} does not support the target: {:?}", os, target),
             PistonError::CopyFileError { input_path, output_path, .. } => write!(f, "Failed to copy {:?} to {:?}", input_path, output_path),
             PistonError::MacOSIconError { input_path, output_path, .. } => write!(f, "Failed to format icon {:?} to {:?}", input_path, output_path),

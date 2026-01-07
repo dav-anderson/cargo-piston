@@ -87,7 +87,7 @@ fn new(release: bool, target: String, cwd: PathBuf, env_vars: HashMap<String, St
             format!("target/{}/macos/{}.app/Contents",release, capitalized).into()
         };
         println!("partial path: {:?}", partial_path);
-        //establish ~/macos/release/Appname.app/Contents/Resources
+        //establish ~/target/release/macos/Appname.app/Contents/Resources
         let res_path: PathBuf = partial_path.join("Resources");
         println!("res path: {:?}", res_path);
         let macos_path = partial_path.join("MacOS");

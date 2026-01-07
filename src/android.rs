@@ -4,8 +4,70 @@ use cargo_metadata::{ Metadata, MetadataCommand };
 use std::fs::{ File, create_dir_all, copy, remove_file};
 use std::io::Write;
 use std::process::{ Command, Stdio };
+use serde::Deserialize;
+use serde_json::Value;
 use crate::Helper;
 use crate::PistonError;
+
+#[derive(Deserialize, Default)]
+struct AndroidMetadata {
+    #[serde(default)]
+    package: Option<String>,
+    #[serde(default)]
+    version_code: Option<u32>,
+    #[serde(default)]
+    version_name: Option<String>,
+    #[serde(default)]
+    min_sdk_version: Option<u32>,
+    #[serde(default)]
+    target_sdk_version: Option<u32>,
+    #[serde(default)]
+    label: Option<String>
+}
+
+#[derive(Deserialize, Default)]
+struct AndroidManifest {
+    package: String,
+    version_code: u32,
+    version_name: String,
+    min_sdk_version: u32,
+    target_sdk_version: u32,
+    app_label: String,
+    app_name: String
+}
+
+impl AndroidManifest {
+    pub fn build(metadata: &Metadata, app_name: String) -> Result<Self, PistonError> {
+        let package = metadata.root_package()
+            .ok_or_else(|| PistonError::ParseManifestError("No Root package found in metadata".to_string()))?;
+        let crate_name = package.name.clone();
+        //extract [package.metadata.android] as JSON values
+        let android_meta_value: Value = package.metadata
+            .get("android")
+            .cloned()
+            .unwrap_or(Value::Object(Default::default()));
+        //Deserialize to structured metadata
+        let android_meta: AndroidMetadata = serde_json::from_value(android_meta_value)
+            .map_err(|e| PistonError::ParseManifestError(format!("Failed to deserialize [package.metadata.android: {}]", e)))?;
+        //Build the manifest with extracted values or defaults
+        let mut manifest = Self::default();
+        manifest.package = android_meta.package
+            .unwrap_or(format!("com.example.{}", crate_name));
+        manifest.version_code = android_meta.version_code
+            .unwrap_or(1);
+        manifest.version_name = android_meta.version_name
+            .unwrap_or("1.0".to_string());
+        manifest.min_sdk_version = android_meta.min_sdk_version
+            .unwrap_or(21);
+        manifest.target_sdk_version = android_meta.target_sdk_version
+            .unwrap_or(34);
+        manifest.app_label = android_meta.label
+            .unwrap_or(format!("{} App", crate_name));
+        manifest.app_name = app_name;
+
+        Ok(manifest)
+    }
+}
 
 pub struct AndroidBuilder {
     release: bool,
@@ -138,13 +200,22 @@ impl AndroidBuilder {
         Helper::resize_png(&self.icon_path.as_ref().unwrap(), &xxhdpi_target.display().to_string(), 144, 144)?;
         let xxxhdpi_target: PathBuf = xxxhdpi_path.join("ic_launcher.png");
         Helper::resize_png(&self.icon_path.as_ref().unwrap(), &xxxhdpi_target.display().to_string(), 192, 192)?;
+        //parse cargotoml & generate androidmanifest xml
+        let metadata: Metadata = MetadataCommand::new()
+            .current_dir(cwd.clone())
+            .exec()
+            .map_err(|e| PistonError::CargoParseError(e.to_string()))?;
+        let manifest = AndroidManifest::build(&metadata, self.app_name.as_ref().unwrap().to_string())?;
+        //TODO create mainfest path within android bundle and mainfest.write_to(path)
+
+        //TDOD proceed to aapt2 with generated AndroidManifest.xml path
 
         //TODO
 
         //reverse engineer cargo-apk
 
 
-        // //establish Info.plist path ~/macos/release/Appname.app/Contents/Info.plist
+        // //establish AndroidManifest.xml path ~/target/android/<release>/Appname.app/
         // let plist_path: PathBuf = partial_path.join("Info.plist");
         // println!("plist path: {:?}", plist_path);
         // //if a plist file exists, first remove it.

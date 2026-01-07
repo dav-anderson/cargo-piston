@@ -312,6 +312,8 @@ fn test_platform_from_target() {
     assert!(matches!(Platform::from_target("some-unknown-target"), Platform::Unknown));
 }
 
+//TODO refactor main to use custom error types and remove anyhow as a dep
+
 
 //TODO add a `cargo piston list-devices` command used to query relevant info on all connected compatible mobile devices
 
