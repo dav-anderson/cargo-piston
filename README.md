@@ -153,30 +153,38 @@ SDK url Repository (Linux)
 
 `https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip`
 
+Download the file
+
+`curl -o </path/to/downloads> <sdk_url_from_above>`
+
 Create an install dir and unzip the file (replace $HOME with your absolute path)
 
 `mkdir <$HOME>/Android/sdk`
 
-`unzip -o <$HOME>/Downloads/cmdline-tools.zip -d <$HOME>/Android/sdk`
+`unzip -o </path/to/downloads>/cmdline-tools.zip -d <$HOME>/Android/sdk`
 
 
 Accept android SDK licenses
 
-`yes | JAVA_HOME=PATH/TO/JAVA sudo <$HOME>/Android/sdk/cmdline-tools/bin/sdkmanager --licenses --sdk_root=<$HOME>/Android/sdk || echo "Failed to accept the license"`
+`yes | JAVA_HOME=<PATH/TO/JAVA> sudo <$HOME>/Android/sdk/cmdline-tools/bin/sdkmanager --licenses --sdk_root=<$HOME>/Android/sdk || echo "Failed to accept the license"`
 
 ### Install Android SDK & NDK
 
 Install platform-tools
-`JAVA_HOME="/path/to/java" sudo /path/to/sdkmanager "platform-tools" --sdk_root=/path/to/sdk 2> stderr.log || (echo "Failed: $(cat stderr.log)" && exit 1)`
+
+`JAVA_HOME="</path/to/java>" sudo </path/to/sdkmanager> "platform-tools" --sdk_root=</path/to/sdk> 2> stderr.log || (echo "Failed: $(cat stderr.log)" && exit 1)`
 
 Install build-tools;34.0.0
-`JAVA_HOME="/path/to/java" sudo /path/to/sdkmanager "build-tools;34.0.0" --sdk_root=/path/to/sdk 2> stderr.log || (echo "Failed: $(cat stderr.log)" && exit 1)`
+
+`JAVA_HOME="</path/to/java>" sudo </path/to/sdkmanager> "build-tools;34.0.0" --sdk_root=</path/to/sdk> 2> stderr.log || (echo "Failed: $(cat stderr.log)" && exit 1)`
 
 Install platforms;android-34 (adjust version)
-`JAVA_HOME="/path/to/java" sudo /path/to/sdkmanager "platforms;android-34" --sdk_root=/path/to/sdk 2> stderr.log || (echo "Failed: $(cat stderr.log)" && exit 1)`
+
+`JAVA_HOME="</path/to/java>" sudo </path/to/sdkmanager> "platforms;android-34" --sdk_root=</path/to/sdk> 2> stderr.log || (echo "Failed: $(cat stderr.log)" && exit 1)`
 
 Install ndk;25.1.8937393
-`JAVA_HOME="/path/to/java" sudo /path/to/sdkmanager "ndk;25.1.8937393" --sdk_root=/path/to/sdk 2> stderr.log || (echo "Failed: $(cat stderr.log)" && exit 1)`
+
+`JAVA_HOME="</path/to/java>" sudo </path/to/sdkmanager> "ndk;25.1.8937393" --sdk_root=</path/to/sdk> 2> stderr.log || (echo "Failed: $(cat stderr.log)" && exit 1)`
 
 
 Set the paths to the binaries in your .env (replace $HOME with your absolute path)
