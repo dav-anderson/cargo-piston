@@ -2,7 +2,7 @@ use std::path::{ Path, PathBuf };
 use std::collections::HashMap;
 use cargo_metadata::{ Metadata, MetadataCommand };
 use std::fs::{ File, create_dir_all, copy, remove_file};
-use std::io::Write;
+use std::io::{ Write, BufWriter };
 use std::process::{ Command, Stdio };
 use serde::Deserialize;
 use serde_json::Value;
@@ -33,7 +33,8 @@ struct AndroidManifest {
     min_sdk_version: u32,
     target_sdk_version: u32,
     app_label: String,
-    app_name: String
+    app_name: String,
+    icon: String,
 }
 
 impl AndroidManifest {
@@ -64,8 +65,66 @@ impl AndroidManifest {
         manifest.app_label = android_meta.label
             .unwrap_or(format!("{} App", crate_name));
         manifest.app_name = app_name;
+        manifest.icon = "@mipmap/ic_launcher".to_string();
 
         Ok(manifest)
+    }
+
+    pub fn to_xml(&self) -> String {
+        let icon_attr = format!(r#" android:icon={}""#, Self::escape_xml(&self.icon));
+
+        format!(
+            r#"<?xml version="1.0" encoding="utf-8"?>
+            <manifest xmlns:android="http://schemas.android.com/apk/res/android"
+                package="{package}"
+                android:versionCode="{version_code}"
+                android:versionName="{version_name}">
+
+                <uses-sdk android:minSdkVersion="{min_sdk}" android:targetSdkVersion="{target_sdk}" />
+
+                <application android:label="{label}" android:hasCode="false"{icon_attr}>
+                    <activity android:name="android.app.NativeActivity"
+                        android:label="{label}"
+                        android:exported="true">
+                        <meta-data android:name="android.app.lib_name" android:value="{app_name}" />
+                        <intent-filter>
+                            <action android:name="android.intent.action.MAIN" />
+                            <category android:name="android.intent.category.LAUNCHER" />
+                        </intent-filter>
+                    </activity>
+                </application>
+            </manifest>"#,
+            package = Self::escape_xml(&self.package),
+            version_code = self.version_code,
+            version_name = Self::escape_xml(&self.version_name),
+            min_sdk = self.min_sdk_version,
+            target_sdk = self.target_sdk_version,
+            label = Self::escape_xml(&self.app_label),
+            app_name = Self::escape_xml(&self.app_name),  // Using app_name for lib_name in meta-data
+            icon_attr = icon_attr,
+        )
+    }
+
+    pub fn write_to(&self, dir: &Path) -> Result<(), PistonError> {
+        println!("writing manifest...");
+        let path = dir.join("AndroidManifest.xml");
+        println!("Manifest path: {:?}", path);
+        let file = File::create(&path)
+            .map_err(|e| PistonError::CreateManifestError(format!("Failed to create manifest file: {}", e)))?;
+        
+        let mut writer = BufWriter::new(file);
+        writer.write_all(self.to_xml().as_bytes())
+            .map_err(|e| PistonError::WriteManifestError(format!("Failed to write manifest file: {}", e)))?;
+
+        Ok(())
+    }
+
+    pub fn escape_xml(s: &str) -> String {
+        s.replace('&', "&amp;")
+            .replace('<', "&lt;")
+            .replace('>', "&gt;")
+            .replace('"', "&quot;")
+            .replace('\'', "&apos;")
     }
 }
 
@@ -206,75 +265,17 @@ impl AndroidBuilder {
             .exec()
             .map_err(|e| PistonError::CargoParseError(e.to_string()))?;
         let manifest = AndroidManifest::build(&metadata, self.app_name.as_ref().unwrap().to_string())?;
-        //TODO create mainfest path within android bundle and mainfest.write_to(path)
+        //manifest path is cwd/target/android/AndroidManifest.xml
+        let manifest_path: PathBuf = cwd.join("target").join(if self.release { "release" } else { "debug" }).join("android");
+        println!("manifest path: {:?}", manifest_path);
+        //write the manifest file
+        manifest.write_to(&manifest_path.as_path())?;
 
         //TDOD proceed to aapt2 with generated AndroidManifest.xml path
 
-        //TODO
+        //TODO reverse engineer cargo-apk
 
-        //reverse engineer cargo-apk
-
-
-        // //establish AndroidManifest.xml path ~/target/android/<release>/Appname.app/
-        // let plist_path: PathBuf = partial_path.join("Info.plist");
-        // println!("plist path: {:?}", plist_path);
-        // //if a plist file exists, first remove it.
-        // if plist_path.exists() {
-        //     remove_file(&plist_path).map_err(|e| PistonError::RemoveFileError {
-        //         path: plist_path.clone().to_path_buf(),
-        //         source: e,
-        //     })?;
-        // }
-        // //create a new Info.plist file
-        // let mut plist_file = File::create(&plist_path).map_err(|e| PistonError::CreateFileError {
-        //         path: plist_path.clone().to_path_buf(),
-        //         source: e,
-        //     })?;
-        // //populate the Info.plist file
-        // let plist_content = format!(
-        //     r#"
-        //     <?xml version="1.0" encoding="UTF-8"?>
-        //     <!DOCTYPE plist PUBLIC "-//Apple Computer//DTD PLIST 1.0//EN"
-        //     "https://www.apple.com/DTDs/PropertyList-1.0.dtd">
-        //     <plist version="1.0">
-        //     <dict>
-        //         <key>CFBundleName</key>
-        //         <string>{}</string>
-        //         <key>CFBundleExecutable</key>
-        //         <string>{}</string>
-        //         <key>CFBundleIconFile</key>
-        //         <string>macos_icon</string>
-        //         <key>CFBundleVersion</key>
-        //         <string>{}</string>
-        //     </dict>
-        //     </plist>
-        //     "#,
-        //     &capitalized,
-        //     &self.app_name.as_ref().unwrap(),
-        //     &self.app_version.as_ref().unwrap(),
-        // );
-        // plist_file.write_all(plist_content.as_bytes()).map_err(|e| PistonError::WriteFileError(e.to_string()))?;;
-        // println!("Info.plist created");
-        // //if icon path was provided...convert
-        // if !self.icon_path.is_none(){
-        //     println!("icon path provided, configuring icon");
-        //     //convert the .png at icon_path to an .icns which resides in the app bundle
-        //     println!("icon output path: {}", icon_path.display());
-        //     let img_path_clone = self.icon_path.clone().unwrap();
-        //     println!("image path clone: {}", &img_path_clone);
-        //     let img_path = Path::new(&img_path_clone);
-        //     println!("image path as path: {}", &img_path.display());
-        //     let macos_icon = Command::new("sips")
-        //         .args(["-s", "format", "icns", &img_path_clone, "--out", &icon_path.display().to_string()])
-        //         .output()
-        //         .map_err(|e| PistonError::MacOSIconError {
-        //             input_path: img_path.to_path_buf(),
-        //             output_path: icon_path,
-        //             source: e,
-        //         })?;
-        //     println!("done configuring macos icon");
-        // }
-        // println!("done configuring MacOS bundle");
+        println!("done configuring Android bundle");
         Ok(())
     }
 

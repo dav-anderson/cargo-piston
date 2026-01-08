@@ -77,37 +77,45 @@ impl Helper {
 
 
     pub fn resize_png(input_name: &str, target_name: &str, width: u32, height: u32) -> Result<(), PistonError> {
-    // Open the input PNG file
-    let img = image::open(input_name).map_err(|e| PistonError::OpenImageError {
-            path: PathBuf::from(input_name),
-            source: e,
-    })?;
+        // Open the input PNG file
+        let img = image::open(input_name).map_err(|e| PistonError::OpenImageError {
+                path: PathBuf::from(input_name),
+                source: e,
+        })?;
 
-    //remove target output if it exists
-    if Path::new(&target_name).exists() {
-        let output = Command::new("rm")
-            .arg(&target_name)
-            .output()
-            .unwrap();
-        if !output.status.success() {
-            return Err(
-                PistonError::Generic(format!("error removing the target: {}", target_name))
-            );
+        //remove target output if it exists
+        if Path::new(&target_name).exists() {
+            let output = Command::new("rm")
+                .arg(&target_name)
+                .output()
+                .unwrap();
+            if !output.status.success() {
+                return Err(
+                    PistonError::Generic(format!("error removing the target: {}", target_name))
+                );
+            }
         }
+
+        // Resize the image to the target resolution
+        let resized_img = imageops::resize(&img, width, height, imageops::FilterType::Lanczos3);
+
+        // Save the resized image to the target name
+        resized_img.save(target_name).map_err(|e| {
+            PistonError::SaveImageError(format!("Failed to save {}: {}", target_name, e))
+        })?;
+
+        println!(
+            "Resized {} to {}x{} and saved as {}",
+            input_name, width, height, target_name
+        );
+        Ok(())
     }
 
-    // Resize the image to the target resolution
-    let resized_img = imageops::resize(&img, width, height, imageops::FilterType::Lanczos3);
-
-    // Save the resized image to the target name
-    resized_img.save(target_name).map_err(|e| {
-        PistonError::SaveImageError(format!("Failed to save {}: {}", target_name, e))
-    })?;
-
-    println!(
-        "Resized {} to {}x{} and saved as {}",
-        input_name, width, height, target_name
-    );
-    Ok(())
-}
+    pub fn escape_xml(s: &str) -> String {
+        s.replace('&', "&amp;")
+            .replace('<', "&lt;")
+            .replace('>', "&gt;")
+            .replace('"', "&quot;")
+            .replace('\'', "&apos;")
+    }
 }
