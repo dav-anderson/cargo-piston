@@ -47,7 +47,7 @@ x86_64-unknown-linux-gnu
 
 # Configuration
 
-## General .ENV configuration
+## .ENV configuration
 
 ### Path to cargo binary (if not in your local PATH) example
 `cargo_path=/Users/<username>/.cargo/bin/cargo`
@@ -108,7 +108,84 @@ provide a path to your homebrew binaries (somewhere like `/opt/homebrew/bin`) in
 
 ## Android Specific Configuration
 
-### Install Android NDK & SDK
+ ### Install Java
+
+Install Java and provide the path to the installation in your .env file
+
+Example install command (Macos)
+
+`brew install openjdk@17`
+
+Example .env entries (Macos)
+
+set the path to the binary in your .env
+
+aarch64
+`java_path=/opt/homebrew/openjdk@17`
+
+silicone chipset
+`java_path=/usr/local/opt/openjdk@17`
+
+Example install command (Linux)
+
+`sudo apt update`
+
+`sudo apt install -y openjdk-17-jdk`
+
+Example .env entry (Linux)
+
+`java_path=/usr/lib/jvm/java-17-openjdk-amd64`
+
+
+### Install Android Command-line tools
 
 Install the android NDK & SDK and provide the paths to the installation in your .env file.
+
+Example install commands
+
+Download & Install command line tools
+
+SDK url Repository (MacOS)
+
+`https://dl.google.com/android/repository/commandlinetools-mac-11076708_latest.zip`
+
+SDK url Repository (Linux)
+
+`https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip`
+
+Create an install dir and unzip the file (replace $HOME with your absolute path)
+
+`mkdir <$HOME>/Android/sdk`
+
+`unzip -o <$HOME>/Downloads/cmdline-tools.zip -d <$HOME>/Android/sdk`
+
+
+Accept android SDK licenses
+
+`yes | JAVA_HOME=PATH/TO/JAVA sudo <$HOME>/Android/sdk/cmdline-tools/bin/sdkmanager --licenses --sdk_root=<$HOME>/Android/sdk || echo "Failed to accept the license"`
+
+### Install Android SDK & NDK
+
+Install platform-tools
+`JAVA_HOME="/path/to/java" sudo /path/to/sdkmanager "platform-tools" --sdk_root=/path/to/sdk 2> stderr.log || (echo "Failed: $(cat stderr.log)" && exit 1)`
+
+Install build-tools;34.0.0
+`JAVA_HOME="/path/to/java" sudo /path/to/sdkmanager "build-tools;34.0.0" --sdk_root=/path/to/sdk 2> stderr.log || (echo "Failed: $(cat stderr.log)" && exit 1)`
+
+Install platforms;android-34 (adjust version)
+`JAVA_HOME="/path/to/java" sudo /path/to/sdkmanager "platforms;android-34" --sdk_root=/path/to/sdk 2> stderr.log || (echo "Failed: $(cat stderr.log)" && exit 1)`
+
+Install ndk;25.1.8937393
+`JAVA_HOME="/path/to/java" sudo /path/to/sdkmanager "ndk;25.1.8937393" --sdk_root=/path/to/sdk 2> stderr.log || (echo "Failed: $(cat stderr.log)" && exit 1)`
+
+
+Set the paths to the binaries in your .env (replace $HOME with your absolute path)
+
+Examples (MacOS)
+
+`android_sdk=<$HOME>/Android/sdk`
+
+`android_ndk=<$HOME>/Android/sdk/ndk/26.1.10909125`
+
+
 
