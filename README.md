@@ -178,7 +178,7 @@ Install build-tools;34.0.0
 
 `JAVA_HOME="</path/to/java>" sudo </path/to/sdkmanager> "build-tools;34.0.0" --sdk_root=</path/to/sdk> 2> stderr.log || (echo "Failed: $(cat stderr.log)" && exit 1)`
 
-Install platforms;android-34 (adjust version)
+Install platforms;android-34
 
 `JAVA_HOME="</path/to/java>" sudo </path/to/sdkmanager> "platforms;android-34" --sdk_root=</path/to/sdk> 2> stderr.log || (echo "Failed: $(cat stderr.log)" && exit 1)`
 
