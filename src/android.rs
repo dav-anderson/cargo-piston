@@ -9,41 +9,6 @@ use serde_json::Value;
 use crate::Helper;
 use crate::PistonError;
 
-#[derive(Debug)]
-pub struct AabConfig{
-    pub build_tools_version: String,
-    pub bundletool_jar_path: PathBuf,
-    pub build_dir: PathBuf,
-    pub aab_name: String,
-    pub assets: Option<PathBuf>,
-    pub resources: Option<PathBuf>,
-    pub manifest: AndroidManifest,
-    pub isdebug: bool,
-    pub min_sdk_version: u32,
-    pub target_sdk_version: u32,
-}
-
-// impl AabConfig{
-//     pub fn build_aab(&self, metadata: &Metadata) -> Result<PathBuf, Result> {
-//         //TODO build the .so with cargo
-
-//         //TODO compile resources if any (aapt2 compile)
-
-//         //TODO link manifest and resources
-
-//         //TODO add assets if any (copy to base/asssets)
-
-//         //TODO add the .so lib for single lib/no recursion
-
-//         //TODO zip base module
-
-//         //TODO build AAB with bundletool? Can we just use cargo commands?
-
-//         //
-//     }
-// }
-
-
 // impl AabConfig {
 //     pub fn build_aab(&self, metadata: &Metadata, artifact_name: &str, target_triple: &str) -> Result<PathBuf, PistonError> {
 //         // Step 1: Create build dir and write manifest (as in cargo-apk)
@@ -87,30 +52,6 @@ pub struct AabConfig{
 //         Ok(aab_path)
 //     }
 
-//     fn build_so(&self, artifact_name: &str, target_triple: &str, metadata: &Metadata) -> Result<(), PistonError> {
-//         // Set linker/ar env as before
-//         let host_platform = "linux-x86_64";  // Adjust for host
-//         let api_level = self.min_sdk_version.to_string();
-//         let linker_path = self.ndk_path.join(format!("toolchains/llvm/prebuilt/{}/bin/{}{}-clang", host_platform, target_triple.strip_suffix("-android").unwrap_or(target_triple), api_level));
-//         let ar_path = self.ndk_path.join(format!("toolchains/llvm/prebuilt/{}/bin/llvm-ar", host_platform));
-
-//         let cargo_command = format!("cargo build --target {} --release", target_triple);  // Or dev if is_debug
-
-//         Command::new("bash")
-//             .arg("-c")
-//             .arg(&cargo_command)
-//             .current_dir(/* project_dir */)
-//             .env("CARGO_TARGET_{}_LINKER", target_triple.to_uppercase().replace("-", "_"), linker_path.to_str().unwrap())
-//             .env("CARGO_TARGET_{}_AR", target_triple.to_uppercase().replace("-", "_"), ar_path.to_str().unwrap())
-//             .env("ANDROID_HOME", self.sdk_path.to_str().unwrap())
-//             .env("NDK_HOME", self.ndk_path.to_str().unwrap())
-//             .stdout(Stdio::inherit())
-//             .stderr(Stdio::inherit())
-//             .output()
-//             .map_err(|e| PistonError::BuildError(format!("Cargo build failed: {}", e)))?;
-
-//         Ok(())
-//     }
 
 //     fn compile_resources(&self) -> Result<PathBuf, PistonError> {
 //         if let Some(res) = &self.resources {
@@ -432,6 +373,10 @@ pub struct AndroidBuilder {
     ndk_path: String,
     sdk_path: String,
     java_path: String,
+    // assets: Option<PathBuf>,
+    // resources: Option<PathBuf>,
+    // build_tools_version: String,
+    // bundletool_jar_path: PathBuf,
 }
 
 impl AndroidBuilder {
@@ -494,8 +439,20 @@ impl AndroidBuilder {
         println!("manifest path: {:?}", manifest_path);
         //write AndroidManifest.xml to file
         manifest.write_to(&manifest_path.as_path())?;
-
-        Ok(AndroidBuilder{release: release, target: target.to_string(), cwd: cwd, output_path: None, icon_path: icon_path, cargo_path: cargo_path, app_name: app_name, app_version: app_version, manifest: manifest, ndk_path: ndk_path.to_string(), sdk_path: sdk_path.to_string(), java_path: java_path.to_string()})
+        Ok(AndroidBuilder{
+            release: release, 
+            target: target.to_string(), 
+            cwd: cwd, 
+            output_path: None, 
+            icon_path: icon_path, 
+            cargo_path: cargo_path, 
+            app_name: app_name, 
+            app_version: app_version, 
+            manifest: manifest, 
+            ndk_path: ndk_path.to_string(), 
+            sdk_path: sdk_path.to_string(), 
+            java_path: java_path.to_string(),
+        })
     }
 
     fn pre_build(&mut self) -> Result <(), PistonError>{
@@ -578,9 +535,63 @@ impl AndroidBuilder {
 
     fn build(&mut self) -> Result <(), PistonError>{
         println!("building for android");
-        //TODO build aab 
-        //let AabConfig = AabConfig::new();
-        //AabConfig.build_aab()
+
+        //build the .so with cargo
+        let host_platform = Helper::get_host_platform(self.ndk_path.as_ref())?;
+        //set linker
+        let api_level = self.manifest.min_sdk_version.to_string();  // Assume min_sdk_version in your struct; fallback to "21"
+        // For linker name: for aarch64-linux-android, it's target_triple + api_level + "-clang"
+        let linker_name = if self.target == "armv7-linux-androideabi" {
+            format!("armv7a-linux-androideabi{}-clang", api_level)
+        } else {
+            format!("{}{}-clang", self.target, api_level)
+        };
+        let ndk_path_buf = PathBuf::from(&self.ndk_path);
+        let linker_path = ndk_path_buf.join("toolchains/llvm/prebuilt").join(&host_platform).join("bin").join(linker_name);
+        let ar_path = ndk_path_buf.join("toolchains/llvm/prebuilt").join(&host_platform).join("bin").join("llvm-ar");
+        // Check if paths exists
+        if !linker_path.exists() {
+            return Err(PistonError::BuildError(format!("Linker not found at {}", linker_path.display())));
+        }
+        if !ar_path.exists() {
+            return Err(PistonError::BuildError(format!("AR not found at {}", ar_path.display())));
+        }
+        let target_upper = self.target.to_uppercase().replace("-", "_");
+        let linker_env_key = format!("CARGO_TARGET_{}_LINKER", target_upper);
+        let ar_env_key = format!("CARGO_TARGET_{}_AR", target_upper);
+        let release = if self.release {"--release"} else {""};
+        let cargo_command = format!("cargo build --target {}  {}", self.target, release); 
+        //run the cargo build command
+        Command::new("bash")
+            .arg("-c")
+            .arg(&cargo_command)
+            .current_dir(self.output_path.as_ref().unwrap())
+            .env("JAVA_HOME", self.java_path.clone())
+            .env("ANDROID_HOME", self.sdk_path.clone())
+            .env("NDK_HOME", self.ndk_path.clone())
+            .env(&linker_env_key, linker_path.to_str().unwrap())
+            .env(&ar_env_key, ar_path.to_str().unwrap())
+            .stdout(Stdio::inherit())
+            .stderr(Stdio::inherit())
+            .output()
+            .map_err(|e| PistonError::BuildError(format!("Cargo build failed: {}", e)))?;
+
+
+
+
+        
+        //TODO compile resources if any (aapt2 compile)
+
+        //TODO link manifest and resources
+
+        //TODO add assets if any (copy to base/asssets)
+
+        //TODO add the .so lib for single lib/no recursion
+
+        //TODO zip base module
+
+        //TODO build AAB with bundletool? Can we just use cargo commands?
+
         Ok(())
     }
 

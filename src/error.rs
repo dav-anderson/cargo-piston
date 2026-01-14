@@ -6,6 +6,8 @@ use image::ImageError;
 
 #[derive(Debug)]
 pub enum PistonError {
+    BuildError(String),
+
     CargoParseError(String),
 
     WriteFileError(String),
@@ -54,6 +56,7 @@ pub enum PistonError {
 impl fmt::Display for PistonError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            PistonError::BuildError(err) => write!(f, "Failed to build the binary: {}", err),
             PistonError::CargoParseError(err) => write!(f, "Failed to parse the cargo.toml: {}", err),
             PistonError::WriteFileError(err) => write!(f, "Failed to write file: {}", err),
             PistonError::WriteImageError(err) => write!(f, "Failed to write image: {}", err),

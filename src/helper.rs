@@ -1,4 +1,5 @@
 use std::path::{Path};
+use std::fs;
 use std::fs::{read_dir, remove_dir_all, remove_file};
 use std::process::Command;
 use image::imageops;
@@ -113,5 +114,31 @@ impl Helper {
 
     pub fn get_or_err<'a>(map: &'a HashMap<String, String>, key: &str) -> Result<&'a String, PistonError> {
         map.get(key).ok_or(PistonError::AndroidConfigError(format!("key '{}' not found in .env", key)))
+    }
+
+    pub fn get_host_platform(ndk_path: &str) -> Result<String, PistonError> {
+        let prebuilt_path = PathBuf::from(ndk_path).join("toolchains/llvm/prebuilt");
+        
+        let entries = fs::read_dir(&prebuilt_path)
+            .map_err(|e| PistonError::BuildError(format!("Failed to read prebuilt dir: {}", e)))?;
+        
+        let mut host_dirs = Vec::new();
+        for entry in entries {
+            let entry = entry.map_err(|e| PistonError::BuildError(format!("Dir entry error: {}", e)))?;
+            if entry.file_type().map_err(|e| PistonError::BuildError(format!("File type error: {}", e)))?.is_dir() {
+                if let Some(name) = entry.file_name().to_str() {
+                    host_dirs.push(name.to_string());
+                }
+            }
+        }
+        
+        if host_dirs.is_empty() {
+            return Err(PistonError::BuildError("No host platform dir found in NDK prebuilt".to_string()));
+        } else if host_dirs.len() > 1 {
+            // Warn or error; for now, take the first
+            eprintln!("Warning: Multiple host dirs found; using the first: {}", host_dirs[0]);
+        }
+        
+        Ok(host_dirs[0].clone())
     }
 }

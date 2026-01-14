@@ -125,10 +125,9 @@ impl LinuxBuilder {
                 .env("PATH", new_path)
                 .stdout(Stdio::inherit())
                 .stderr(Stdio::inherit())
-                .output();
-            if !output.unwrap().status.success() {
-                return Err(PistonError::Generic("Compiler error".to_string()))
-            }
+                .output()
+                .map_err(|e| PistonError::BuildError(format!("Cargo build failed: {}", e)))?;
+
         //LINUX HOST
         }else{
             let output = Command::new("bash")
@@ -137,10 +136,8 @@ impl LinuxBuilder {
             .current_dir(self.cwd.clone())
             .stdout(Stdio::inherit())
             .stderr(Stdio::inherit())
-            .output();
-            if !output.unwrap().status.success() {
-                return Err(PistonError::Generic("Compiler error".to_string()))
-            }
+            .output()
+            .map_err(|e| PistonError::BuildError(format!("Cargo build failed: {}", e)))?;
         }
         Ok(())
     }
