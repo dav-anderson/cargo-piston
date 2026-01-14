@@ -9,6 +9,297 @@ use serde_json::Value;
 use crate::Helper;
 use crate::PistonError;
 
+#[derive(Debug)]
+pub struct AabConfig{
+    pub build_tools_version: String,
+    pub bundletool_jar_path: PathBuf,
+    pub build_dir: PathBuf,
+    pub aab_name: String,
+    pub assets: Option<PathBuf>,
+    pub resources: Option<PathBuf>,
+    pub manifest: AndroidManifest,
+    pub isdebug: bool,
+    pub min_sdk_version: u32,
+    pub target_sdk_version: u32,
+}
+
+// impl AabConfig{
+//     pub fn build_aab(&self, metadata: &Metadata) -> Result<PathBuf, Result> {
+//         //TODO build the .so with cargo
+
+//         //TODO compile resources if any (aapt2 compile)
+
+//         //TODO link manifest and resources
+
+//         //TODO add assets if any (copy to base/asssets)
+
+//         //TODO add the .so lib for single lib/no recursion
+
+//         //TODO zip base module
+
+//         //TODO build AAB with bundletool? Can we just use cargo commands?
+
+//         //
+//     }
+// }
+
+
+// impl AabConfig {
+//     pub fn build_aab(&self, metadata: &Metadata, artifact_name: &str, target_triple: &str) -> Result<PathBuf, PistonError> {
+//         // Step 1: Create build dir and write manifest (as in cargo-apk)
+//         fs::create_dir_all(&self.build_dir)
+//             .map_err(|e| PistonError::BuildError(format!("Failed to create build dir: {}", e)))?;
+//         self.manifest.write_to(&self.build_dir)?;
+
+//         // Step 2: Build the .so with cargo (mirrors cargo-apk's cargo_ndk and build invocation)
+//         self.build_so(artifact_name, target_triple, metadata)?;
+
+//         // Step 3: Compile resources if any (aapt2 compile; cargo-apk likely does similar in create_apk)
+//         let compiled_res = self.compile_resources()?;
+
+//         // Step 4: Link manifest and resources (aapt2 link; part of create_apk)
+//         let base_dir = self.build_dir.join("base");
+//         fs::create_dir_all(&base_dir)?;
+//         self.link_manifest_and_resources(&compiled_res, &base_dir)?;
+
+//         // Step 5: Add assets if any (copy to base/assets; like cargo-apk's assets handling)
+//         if let Some(assets) = &self.assets {
+//             let assets_dest = base_dir.join("assets");
+//             fs::create_dir_all(&assets_dest)?;
+//             // Assume recursive copy; implement or use walkdir if needed
+//             self.copy_dir_recursively(assets, &assets_dest)?;
+//         }
+
+//         // Step 6: Add the .so lib (mirrors add_lib_recursively, but minimal for single lib/no recursion)
+//         self.add_lib(&base_dir, artifact_name, target_triple)?;
+
+//         // Step 7: Zip base module (for AAB; better than APK as it allows splits)
+//         let base_zip = self.build_dir.join("base.zip");
+//         self.zip_base(&base_dir, &base_zip)?;
+
+//         // Step 8: Build AAB with bundletool (improvement over APK; cargo-apk uses APK)
+//         let aab_path = self.build_dir.join(format!("{}.aab", self.aab_name));
+//         self.build_bundle(&base_zip, &aab_path)?;
+
+//         // Step 9: Sign the AAB (mirrors signing logic, with env vars or default debug key)
+//         self.sign_aab(&aab_path)?;
+
+//         Ok(aab_path)
+//     }
+
+//     fn build_so(&self, artifact_name: &str, target_triple: &str, metadata: &Metadata) -> Result<(), PistonError> {
+//         // Set linker/ar env as before
+//         let host_platform = "linux-x86_64";  // Adjust for host
+//         let api_level = self.min_sdk_version.to_string();
+//         let linker_path = self.ndk_path.join(format!("toolchains/llvm/prebuilt/{}/bin/{}{}-clang", host_platform, target_triple.strip_suffix("-android").unwrap_or(target_triple), api_level));
+//         let ar_path = self.ndk_path.join(format!("toolchains/llvm/prebuilt/{}/bin/llvm-ar", host_platform));
+
+//         let cargo_command = format!("cargo build --target {} --release", target_triple);  // Or dev if is_debug
+
+//         Command::new("bash")
+//             .arg("-c")
+//             .arg(&cargo_command)
+//             .current_dir(/* project_dir */)
+//             .env("CARGO_TARGET_{}_LINKER", target_triple.to_uppercase().replace("-", "_"), linker_path.to_str().unwrap())
+//             .env("CARGO_TARGET_{}_AR", target_triple.to_uppercase().replace("-", "_"), ar_path.to_str().unwrap())
+//             .env("ANDROID_HOME", self.sdk_path.to_str().unwrap())
+//             .env("NDK_HOME", self.ndk_path.to_str().unwrap())
+//             .stdout(Stdio::inherit())
+//             .stderr(Stdio::inherit())
+//             .output()
+//             .map_err(|e| PistonError::BuildError(format!("Cargo build failed: {}", e)))?;
+
+//         Ok(())
+//     }
+
+//     fn compile_resources(&self) -> Result<PathBuf, PistonError> {
+//         if let Some(res) = &self.resources {
+//             let compiled_res = self.build_dir.join("compiled_resources.zip");
+//             let aapt2_path = self.sdk_path.join(format!("build-tools/{}/aapt2", self.build_tools_version));
+
+//             let compile_command = format!(
+//                 "{} compile --dir {} -o {}",
+//                 aapt2_path.display(),
+//                 res.display(),
+//                 compiled_res.display()
+//             );
+
+//             Command::new("bash")
+//                 .arg("-c")
+//                 .arg(&compile_command)
+//                 .current_dir(&self.build_dir)
+//                 .env("ANDROID_HOME", self.sdk_path.to_str().unwrap())
+//                 .stdout(Stdio::inherit())
+//                 .stderr(Stdio::inherit())
+//                 .output()
+//                 .map_err(|e| PistonError::BuildError(format!("aapt2 compile failed: {}", e)))?;
+
+//             Ok(compiled_res)
+//         } else {
+//             Ok(PathBuf::new())  // Empty if no resources
+//         }
+//     }
+
+//     fn link_manifest_and_resources(&self, compiled_res: &Path, base_dir: &Path) -> Result<(), PistonError> {
+//         let aapt2_path = self.sdk_path.join(format!("build-tools/{}/aapt2", self.build_tools_version));
+//         let android_jar = self.sdk_path.join(format!("platforms/android-{}/android.jar", self.target_sdk_version));
+//         let manifest_path = self.build_dir.join("AndroidManifest.xml");
+//         let res_arg = if compiled_res.exists() { format!(" {}", compiled_res.display()) } else { String::new() };
+
+//         let link_command = format!(
+//             "{} link --proto-format -o {} --manifest {} -I {} {}",
+//             aapt2_path.display(),
+//             base_dir.display(),
+//             manifest_path.display(),
+//             android_jar.display(),
+//             res_arg
+//         );
+
+//         Command::new("bash")
+//             .arg("-c")
+//             .arg(&link_command)
+//             .current_dir(&self.build_dir)
+//             .env("ANDROID_HOME", self.sdk_path.to_str().unwrap())
+//             .stdout(Stdio::inherit())
+//             .stderr(Stdio::inherit())
+//             .output()
+//             .map_err(|e| PistonError::BuildError(format!("aapt2 link failed: {}", e)))?;
+
+//         Ok(())
+//     }
+
+//     fn add_lib(&self, base_dir: &Path, artifact_name: &str, target_triple: &str) -> Result<(), PistonError> {
+//         let abi = match target_triple {
+//             "aarch64-linux-android" => "arm64-v8a",
+//             // Add more mappings
+//             _ => return Err(PistonError::BuildError("Unsupported target".to_string())),
+//         };
+//         let lib_dir = base_dir.join("lib").join(abi);
+//         fs::create_dir_all(&lib_dir)?;
+
+//         let so_path = self.build_dir.parent().unwrap().join(target_triple).join(if self.is_debug { "debug" } else { "release" }).join(format!("lib{}.so", artifact_name));  // Adjust path
+//         fs::copy(&so_path, lib_dir.join(format!("lib{}.so", artifact_name)))
+//             .map_err(|e| PistonError::BuildError(format!("Failed to copy .so: {}", e)))?;
+
+//         Ok(())
+//     }
+
+//     fn zip_base(&self, base_dir: &Path, base_zip: &Path) -> Result<(), PistonError> {
+//         let zip_command = format!(
+//             "cd {} && zip -r ../base.zip *",
+//             base_dir.display()
+//         );
+
+//         Command::new("bash")
+//             .arg("-c")
+//             .arg(&zip_command)
+//             .current_dir(&self.build_dir)
+//             .stdout(Stdio::inherit())
+//             .stderr(Stdio::inherit())
+//             .output()
+//             .map_err(|e| PistonError::BuildError(format!("Zip failed: {}", e)))?;
+
+//         Ok(())
+//     }
+
+//     fn build_bundle(&self, base_zip: &Path, aab_path: &Path) -> Result<(), PistonError> {
+//         let bundle_command = format!(
+//             "java -jar {} build-bundle --modules={} --output={}",
+//             self.bundletool_jar_path.display(),
+//             base_zip.display(),
+//             aab_path.display()
+//         );
+
+//         Command::new("bash")
+//             .arg("-c")
+//             .arg(&bundle_command)
+//             .current_dir(&self.build_dir)
+//             .env("JAVA_HOME", self.java_path.to_str().unwrap())
+//             .stdout(Stdio::inherit())
+//             .stderr(Stdio::inherit())
+//             .output()
+//             .map_err(|e| PistonError::BuildError(format!("bundletool failed: {}", e)))?;
+
+//         Ok(())
+//     }
+
+//     fn sign_aab(&self, aab_path: &Path) -> Result<(), PistonError> {
+//         let profile_name = if self.is_debug { "dev" } else { "release" };
+//         let keystore_env = format!("CARGO_APK_{}_KEYSTORE", profile_name.to_uppercase());
+//         let password_env = format!("{}_PASSWORD", keystore_env);
+
+//         let keystore_path = std::env::var_os(&keystore_env).map(PathBuf::from);
+//         let password = std::env::var(&password_env).ok();
+
+//         let signing_key = match (keystore_path, password) {
+//             Some(path), Some(pass) => (path, pass),
+//             _ if self.is_debug => {
+//                 // Fall back to default debug key (mirrors cargo-apk; assume path from NDK or SDK)
+//                 let default_key = self.sdk_path.join("debug.keystore");  // Generate if needed with keytool
+//                 if !default_key.exists() {
+//                     self.generate_debug_key(&default_key)?;
+//                 }
+//                 (default_key, "android".to_string())  // Default pass
+//             }
+//             _ => return Err(PistonError::BuildError("Missing release key".to_string())),
+//         };
+
+//         let apksigner_path = self.sdk_path.join(format!("build-tools/{}/apksigner", self.build_tools_version));
+
+//         let sign_command = format!(
+//             "{} sign --ks {} --ks-key-alias androiddebugkey --ks-pass pass:{} {}",
+//             apksigner_path.display(),
+//             signing_key.0.display(),
+//             signing_key.1,
+//             aab_path.display()
+//         );
+
+//         Command::new("bash")
+//             .arg("-c")
+//             .arg(&sign_command)
+//             .current_dir(&self.build_dir)
+//             .stdout(Stdio::inherit())
+//             .stderr(Stdio::inherit())
+//             .output()
+//             .map_err(|e| PistonError::BuildError(format!("Signing failed: {}", e)))?;
+
+//         Ok(())
+//     }
+
+//     fn generate_debug_key(&self, key_path: &Path) -> Result<(), PistonError> {
+//         let keytool_command = format!(
+//             "keytool -genkeypair -v -keystore {} -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 -dname \"CN=Android Debug,O=Android,C=US\" -storepass android -keypass android",
+//             key_path.display()
+//         );
+
+//         Command::new("bash")
+//             .arg("-c")
+//             .arg(&keytool_command)
+//             .env("JAVA_HOME", self.java_path.to_str().unwrap())
+//             .stdout(Stdio::inherit())
+//             .stderr(Stdio::inherit())
+//             .output()
+//             .map_err(|e| PistonError::BuildError(format!("keytool failed: {}", e)))?;
+
+//         Ok(())
+//     }
+
+//     // Helper for recursive copy (minimum impl; expand as needed)
+//     fn copy_dir_recursively(&self, src: &Path, dest: &Path) -> Result<(), PistonError> {
+//         for entry in fs::read_dir(src)? {
+//             let entry = entry?;
+//             let ty = entry.file_type()?;
+//             if ty.is_dir() {
+//                 self.copy_dir_recursively(&entry.path(), &dest.join(entry.file_name()))?;
+//             } else {
+//                 fs::copy(entry.path(), dest.join(entry.file_name()))
+//                     .map_err(|e| PistonError::BuildError(format!("Copy failed: {}", e)))?;
+//             }
+//         }
+//         Ok(())
+//     }
+// }
+
 #[derive(Deserialize, Default)]
 struct AndroidMetadata {
     #[serde(default)]
@@ -25,7 +316,7 @@ struct AndroidMetadata {
     label: Option<String>
 }
 
-#[derive(Deserialize, Default)]
+#[derive(Deserialize, Default, Debug)]
 struct AndroidManifest {
     package: String,
     version_code: u32,
@@ -136,7 +427,11 @@ pub struct AndroidBuilder {
     icon_path: Option<String>,
     cargo_path: String,
     app_name: Option<String>,
-    app_version: Option<String>
+    app_version: Option<String>,
+    manifest: AndroidManifest,
+    ndk_path: String,
+    sdk_path: String,
+    java_path: String,
 }
 
 impl AndroidBuilder {
@@ -161,6 +456,9 @@ impl AndroidBuilder {
         println!("creating AndroidBuilder: release: {:?}, target: {:?}, cwd: {:?}", release, target.to_string(), cwd);
         //parse env vars
         let cargo_path = env_vars.get("cargo_path").cloned().unwrap_or("cargo".to_string());
+        let ndk_path = Helper::get_or_err(&env_vars, "ndk_path")?;
+        let sdk_path = Helper::get_or_err(&env_vars, "sdk_path")?;
+        let java_path = Helper::get_or_err(&env_vars, "java_path")?;
         println!("Cargo path determined: {}", &cargo_path);
         //parse cargo.toml
         let metadata: Metadata = MetadataCommand::new()
@@ -188,7 +486,16 @@ impl AndroidBuilder {
         } else {
             println!("No packages found in Cargo.toml");
         } 
-        Ok(AndroidBuilder{release: release, target: target.to_string(), cwd: cwd, output_path: None, icon_path: icon_path, cargo_path: cargo_path, app_name: app_name, app_version: app_version})
+
+        //generate androidmanifest.xml
+        let manifest = AndroidManifest::build(&metadata, app_name.as_ref().unwrap().to_string())?;
+        //manifest path is cwd/target/android/AndroidManifest.xml
+        let manifest_path: PathBuf = cwd.join("target").join(if release { "release" } else { "debug" }).join("android");
+        println!("manifest path: {:?}", manifest_path);
+        //write AndroidManifest.xml to file
+        manifest.write_to(&manifest_path.as_path())?;
+
+        Ok(AndroidBuilder{release: release, target: target.to_string(), cwd: cwd, output_path: None, icon_path: icon_path, cargo_path: cargo_path, app_name: app_name, app_version: app_version, manifest: manifest, ndk_path: ndk_path.to_string(), sdk_path: sdk_path.to_string(), java_path: java_path.to_string()})
     }
 
     fn pre_build(&mut self) -> Result <(), PistonError>{
@@ -259,17 +566,7 @@ impl AndroidBuilder {
         Helper::resize_png(&self.icon_path.as_ref().unwrap(), &xxhdpi_target.display().to_string(), 144, 144)?;
         let xxxhdpi_target: PathBuf = xxxhdpi_path.join("ic_launcher.png");
         Helper::resize_png(&self.icon_path.as_ref().unwrap(), &xxxhdpi_target.display().to_string(), 192, 192)?;
-        //parse cargotoml & generate androidmanifest xml
-        let metadata: Metadata = MetadataCommand::new()
-            .current_dir(cwd.clone())
-            .exec()
-            .map_err(|e| PistonError::CargoParseError(e.to_string()))?;
-        let manifest = AndroidManifest::build(&metadata, self.app_name.as_ref().unwrap().to_string())?;
-        //manifest path is cwd/target/android/AndroidManifest.xml
-        let manifest_path: PathBuf = cwd.join("target").join(if self.release { "release" } else { "debug" }).join("android");
-        println!("manifest path: {:?}", manifest_path);
-        //write the manifest file
-        manifest.write_to(&manifest_path.as_path())?;
+
 
         //TDOD proceed to aapt2 with generated AndroidManifest.xml path
 
@@ -281,11 +578,15 @@ impl AndroidBuilder {
 
     fn build(&mut self) -> Result <(), PistonError>{
         println!("building for android");
+        //TODO build aab 
+        //let AabConfig = AabConfig::new();
+        //AabConfig.build_aab()
         Ok(())
     }
 
     fn post_build(&mut self) -> Result <(), PistonError>{
         println!("post build for android");
+        //TDOD sign the completed AAB
         Ok(())
     }
 

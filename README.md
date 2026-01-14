@@ -191,9 +191,9 @@ Set the paths to the binaries in your .env (replace $HOME with your absolute pat
 
 Examples (MacOS)
 
-`android_sdk=<$HOME>/Android/sdk`
+`sdk_path=<$HOME>/Android/sdk`
 
-`android_ndk=<$HOME>/Android/sdk/ndk/26.1.10909125`
+`ndk_path=<$HOME>/Android/sdk/ndk/26.1.10909125`
 
 
 

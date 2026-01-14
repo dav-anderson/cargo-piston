@@ -111,11 +111,7 @@ impl Helper {
         Ok(())
     }
 
-    pub fn escape_xml(s: &str) -> String {
-        s.replace('&', "&amp;")
-            .replace('<', "&lt;")
-            .replace('>', "&gt;")
-            .replace('"', "&quot;")
-            .replace('\'', "&apos;")
+    pub fn get_or_err<'a>(map: &'a HashMap<String, String>, key: &str) -> Result<&'a String, PistonError> {
+        map.get(key).ok_or(PistonError::AndroidConfigError(format!("key '{}' not found in .env", key)))
     }
 }

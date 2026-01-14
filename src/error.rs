@@ -26,6 +26,8 @@ pub enum PistonError {
 
     WriteManifestError(String),
 
+    AndroidConfigError(String),
+
     UnsupportedOSError{ os: String, target: String },
 
     CopyFileError{ input_path: PathBuf, output_path: PathBuf, source: IoError },
@@ -62,6 +64,7 @@ impl fmt::Display for PistonError {
             PistonError::ParseManifestError(err) => write!(f, "Failed to parse package.metadata.android value: {}", err),
             PistonError::CreateManifestError(err) => write!(f, "Failed to create AndroidManifest.xml file: {}", err),
             PistonError::WriteManifestError(err) => write!(f, "Failed to write AndroidManifest.xml contents: {}", err),
+            PistonError::AndroidConfigError(err) => write!(f, "Failed to read android config path from .env: {}", err),
             PistonError::UnsupportedOSError{ os, target, .. } => write!(f, "Host system: {:?} does not support the target: {:?}", os, target),
             PistonError::CopyFileError { input_path, output_path, .. } => write!(f, "Failed to copy {:?} to {:?}", input_path, output_path),
             PistonError::MacOSIconError { input_path, output_path, .. } => write!(f, "Failed to format icon {:?} to {:?}", input_path, output_path),
