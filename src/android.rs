@@ -9,18 +9,9 @@ use serde_json::Value;
 use crate::Helper;
 use crate::PistonError;
 
-// impl AabConfig {
-//     pub fn build_aab(&self, metadata: &Metadata, artifact_name: &str, target_triple: &str) -> Result<PathBuf, PistonError> {
-//         // Step 1: Create build dir and write manifest (as in cargo-apk)
-//         fs::create_dir_all(&self.build_dir)
-//             .map_err(|e| PistonError::BuildError(format!("Failed to create build dir: {}", e)))?;
-//         self.manifest.write_to(&self.build_dir)?;
+//TODO reverse engineer cargo-apk
 
-//         // Step 2: Build the .so with cargo (mirrors cargo-apk's cargo_ndk and build invocation)
-//         self.build_so(artifact_name, target_triple, metadata)?;
 
-//         // Step 3: Compile resources if any (aapt2 compile; cargo-apk likely does similar in create_apk)
-//         let compiled_res = self.compile_resources()?;
 
 //         // Step 4: Link manifest and resources (aapt2 link; part of create_apk)
 //         let base_dir = self.build_dir.join("base");
@@ -50,35 +41,6 @@ use crate::PistonError;
 //         self.sign_aab(&aab_path)?;
 
 //         Ok(aab_path)
-//     }
-
-
-//     fn compile_resources(&self) -> Result<PathBuf, PistonError> {
-//         if let Some(res) = &self.resources {
-//             let compiled_res = self.build_dir.join("compiled_resources.zip");
-//             let aapt2_path = self.sdk_path.join(format!("build-tools/{}/aapt2", self.build_tools_version));
-
-//             let compile_command = format!(
-//                 "{} compile --dir {} -o {}",
-//                 aapt2_path.display(),
-//                 res.display(),
-//                 compiled_res.display()
-//             );
-
-//             Command::new("bash")
-//                 .arg("-c")
-//                 .arg(&compile_command)
-//                 .current_dir(&self.build_dir)
-//                 .env("ANDROID_HOME", self.sdk_path.to_str().unwrap())
-//                 .stdout(Stdio::inherit())
-//                 .stderr(Stdio::inherit())
-//                 .output()
-//                 .map_err(|e| PistonError::BuildError(format!("aapt2 compile failed: {}", e)))?;
-
-//             Ok(compiled_res)
-//         } else {
-//             Ok(PathBuf::new())  // Empty if no resources
-//         }
 //     }
 
 //     fn link_manifest_and_resources(&self, compiled_res: &Path, base_dir: &Path) -> Result<(), PistonError> {
@@ -534,21 +496,16 @@ impl AndroidBuilder {
         let xxxhdpi_target: PathBuf = xxxhdpi_path.join("ic_launcher.png");
         Helper::resize_png(&self.icon_path.as_ref().unwrap(), &xxxhdpi_target.display().to_string(), 192, 192)?;
 
-
-        //TDOD proceed to aapt2 with generated AndroidManifest.xml path
-
-        //TODO reverse engineer cargo-apk
-
         println!("done configuring Android bundle");
         Ok(())
     }
 
     fn build(&mut self) -> Result <(), PistonError>{
         println!("building for android");
-
+        //build the android .so with cargo
         self.build_so()?;
-
-        let res = self.compile_resources()?;
+        //compile the resources directory
+        let resources = self.compile_resources()?;
         
         //TODO compile resources if any (aapt2 compile)
 
@@ -574,7 +531,7 @@ impl AndroidBuilder {
     }
 
     fn build_so(&mut self) -> Result<(), PistonError>{
-                //build the .so with cargo
+        //build the .so with cargo
         let host_platform = Helper::get_host_platform(self.ndk_path.as_ref())?;
         //set linker
         let api_level = self.manifest.min_sdk_version.to_string();  // Assume min_sdk_version in your struct; fallback to "21"
