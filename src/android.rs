@@ -373,9 +373,9 @@ pub struct AndroidBuilder {
     ndk_path: String,
     sdk_path: String,
     java_path: String,
+    resources: Option<String>,
+    build_tools_version: String,
     // assets: Option<PathBuf>,
-    // resources: Option<PathBuf>,
-    // build_tools_version: String,
     // bundletool_jar_path: PathBuf,
 }
 
@@ -400,10 +400,12 @@ impl AndroidBuilder {
     fn new(release: bool, target: String, cwd: PathBuf, env_vars: HashMap<String, String>) -> Result<Self, PistonError> {
         println!("creating AndroidBuilder: release: {:?}, target: {:?}, cwd: {:?}", release, target.to_string(), cwd);
         //parse env vars
-        let cargo_path = env_vars.get("cargo_path").cloned().unwrap_or("cargo".to_string());
-        let ndk_path = Helper::get_or_err(&env_vars, "ndk_path")?;
-        let sdk_path = Helper::get_or_err(&env_vars, "sdk_path")?;
-        let java_path = Helper::get_or_err(&env_vars, "java_path")?;
+        let cargo_path: String = env_vars.get("cargo_path").cloned().unwrap_or("cargo".to_string());
+        let resources_path: Option<String> = env_vars.get("resources_path").cloned();
+        let ndk_path: &String = Helper::get_or_err(&env_vars, "ndk_path")?;
+        let sdk_path: &String = Helper::get_or_err(&env_vars, "sdk_path")?;
+        let java_path: &String = Helper::get_or_err(&env_vars, "java_path")?;
+        let build_tools_version: String = Helper::get_build_tools_version(&sdk_path)?;
         println!("Cargo path determined: {}", &cargo_path);
         //parse cargo.toml
         let metadata: Metadata = MetadataCommand::new()
@@ -452,6 +454,8 @@ impl AndroidBuilder {
             ndk_path: ndk_path.to_string(), 
             sdk_path: sdk_path.to_string(), 
             java_path: java_path.to_string(),
+            resources: resources_path,
+            build_tools_version: build_tools_version,
         })
     }
 
@@ -536,7 +540,35 @@ impl AndroidBuilder {
     fn build(&mut self) -> Result <(), PistonError>{
         println!("building for android");
 
-        //build the .so with cargo
+        self.build_so()?;
+
+        let res = self.compile_resources()?;
+        
+        //TODO compile resources if any (aapt2 compile)
+
+        //TODO link manifest and resources
+
+        //TODO add assets if any (copy to base/asssets)
+
+        //TODO add the .so lib for single lib/no recursion
+
+        //TODO zip base module
+
+        //TODO build AAB with bundletool? Can we just use cargo commands?
+
+        //TODO sign AAB
+
+        Ok(())
+    }
+
+    fn post_build(&mut self) -> Result <(), PistonError>{
+        println!("post build for android");
+        //TDOD sign the completed AAB
+        Ok(())
+    }
+
+    fn build_so(&mut self) -> Result<(), PistonError>{
+                //build the .so with cargo
         let host_platform = Helper::get_host_platform(self.ndk_path.as_ref())?;
         //set linker
         let api_level = self.manifest.min_sdk_version.to_string();  // Assume min_sdk_version in your struct; fallback to "21"
@@ -575,30 +607,38 @@ impl AndroidBuilder {
             .stderr(Stdio::inherit())
             .output()
             .map_err(|e| PistonError::BuildError(format!("Cargo build failed: {}", e)))?;
-
-
-
-
-        
-        //TODO compile resources if any (aapt2 compile)
-
-        //TODO link manifest and resources
-
-        //TODO add assets if any (copy to base/asssets)
-
-        //TODO add the .so lib for single lib/no recursion
-
-        //TODO zip base module
-
-        //TODO build AAB with bundletool? Can we just use cargo commands?
-
         Ok(())
     }
 
-    fn post_build(&mut self) -> Result <(), PistonError>{
-        println!("post build for android");
-        //TDOD sign the completed AAB
-        Ok(())
+    fn compile_resources(&self) -> Result<PathBuf, PistonError> {
+        if let Some(res_str) = &self.resources {
+            let res = PathBuf::from(res_str);
+            let build_dir_path = self.output_path.as_ref().unwrap();
+            let compiled_res = build_dir_path.join("compiled_resources.zip");
+            let sdk = PathBuf::from(&self.sdk_path);
+            let aapt2_path = sdk.join(format!("build-tools/{}/aapt2", self.build_tools_version));
+
+            let compile_command = format!(
+                "{} compile --dir {} -o {}",
+                aapt2_path.display(),
+                res.display(),
+                compiled_res.display()
+            );
+
+            Command::new("bash")
+                .arg("-c")
+                .arg(&compile_command)
+                .current_dir(&build_dir_path)
+                .env("ANDROID_HOME", &self.sdk_path)
+                .stdout(Stdio::inherit())
+                .stderr(Stdio::inherit())
+                .output()
+                .map_err(|e| PistonError::BuildError(format!("aapt2 compile failed: {}", e)))?;
+
+            Ok(compiled_res)
+        } else {
+            Ok(PathBuf::new())  // Empty if no resources
+        }
     }
 
 }

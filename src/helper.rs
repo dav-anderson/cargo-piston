@@ -141,4 +141,30 @@ impl Helper {
         
         Ok(host_dirs[0].clone())
     }
+
+    pub fn get_build_tools_version(sdk_path: &str) -> Result<String, PistonError> {
+        let prebuilt_path = PathBuf::from(sdk_path).join("build-tools");
+        
+        let entries = fs::read_dir(&prebuilt_path)
+            .map_err(|e| PistonError::BuildError(format!("Failed to read prebuilt dir: {}", e)))?;
+        
+        let mut host_dirs = Vec::new();
+        for entry in entries {
+            let entry = entry.map_err(|e| PistonError::BuildError(format!("Dir entry error: {}", e)))?;
+            if entry.file_type().map_err(|e| PistonError::BuildError(format!("File type error: {}", e)))?.is_dir() {
+                if let Some(name) = entry.file_name().to_str() {
+                    host_dirs.push(name.to_string());
+                }
+            }
+        }
+        
+        if host_dirs.is_empty() {
+            return Err(PistonError::BuildError("No build tools version found in SDK prebuilt".to_string()));
+        } else if host_dirs.len() > 1 {
+            // Warn or error; for now, take the first
+            eprintln!("Warning: Multiple host dirs found; using the first: {}", host_dirs[0]);
+        }
+        
+        Ok(host_dirs[0].clone())
+    }
 }
