@@ -617,6 +617,7 @@ impl AndroidBuilder {
     }
 
     fn compile_resources(&self) -> Result<PathBuf, PistonError> {
+        println!("compiling resources");
         if let Some(res_str) = &self.resources {
             let res = PathBuf::from(res_str);
             let build_dir_path = self.output_path.as_ref().unwrap();
@@ -640,9 +641,10 @@ impl AndroidBuilder {
                 .stderr(Stdio::inherit())
                 .output()
                 .map_err(|e| PistonError::BuildError(format!("aapt2 compile failed: {}", e)))?;
-
+            println!("done compiling resources");
             Ok(compiled_res)
         } else {
+            println!("no resources found");
             Ok(PathBuf::new())  // Empty if no resources
         }
     }
