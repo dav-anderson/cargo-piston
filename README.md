@@ -57,9 +57,13 @@ x86_64-unknown-linux-gnu
 `homebrew_path=/opt/homebrew/bin`
 
 ## General Cargo.toml configuration 
-### Path to App icon example
+### Path to App Icon example
 
 `icon_path = "absolute/path/to/icon.png`
+
+### Path to App Resources directory example
+
+`resources_path = absolute/path/to/resources/dir`
 
 ## Installing locally from source
 Run the following command within your rust project repo to install the package locally

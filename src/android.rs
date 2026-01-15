@@ -401,7 +401,7 @@ impl AndroidBuilder {
         println!("creating AndroidBuilder: release: {:?}, target: {:?}, cwd: {:?}", release, target.to_string(), cwd);
         //parse env vars
         let cargo_path: String = env_vars.get("cargo_path").cloned().unwrap_or("cargo".to_string());
-        let resources_path: Option<String> = env_vars.get("resources_path").cloned();
+        // let resources_path: Option<String> = env_vars.get("resources_path").cloned();
         let ndk_path: &String = Helper::get_or_err(&env_vars, "ndk_path")?;
         let sdk_path: &String = Helper::get_or_err(&env_vars, "sdk_path")?;
         let java_path: &String = Helper::get_or_err(&env_vars, "java_path")?;
@@ -416,6 +416,7 @@ impl AndroidBuilder {
         let mut icon_path: Option<String> = None;
         let mut app_name: Option<String> = None;
         let mut app_version: Option<String> = None;
+        let mut resources_path: Option<String> = None;
         // Read standard fields from the first package
         if let Some(package) = metadata.root_package() {
             println!("Package name: {}", package.name);
@@ -427,6 +428,11 @@ impl AndroidBuilder {
                 if let Some(value) = meta.get("icon_path") {
                     if let serde_json::Value::String(s) = value {
                         icon_path = Some(s.to_string());
+                    }
+                }
+                if let Some(value) = meta.get("resources_path") {
+                    if let serde_json::Value::String(s) = value {
+                        resources_path = Some(s.to_string())
                     }
                 }
             }
