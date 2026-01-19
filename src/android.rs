@@ -13,37 +13,6 @@ use crate::PistonError;
 //TODO reverse engineer cargo-apk
 
 
-
-//         // Step 4: Link manifest and resources (aapt2 link; part of create_apk)
-//         let base_dir = self.build_dir.join("base");
-//         fs::create_dir_all(&base_dir)?;
-//         self.link_manifest_and_resources(&compiled_res, &base_dir)?;
-
-//         // Step 5: Add assets if any (copy to base/assets; like cargo-apk's assets handling)
-//         if let Some(assets) = &self.assets {
-//             let assets_dest = base_dir.join("assets");
-//             fs::create_dir_all(&assets_dest)?;
-//             // Assume recursive copy; implement or use walkdir if needed
-//             self.copy_dir_recursively(assets, &assets_dest)?;
-//         }
-
-//         // Step 6: Add the .so lib (mirrors add_lib_recursively, but minimal for single lib/no recursion)
-//         self.add_lib(&base_dir, artifact_name, target_triple)?;
-
-//         // Step 7: Zip base module (for AAB; better than APK as it allows splits)
-//         let base_zip = self.build_dir.join("base.zip");
-//         self.zip_base(&base_dir, &base_zip)?;
-
-//         // Step 8: Build AAB with bundletool (improvement over APK; cargo-apk uses APK)
-//         let aab_path = self.build_dir.join(format!("{}.aab", self.aab_name));
-//         self.build_bundle(&base_zip, &aab_path)?;
-
-//         // Step 9: Sign the AAB (mirrors signing logic, with env vars or default debug key)
-//         self.sign_aab(&aab_path)?;
-
-//         Ok(aab_path)
-//     }
-
 //     fn link_manifest_and_resources(&self, compiled_res: &Path, base_dir: &Path) -> Result<(), PistonError> {
 //         let aapt2_path = self.sdk_path.join(format!("build-tools/{}/aapt2", self.build_tools_version));
 //         let android_jar = self.sdk_path.join(format!("platforms/android-{}/android.jar", self.target_sdk_version));
@@ -536,14 +505,27 @@ impl AndroidBuilder {
         // self.link_manifest_and_resources(&compiled_res, &base_dir)?;
 
         //TODO add assets if any (copy to base/asssets)
+        //         if let Some(assets) = &self.assets {
+//             let assets_dest = base_dir.join("assets");
+//             fs::create_dir_all(&assets_dest)?;
+//             // Assume recursive copy; implement or use walkdir if needed
+//             self.copy_dir_recursively(assets, &assets_dest)?;
+//         }
 
         //TODO add the .so lib for single lib/no recursion
+        //         self.add_lib(&base_dir, artifact_name, target_triple)?;
+
 
         //TODO zip base module
+        //         let base_zip = self.build_dir.join("base.zip");
+//         self.zip_base(&base_dir, &base_zip)?;
 
         //TODO build AAB with bundletool? Can we just use cargo commands?
+        //         let aab_path = self.build_dir.join(format!("{}.aab", self.aab_name));
+//         self.build_bundle(&base_zip, &aab_path)?;
 
         //TODO sign AAB
+        // self.sign_aab(&aab_path)?;
 
         Ok(())
     }
