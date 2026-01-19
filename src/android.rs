@@ -2,6 +2,7 @@ use std::path::{ Path, PathBuf };
 use std::collections::HashMap;
 use cargo_metadata::{ Metadata, MetadataCommand };
 use std::fs::{ File, create_dir_all, copy, remove_file};
+use std::fs;
 use std::io::{ Write, BufWriter };
 use std::process::{ Command, Stdio };
 use serde::Deserialize;
@@ -438,23 +439,26 @@ impl AndroidBuilder {
         println!("working dir: {:?}", cwd);
         let app_name = self.app_name.as_ref().unwrap();
         let release = if self.release {"release"} else {"debug"};
-        let partial_build_path: PathBuf = format!("target/{}/androidbuilder/app/src/main/res",release).into();
+        let parent_build_path: PathBuf = format!("target/{}/androidbuilder/android",release).into();
+        let child_build_path: PathBuf = parent_build_path.join("app").join("src").join("main").join("res");
         //set the absolute build path
-        let build_path = cwd.join(&partial_build_path);
-        println!("build path: {:?}", build_path);
-        self.build_path = Some(build_path.clone());
+        let full_build_path = cwd.join(&child_build_path);
+        let working_build_path = cwd.join(&parent_build_path);
+        println!("working build path: {:?}", working_build_path);
+        println!("full build path with children {:?}", full_build_path);
+        self.build_path = Some(working_build_path.clone());
         //check for a valid build path
         if self.build_path.as_ref().is_none() {
             return Err(PistonError::Generic("build path not provided".to_string()))
         }
         //Empty the directory if it already exists
-        let path = build_path.as_path();
+        let path = full_build_path.as_path();
         if path.exists() && path.is_dir(){
             Helper::empty_directory(path)?
         }
         //create the target directories
-        create_dir_all(self.build_path.as_ref().unwrap()).map_err(|e| PistonError::CreateDirAllError {
-        path: self.build_path.as_ref().unwrap().to_path_buf(),
+        create_dir_all(&full_build_path).map_err(|e| PistonError::CreateDirAllError {
+        path: full_build_path.clone(),
         source: e,
         })?;
         //set the output path
@@ -477,11 +481,11 @@ impl AndroidBuilder {
         source: e,
         })?;
         //establish absolute paths for  mipmap dirs
-        let hdpi_path: PathBuf = cwd.join(&partial_build_path).join("mipmap-hdpi");
-        let mdpi_path: PathBuf = cwd.join(&partial_build_path).join("mipmap-mdpi");
-        let xhdpi_path: PathBuf = cwd.join(&partial_build_path).join("mipmap-xhdpi");
-        let xxhdpi_path: PathBuf = cwd.join(&partial_build_path).join("mipmap-xxhdpi");
-        let xxxhdpi_path: PathBuf = cwd.join(&partial_build_path).join("mipmap-xxxhdpi");
+        let hdpi_path: PathBuf = full_build_path.join("mipmap-hdpi");
+        let mdpi_path: PathBuf = full_build_path.join("mipmap-mdpi");
+        let xhdpi_path: PathBuf = full_build_path.join("mipmap-xhdpi");
+        let xxhdpi_path: PathBuf = full_build_path.join("mipmap-xxhdpi");
+        let xxxhdpi_path: PathBuf = full_build_path.join("mipmap-xxxhdpi");
         println!("mipmap paths: hdpi: {:?}, mdpi: {:?}, xhdpi: {:?}, xxhdpi: {:?}, xxxhdpi: {:?}", hdpi_path, mdpi_path, xhdpi_path, xxhdpi_path, xxxhdpi_path);
         //create mipmap dirs
         create_dir_all(&hdpi_path).map_err(|e| PistonError::CreateDirAllError {
@@ -516,7 +520,7 @@ impl AndroidBuilder {
         let xxxhdpi_target: PathBuf = xxxhdpi_path.join("ic_launcher.png");
         Helper::resize_png(&self.icon_path.as_ref().unwrap(), &xxxhdpi_target.display().to_string(), 192, 192)?;
 
-        println!("done configuring Android bundle");
+        println!("done preconfiguring Android build path");
         Ok(())
     }
 
@@ -526,10 +530,10 @@ impl AndroidBuilder {
         self.build_so()?;
         //compile the resources directory
         let resources = self.compile_resources()?;
-        
-        //TODO compile resources if any (aapt2 compile)
-
-        //TODO link manifest and resources
+        //TODO Link manifest and resources (aapt2 link)
+        // let base_dir = self.build_path.join("base");
+        // fs::create_dir_all(&base_dir)?;
+        // self.link_manifest_and_resources(&compiled_res, &base_dir)?;
 
         //TODO add assets if any (copy to base/asssets)
 
