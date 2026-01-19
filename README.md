@@ -69,7 +69,7 @@ x86_64-unknown-linux-gnu
 Run the following command within your rust project repo to install the package locally
 `cargo install --path ../path/to/cargo-piston`
 
-## Windows Specific Configuration
+## Windows Output Configuration
 
 ### Install mingw-w64 via homebrew (required on MACOS only)
 
@@ -97,7 +97,7 @@ You should have your desired output filename designated in your Cargo.toml as
 OriginalFilename = "<appname>.exe"
 ``` -->
 
-## Linux Specific Configuration
+## Linux Output Configuration
 
 ### Install zigbuild via (required on MACOS ONLY)
 `cargo install cargo-zigbuild`
@@ -108,9 +108,11 @@ Provide a path to your cargo dependency binaries (somewhere like `~/.cargo/bin`)
 provide a path to your homebrew binaries (somewhere like `/opt/homebrew/bin`) in your .env
 `homebrew_path=/opt/homebrew/bin`
 
-## MacOS Specific Configuration
+## MacOS Output Configuration
 
-## Android Specific Configuration
+## IOS Output Configuration
+
+## Android Output Configuration
 
  ### Install Java
 
@@ -214,9 +216,13 @@ It is reccomended that you install your bundletools .jar within your Android dir
 
 Set the path to your bundle tool .jar in your .env
 
-Example
+Examples
 
 `bundletool_path=<$HOME>/Android/sdk/bundle-tools/bundletool.jar`
+
+or
+
+`bundletool_path=/opt/homebrew/bundletool`
 
 
 
