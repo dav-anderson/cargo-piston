@@ -326,6 +326,7 @@ pub struct AndroidBuilder {
     release: bool,
     target: String,
     cwd: PathBuf,
+    build_path: Option<PathBuf>,
     output_path: Option<PathBuf>,
     icon_path: Option<String>,
     cargo_path: String,
@@ -413,7 +414,8 @@ impl AndroidBuilder {
         Ok(AndroidBuilder{
             release: release, 
             target: target.to_string(), 
-            cwd: cwd, 
+            cwd: cwd,
+            build_path: None, 
             output_path: None, 
             icon_path: icon_path, 
             cargo_path: cargo_path, 
@@ -436,34 +438,50 @@ impl AndroidBuilder {
         println!("working dir: {:?}", cwd);
         let app_name = self.app_name.as_ref().unwrap();
         let release = if self.release {"release"} else {"debug"};
-        let bundle_path: PathBuf = if self.release {
-            format!("target/{}/android/app/src/main/res",release).into()
-        }else {
-            format!("target/{}/android/app/src/main/res",release).into()
-        };
-        println!("bundle path: {:?}", bundle_path);
-        //set the absolute output path
-        self.output_path = Some(cwd.join(&bundle_path));
-        //check for a valid output path
-        if self.output_path.as_ref().is_none() {
-            return Err(PistonError::Generic("output path not provided".to_string()))
+        let partial_build_path: PathBuf = format!("target/{}/androidbuilder/app/src/main/res",release).into();
+        //set the absolute build path
+        let build_path = cwd.join(&partial_build_path);
+        println!("build path: {:?}", build_path);
+        self.build_path = Some(build_path.clone());
+        //check for a valid build path
+        if self.build_path.as_ref().is_none() {
+            return Err(PistonError::Generic("build path not provided".to_string()))
         }
         //Empty the directory if it already exists
-        let path = bundle_path.as_path();
+        let path = build_path.as_path();
         if path.exists() && path.is_dir(){
             Helper::empty_directory(path)?
         }
-        // //create the target directories
+        //create the target directories
+        create_dir_all(self.build_path.as_ref().unwrap()).map_err(|e| PistonError::CreateDirAllError {
+        path: self.build_path.as_ref().unwrap().to_path_buf(),
+        source: e,
+        })?;
+        //set the output path
+        let partial_output_path: PathBuf = format!("target/{}/android", release).into();
+        let output_path = cwd.join(&partial_output_path);
+        println!("output path: {:?}", output_path);
+        self.output_path = Some(output_path.clone());
+        //check for valid output path
+        if self.output_path.as_ref().is_none() {
+            return Err(PistonError::Generic("output path not provided".to_string()))
+        }
+        //empty dir if it exists
+        let path = output_path.as_path();
+        if path.exists() && path.is_dir(){
+            Helper::empty_directory(path)?
+        }
+        //create target dirs
         create_dir_all(self.output_path.as_ref().unwrap()).map_err(|e| PistonError::CreateDirAllError {
         path: self.output_path.as_ref().unwrap().to_path_buf(),
         source: e,
         })?;
         //establish absolute paths for  mipmap dirs
-        let hdpi_path: PathBuf = cwd.join(&bundle_path).join("mipmap-hdpi");
-        let mdpi_path: PathBuf = cwd.join(&bundle_path).join("mipmap-mdpi");
-        let xhdpi_path: PathBuf = cwd.join(&bundle_path).join("mipmap-xhdpi");
-        let xxhdpi_path: PathBuf = cwd.join(&bundle_path).join("mipmap-xxhdpi");
-        let xxxhdpi_path: PathBuf = cwd.join(&bundle_path).join("mipmap-xxxhdpi");
+        let hdpi_path: PathBuf = cwd.join(&partial_build_path).join("mipmap-hdpi");
+        let mdpi_path: PathBuf = cwd.join(&partial_build_path).join("mipmap-mdpi");
+        let xhdpi_path: PathBuf = cwd.join(&partial_build_path).join("mipmap-xhdpi");
+        let xxhdpi_path: PathBuf = cwd.join(&partial_build_path).join("mipmap-xxhdpi");
+        let xxxhdpi_path: PathBuf = cwd.join(&partial_build_path).join("mipmap-xxxhdpi");
         println!("mipmap paths: hdpi: {:?}, mdpi: {:?}, xhdpi: {:?}, xxhdpi: {:?}, xxxhdpi: {:?}", hdpi_path, mdpi_path, xhdpi_path, xxhdpi_path, xxxhdpi_path);
         //create mipmap dirs
         create_dir_all(&hdpi_path).map_err(|e| PistonError::CreateDirAllError {
@@ -562,7 +580,7 @@ impl AndroidBuilder {
         Command::new("bash")
             .arg("-c")
             .arg(&cargo_command)
-            .current_dir(self.output_path.as_ref().unwrap())
+            .current_dir(self.build_path.as_ref().unwrap())
             .env("JAVA_HOME", self.java_path.clone())
             .env("ANDROID_HOME", self.sdk_path.clone())
             .env("NDK_HOME", self.ndk_path.clone())
@@ -579,7 +597,7 @@ impl AndroidBuilder {
         println!("compiling resources");
         if let Some(res_str) = &self.resources {
             let res = PathBuf::from(res_str);
-            let build_dir_path = self.output_path.as_ref().unwrap();
+            let build_dir_path = self.build_path.as_ref().unwrap();
             let compiled_res = build_dir_path.join("compiled_resources.zip");
             let sdk = PathBuf::from(&self.sdk_path);
             let aapt2_path = sdk.join(format!("build-tools/{}/aapt2", self.build_tools_version));
