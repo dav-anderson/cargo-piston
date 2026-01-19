@@ -505,7 +505,7 @@ impl AndroidBuilder {
         // self.link_manifest_and_resources(&compiled_res, &base_dir)?;
 
         //TODO add assets if any (copy to base/asssets)
-        //         if let Some(assets) = &self.assets {
+        // if let Some(assets) = &self.assets {
 //             let assets_dest = base_dir.join("assets");
 //             fs::create_dir_all(&assets_dest)?;
 //             // Assume recursive copy; implement or use walkdir if needed
@@ -513,15 +513,15 @@ impl AndroidBuilder {
 //         }
 
         //TODO add the .so lib for single lib/no recursion
-        //         self.add_lib(&base_dir, artifact_name, target_triple)?;
+        // self.add_lib(&base_dir, artifact_name, target_triple)?;
 
 
         //TODO zip base module
-        //         let base_zip = self.build_dir.join("base.zip");
+        // let base_zip = self.build_dir.join("base.zip");
 //         self.zip_base(&base_dir, &base_zip)?;
 
         //TODO build AAB with bundletool? Can we just use cargo commands?
-        //         let aab_path = self.build_dir.join(format!("{}.aab", self.aab_name));
+        // let aab_path = self.build_dir.join(format!("{}.aab", self.aab_name));
 //         self.build_bundle(&base_zip, &aab_path)?;
 
         //TODO sign AAB
@@ -625,5 +625,9 @@ impl AndroidRunner{
         println!("running for android");
 
         AndroidRunner{device: "device".to_string()}
+
+        //TODO run androidbuilder
+        //TODO extract .apk from completed aab provided by androidbuilder
+        //TODO stream install the extracted .apk to the target device
     }
 }
