@@ -337,8 +337,8 @@ pub struct AndroidBuilder {
     java_path: String,
     resources: Option<String>,
     build_tools_version: String,
+    bundletool_path: String,
     // assets: Option<PathBuf>,
-    // bundletool_jar_path: PathBuf,
 }
 
 impl AndroidBuilder {
@@ -367,6 +367,7 @@ impl AndroidBuilder {
         let ndk_path: &String = Helper::get_or_err(&env_vars, "ndk_path")?;
         let sdk_path: &String = Helper::get_or_err(&env_vars, "sdk_path")?;
         let java_path: &String = Helper::get_or_err(&env_vars, "java_path")?;
+        let bundletool_path: &String = Helper::get_or_err(&env_vars, "bundletool_path")?;
         let build_tools_version: String = Helper::get_build_tools_version(&sdk_path)?;
         println!("Cargo path determined: {}", &cargo_path);
         //parse cargo.toml
@@ -424,6 +425,7 @@ impl AndroidBuilder {
             java_path: java_path.to_string(),
             resources: resources_path,
             build_tools_version: build_tools_version,
+            bundletool_path: bundletool_path.to_string()
         })
     }
 

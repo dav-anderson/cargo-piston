@@ -199,5 +199,24 @@ Examples (MacOS)
 
 `ndk_path=<$HOME>/Android/sdk/ndk/26.1.10909125`
 
+### Install Android Bundle tool
+
+Install Android bundletool
+
+`https://github.com/google/bundletool/releases`
+
+or install with brew on macos
+
+`brew install bundletool`
+
+It is reccomended that you install your bundletools .jar within your Android directory, something like
+`$HOME/Android/sdk/bundle-tools`
+
+Set the path to your bundle tool .jar in your .env
+
+Example
+
+`bundletool_path=<$HOME>/Android/sdk/bundle-tools/bundletool.jar`
+
 
 
