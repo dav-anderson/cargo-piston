@@ -205,7 +205,7 @@ impl AndroidManifest {
     }
 
     pub fn to_xml(&self) -> String {
-        let icon_attr = format!(r#" android:icon={}""#, Self::escape_xml(&self.icon));
+        let icon_attr = format!(r#" android:icon="{}""#, Self::escape_xml(&self.icon));
 
         format!(
             r#"<?xml version="1.0" encoding="utf-8"?>
@@ -276,7 +276,7 @@ pub struct AndroidBuilder {
     ndk_path: String,
     sdk_path: String,
     java_path: String,
-    resources: Option<String>,
+    resources: PathBuf,
     build_tools_version: String,
     bundletool_path: String,
     // assets: Option<PathBuf>,
@@ -320,7 +320,6 @@ impl AndroidBuilder {
         let mut icon_path: Option<String> = None;
         let mut app_name: Option<String> = None;
         let mut app_version: Option<String> = None;
-        let mut resources_path: Option<String> = None;
         // Read standard fields from the first package
         if let Some(package) = metadata.root_package() {
             println!("Package name: {}", package.name);
@@ -334,11 +333,11 @@ impl AndroidBuilder {
                         icon_path = Some(s.to_string());
                     }
                 }
-                if let Some(value) = meta.get("resources_path") {
-                    if let serde_json::Value::String(s) = value {
-                        resources_path = Some(s.to_string())
-                    }
-                }
+                // if let Some(value) = meta.get("resources_path") {
+                //     if let serde_json::Value::String(s) = value {
+                //         resources_path = Some(s.to_string())
+                //     }
+                // }
             }
         } else {
             println!("No packages found in Cargo.toml");
@@ -348,6 +347,7 @@ impl AndroidBuilder {
         let manifest = AndroidManifest::build(&metadata, app_name.as_ref().unwrap().to_string())?;
         //manifest path is cwd/target/<release>/androidbuilder/android/AndroidManifest.xml
         let build_path: PathBuf = cwd.join("target").join(if release {"release"} else {"debug"}).join("androidbuilder").join("android");
+        let resources_path: PathBuf = build_path.join("app").join("src").join("main").join("res");
         println!("build path: {:?}", build_path);
         //write AndroidManifest.xml to file
         manifest.write_to(&build_path.as_path())?;
@@ -377,19 +377,17 @@ impl AndroidBuilder {
         let cwd: PathBuf = self.cwd.clone();
         println!("working dir: {:?}", cwd);
         let release = if self.release {"release"} else {"debug"};
-        let child_build_path: PathBuf = self.build_path.join("app").join("src").join("main").join("res");
         //set the absolute build path
-        let full_build_path = cwd.join(&child_build_path);
         println!("working build path: {:?}", self.build_path);
-        println!("full build path with children {:?}", full_build_path);
+        println!("full build path with children {:?}", self.resources);
         //Empty the directory if it already exists
-        let path = full_build_path.as_path();
+        let path = self.resources.as_path();
         if path.exists() && path.is_dir(){
             Helper::empty_directory(path)?
         }
         //create the target directories
-        create_dir_all(&full_build_path).map_err(|e| PistonError::CreateDirAllError {
-        path: full_build_path.clone(),
+        create_dir_all(&self.resources).map_err(|e| PistonError::CreateDirAllError {
+        path: self.resources.clone(),
         source: e,
         })?;
         //set the output path
@@ -412,11 +410,11 @@ impl AndroidBuilder {
         source: e,
         })?;
         //establish absolute paths for  mipmap dirs
-        let hdpi_path: PathBuf = full_build_path.join("mipmap-hdpi");
-        let mdpi_path: PathBuf = full_build_path.join("mipmap-mdpi");
-        let xhdpi_path: PathBuf = full_build_path.join("mipmap-xhdpi");
-        let xxhdpi_path: PathBuf = full_build_path.join("mipmap-xxhdpi");
-        let xxxhdpi_path: PathBuf = full_build_path.join("mipmap-xxxhdpi");
+        let hdpi_path: PathBuf = self.resources.join("mipmap-hdpi");
+        let mdpi_path: PathBuf = self.resources.join("mipmap-mdpi");
+        let xhdpi_path: PathBuf = self.resources.join("mipmap-xhdpi");
+        let xxhdpi_path: PathBuf = self.resources.join("mipmap-xxhdpi");
+        let xxxhdpi_path: PathBuf = self.resources.join("mipmap-xxxhdpi");
         println!("mipmap paths: hdpi: {:?}, mdpi: {:?}, xhdpi: {:?}, xxhdpi: {:?}, xxxhdpi: {:?}", hdpi_path, mdpi_path, xhdpi_path, xxhdpi_path, xxxhdpi_path);
         //create mipmap dirs
         create_dir_all(&hdpi_path).map_err(|e| PistonError::CreateDirAllError {
@@ -545,9 +543,7 @@ impl AndroidBuilder {
     }
 
     fn compile_resources(&self) -> Result<PathBuf, PistonError> {
-        println!("compiling resources");
-        if let Some(res_str) = &self.resources {
-            let res = PathBuf::from(res_str);
+        println!("compiling resources at {:?}", &self.resources);
             let compiled_res = self.build_path.join("compiled_resources.zip");
             let sdk = PathBuf::from(&self.sdk_path);
             let aapt2_path = sdk.join(format!("build-tools/{}/aapt2", self.build_tools_version));
@@ -555,7 +551,7 @@ impl AndroidBuilder {
             let compile_command = format!(
                 "{} compile --dir {} -o {}",
                 aapt2_path.display(),
-                res.display(),
+                self.resources.display(),
                 compiled_res.display()
             );
 
@@ -570,10 +566,6 @@ impl AndroidBuilder {
                 .map_err(|e| PistonError::BuildError(format!("aapt2 compile failed: {}", e)))?;
             println!("done compiling resources");
             Ok(compiled_res)
-        } else {
-            println!("no resources found");
-            Ok(PathBuf::new())  // Empty if no resources
-        }
     }
 
     fn link_manifest_and_resources(&self, compiled_res: &Path, base_dir: &Path) -> Result<(), PistonError> {
@@ -581,15 +573,17 @@ impl AndroidBuilder {
         let android_jar: PathBuf = PathBuf::from(self.sdk_path.clone()).join(format!("platforms/android-{}/android.jar", self.manifest.target_sdk_version));
         let manifest_path: PathBuf = self.build_path.join("AndroidManifest.xml");
         let res_arg = if compiled_res.exists() { format!(" {}", compiled_res.display()) } else { String::new() };
-        
+        println!("linking manifest & resources");
         let link_command = format!(
-            "{} link --proto-format -o {} --manifest {} -I {} {}",
+            "{} link --proto-format --output-to-dir -o {} --manifest {} -I {} {}",
             aapt2_path.display(),
             base_dir.display(),
             manifest_path.display(),
             android_jar.display(),
             res_arg
         );
+
+        println!("link command: {}", link_command);
 
         Command::new("bash")
             .arg("-c")
@@ -600,6 +594,8 @@ impl AndroidBuilder {
             .stderr(Stdio::inherit())
             .output()
             .map_err(|e| PistonError::BuildError(format!("aapt2 link failed: {}", e)))?;
+        
+        println!("done linking manifest and resources");
 
         Ok(())
     }
