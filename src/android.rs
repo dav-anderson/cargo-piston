@@ -304,7 +304,6 @@ impl AndroidBuilder {
         println!("creating AndroidBuilder: release: {:?}, target: {:?}, cwd: {:?}", release, target.to_string(), cwd);
         //parse env vars
         let cargo_path: String = env_vars.get("cargo_path").cloned().unwrap_or("cargo".to_string());
-        // let resources_path: Option<String> = env_vars.get("resources_path").cloned();
         let ndk_path: &String = Helper::get_or_err(&env_vars, "ndk_path")?;
         let sdk_path: &String = Helper::get_or_err(&env_vars, "sdk_path")?;
         let java_path: &String = Helper::get_or_err(&env_vars, "java_path")?;
@@ -333,11 +332,6 @@ impl AndroidBuilder {
                         icon_path = Some(s.to_string());
                     }
                 }
-                // if let Some(value) = meta.get("resources_path") {
-                //     if let serde_json::Value::String(s) = value {
-                //         resources_path = Some(s.to_string())
-                //     }
-                // }
             }
         } else {
             println!("No packages found in Cargo.toml");

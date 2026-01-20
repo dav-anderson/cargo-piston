@@ -57,12 +57,11 @@ x86_64-unknown-linux-gnu
 `homebrew_path=/opt/homebrew/bin`
 
 ## General Cargo.toml configuration 
-### App Icon and App Resources example
+### App Icon example
 
 ```
 [package.metadata]
 icon_path = "absolute/path/to/icon.png
-resources_path = absolute/path/to/resources/dir
 ```
 
 ## Installing locally from source
