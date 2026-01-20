@@ -190,7 +190,7 @@ impl WindowsBuilder {
         //build the binary for the specified target
         let cargo_args = format!("build --target {} {}", self.target, if self.release {"--release"} else {""});
         let cargo_cmd = format!("{} {}", self.cargo_path, cargo_args);
-        let output = Command::new("bash")
+        Command::new("bash")
             .arg("-c")
             .arg(&cargo_cmd)
             .current_dir(self.cwd.clone())

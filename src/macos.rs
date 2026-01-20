@@ -152,7 +152,7 @@ fn new(release: bool, target: String, cwd: PathBuf, env_vars: HashMap<String, St
             &self.app_name.as_ref().unwrap(),
             &self.app_version.as_ref().unwrap(),
         );
-        plist_file.write_all(plist_content.as_bytes()).map_err(|e| PistonError::WriteFileError(e.to_string()));
+        plist_file.write_all(plist_content.as_bytes()).map_err(|e| PistonError::WriteFileError(e.to_string()))?;
         println!("Info.plist created");
         //if icon path was provided...convert
         if !self.icon_path.is_none(){
@@ -163,7 +163,8 @@ fn new(release: bool, target: String, cwd: PathBuf, env_vars: HashMap<String, St
             println!("image path clone: {}", &img_path_clone);
             let img_path = Path::new(&img_path_clone);
             println!("image path as path: {}", &img_path.display());
-            let macos_icon = Command::new("sips")
+            //Configure icon
+            Command::new("sips")
                 .args(["-s", "format", "icns", &img_path_clone, "--out", &icon_path.display().to_string()])
                 .output()
                 .map_err(|e| PistonError::MacOSIconError {
@@ -183,7 +184,7 @@ fn new(release: bool, target: String, cwd: PathBuf, env_vars: HashMap<String, St
         //build the binary for the specified target
         let cargo_args = format!("build --target {} {}", self.target, if self.release {"--release"} else {""});
         let cargo_cmd = format!("{} {}", self.cargo_path, cargo_args);
-        let output = Command::new("bash")
+        Command::new("bash")
             .arg("-c")
             .arg(&cargo_cmd)
             .current_dir(self.cwd.clone())

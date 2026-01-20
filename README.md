@@ -6,11 +6,11 @@ Example
 
 `rustup target add aarch64-apple-darwin`
 
-## Example command for building a MacOS app
+## Example command for building with piston
 
 `cargo piston build --target aarch64-apple-darwin`
 
-This command will build a Macos binary within a dynamically created app bundle derived from the information contained within your cargo.toml. This includes ordinarily tedious minutia such as an Info.plist and app icon configuration.
+This command will build a Macos binary within a dynamically created app bundle derived from the information contained within your `cargo.toml` and `.env`. This includes ordinarily tedious minutia such as an Info.plist and app icon configuration.
 
 ## Tested & Supported Build Targets
 
@@ -57,13 +57,13 @@ x86_64-unknown-linux-gnu
 `homebrew_path=/opt/homebrew/bin`
 
 ## General Cargo.toml configuration 
-### Path to App Icon example
+### App Icon and App Resources example
 
-`icon_path = "absolute/path/to/icon.png`
-
-### Path to App Resources directory example
-
-`resources_path = absolute/path/to/resources/dir`
+```
+[package.metadata]
+icon_path = "absolute/path/to/icon.png
+resources_path = absolute/path/to/resources/dir
+```
 
 ## Installing locally from source
 Run the following command within your rust project repo to install the package locally
@@ -224,5 +224,12 @@ or
 
 `bundletool_path=/opt/homebrew/bundletool`
 
+### Android Cargo.Toml configuration
 
+your target_sdk_version must be installed in your `~Android/sdk/platforms` path 
+
+```
+[package.metadata.android]
+target_sdk_version=31
+```
 
