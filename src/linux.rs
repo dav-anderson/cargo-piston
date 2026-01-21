@@ -16,7 +16,7 @@ pub struct LinuxBuilder {
     cargo_path: String,
     zigbuild_path: Option<String>,
     homebrew_path: Option<String>,
-    app_name: Option<String>,
+    app_name: String,
 }
 
 impl LinuxBuilder {
@@ -48,24 +48,8 @@ impl LinuxBuilder {
             .exec()
             .map_err(|e| PistonError::CargoParseError(e.to_string()))?;
 
-        let mut icon_path: Option<String> = None;
-        let mut app_name: Option<String> = None;
-        // Read standard fields from the first package
-        if let Some(package) = metadata.root_package() {
-            println!("Package name: {}", package.name);
-            app_name = Some(package.name.to_string());
-            println!("Version: {}", package.version);
-            // Read custom [package.metadata] keys (if present)
-            if let serde_json::Value::Object(meta) = &package.metadata {
-                if let Some(value) = meta.get("icon_path") {
-                    if let serde_json::Value::String(s) = value {
-                        icon_path = Some(s.to_string());
-                    }
-                }
-            }
-        } else {
-            println!("No packages found in Cargo.toml");
-        }
+        let icon_path = Helper::get_icon_path(&metadata);
+        let app_name = Helper::get_app_name(&metadata)?;
         //parse the path to zigbuild if building on Macos
         let mut zigbuild_path: Option<String> = None;
         let mut homebrew_path: Option<String> = None;
@@ -144,8 +128,8 @@ impl LinuxBuilder {
 
     fn post_build(&mut self) -> Result<(), PistonError>{
         println!("post build for linux");
-        let binary_path = self.cwd.join("target").join(self.target.clone()).join(if self.release {"release"} else {"debug"}).join(self.app_name.as_ref().unwrap());
-        let bundle_path = self.output_path.as_ref().unwrap().join(self.app_name.as_ref().unwrap());
+        let binary_path = self.cwd.join("target").join(self.target.clone()).join(if self.release {"release"} else {"debug"}).join(self.app_name.clone());
+        let bundle_path = self.output_path.as_ref().unwrap().join(self.app_name.clone());
         //bundle path should be cwd + target + <target output> + <--release flag or None for debug> + <appname>.exe
         println!("binary path is: {}", &binary_path.display());
         println!("bundle path is: {}", &bundle_path.display());

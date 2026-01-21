@@ -4,6 +4,8 @@ use std::fs::{read_dir, remove_dir_all, remove_file};
 use std::process::Command;
 use image::imageops;
 use std::path::PathBuf;
+use cargo_metadata::{Metadata, TargetKind};
+use serde_json::Value;
 use crate::error::PistonError;
 
 use std::collections::HashMap;
@@ -166,5 +168,42 @@ impl Helper {
         }
         
         Ok(host_dirs[0].clone())
+    }
+
+    pub fn get_lib_name(metadata: &Metadata) -> Result<String, PistonError> {
+        let root_package = metadata.root_package()
+            .ok_or(PistonError::CargoParseError("no root package found in metadata".to_string()))?;
+
+        // Default to package.name with hyphens replaced by underscores (Cargo's convention for lib outputs)
+        let mut lib_name = root_package.name.replace("-", "_");
+
+        // If [lib] name is overridden, find it in targets (for cdylib)
+        let target_type: TargetKind = "cdylib".into();
+        for target in &root_package.targets {
+            if target.kind.iter().any(|k| k == &target_type) {
+                lib_name = target.name.clone();
+                break;
+            }
+        }
+        Ok(lib_name)
+    }
+
+    pub fn get_icon_path(metadata: &Metadata) -> Option<String> {
+        metadata.root_package()
+            .and_then(|pkg| pkg.metadata.get("icon_path"))
+            .and_then(Value::as_str)
+            .map(|s| s.to_string())
+    }
+
+    pub fn get_app_name(metadata: &Metadata) -> Result<String, PistonError> {
+        metadata.root_package()
+            .map(|pkg| pkg.name.to_string())
+            .ok_or(PistonError::CargoParseError("app_name not found in [package]".to_string()))
+    }
+
+    pub fn get_app_version(metadata: &Metadata) -> Result<String, PistonError> {
+        metadata.root_package()
+            .map(|pkg| pkg.version.to_string())
+            .ok_or(PistonError::CargoParseError("app_version not found in [package]".to_string()))
     }
 }

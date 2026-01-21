@@ -225,10 +225,43 @@ or
 
 ### Android Cargo.Toml configuration
 
+Add the following dependencies
+
+```
+[dependencies]
+android-activity = { version = "0.5", features = ["native-activity"] }
+log = "0.4"
+```
+
+your Cargo.toml must have the following library designation 
+
+```
+[lib]
+name="<app_name>"
+crate-type=["cdylib"]
+```
+
 your target_sdk_version must be installed in your `~Android/sdk/platforms` path 
 
 ```
 [package.metadata.android]
 target_sdk_version=31
+```
+
+### Create a Lib.rs in ~/src
+
+Unlike other outputs, android apps require first building a cdylib, we've already designated those settings in the cargo.toml, however, your project must also contain a `~/src/lib.rs` file with a main activity.
+
+Example `lib.rs`
+
+```
+use android_activity::AndroidApp;
+
+#[unsafe(no_mangle)]
+pub extern "C" fn android_main(app: AndroidApp) {
+    loop {
+        log::info!("Hello from Rust on Android!");
+    }
+}
 ```
 

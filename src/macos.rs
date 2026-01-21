@@ -14,8 +14,8 @@ pub struct MacOSBuilder {
     output_path: Option<PathBuf>,
     icon_path: Option<String>,
     cargo_path: String,
-    app_name: Option<String>,
-    app_version: Option<String>,
+    app_name: String,
+    app_version: String,
 }
 
 impl MacOSBuilder {
@@ -50,26 +50,9 @@ fn new(release: bool, target: String, cwd: PathBuf, env_vars: HashMap<String, St
             .exec()
             .map_err(|e| PistonError::CargoParseError(e.to_string()))?;
 
-        let mut icon_path: Option<String> = None;
-        let mut app_name: Option<String> = None;
-        let mut app_version: Option<String> = None;
-        // Read standard fields from the first package
-        if let Some(package) = metadata.root_package() {
-            println!("Package name: {}", package.name);
-            app_name = Some(package.name.to_string());
-            println!("Version: {}", package.version);
-            app_version = Some(package.version.to_string());
-            // Read custom [package.metadata] keys (if present)
-            if let serde_json::Value::Object(meta) = &package.metadata {
-                if let Some(value) = meta.get("icon_path") {
-                    if let serde_json::Value::String(s) = value {
-                        icon_path = Some(s.to_string());
-                    }
-                }
-            }
-        } else {
-            println!("No packages found in Cargo.toml");
-        } 
+        let icon_path = Helper::get_icon_path(&metadata);
+        let app_name = Helper::get_app_name(&metadata)?;
+        let app_version = Helper::get_app_version(&metadata)?;
         Ok(MacOSBuilder{release: release, target: target.to_string(), cwd: cwd, output_path: None, icon_path: icon_path, cargo_path: cargo_path, app_name: app_name, app_version: app_version})
     }
 
@@ -78,7 +61,7 @@ fn new(release: bool, target: String, cwd: PathBuf, env_vars: HashMap<String, St
         println!("building the dynamic app bundle");
         let cwd: PathBuf = self.cwd.clone();
         println!("working dir: {:?}", cwd);
-        let capitalized = Helper::capitalize_first(self.app_name.as_ref().unwrap());
+        let capitalized = Helper::capitalize_first(&self.app_name.clone());
         println!("capitalized app name: {}", capitalized);
         let release = if self.release {"release"} else {"debug"};
         let partial_path: PathBuf = if self.release {
@@ -149,8 +132,8 @@ fn new(release: bool, target: String, cwd: PathBuf, env_vars: HashMap<String, St
             </plist>
             "#,
             &capitalized,
-            &self.app_name.as_ref().unwrap(),
-            &self.app_version.as_ref().unwrap(),
+            &self.app_name.clone(),
+            &self.app_version.clone(),
         );
         plist_file.write_all(plist_content.as_bytes()).map_err(|e| PistonError::WriteFileError(e.to_string()))?;
         println!("Info.plist created");
@@ -198,8 +181,8 @@ fn new(release: bool, target: String, cwd: PathBuf, env_vars: HashMap<String, St
 
     fn post_build(&mut self) -> Result<(), PistonError>{
         println!("post build for macos");
-        let binary_path = self.cwd.join("target").join(self.target.clone()).join(if self.release {"release"} else {"debug"}).join(self.app_name.as_ref().unwrap());
-        let bundle_path = self.output_path.as_ref().unwrap().join(self.app_name.as_ref().unwrap());
+        let binary_path = self.cwd.join("target").join(self.target.clone()).join(if self.release {"release"} else {"debug"}).join(self.app_name.clone());
+        let bundle_path = self.output_path.as_ref().unwrap().join(self.app_name.clone());
         //bundle path should be cwd + target + <target output> + <--release flag or None for debug> + <appname>.exe
         println!("binary path is: {}", &binary_path.display());
         println!("bundle path is: {}", &bundle_path.display());

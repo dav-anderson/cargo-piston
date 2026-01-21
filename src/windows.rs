@@ -16,7 +16,7 @@ pub struct WindowsBuilder {
     icon_path: Option<String>,
     embed_resources_ok: bool,
     cargo_path: String,
-    app_name: Option<String>,
+    app_name: String,
 }
 
 impl WindowsBuilder {
@@ -54,27 +54,8 @@ impl WindowsBuilder {
             false
         };
         println!("Embed Resources Installed: {}", embed_resources_ok);
-        let mut icon_path: Option<String> = None;
-        let mut app_name: Option<String> = None;
-        // Read standard fields from the first package
-        if let Some(package) = metadata.root_package() {
-            println!("Package name: {}", package.name);
-            app_name = Some(package.name.to_string());
-            println!("Version: {}", package.version);
-            // Read custom [package.metadata] keys (if present)
-            if let serde_json::Value::Object(meta) = &package.metadata {
-                if let Some(value) = meta.get("icon_path") {
-                    if let serde_json::Value::String(s) = value {
-                        icon_path = Some(s.to_string());
-                    }
-                }
-            }
-        } else {
-            println!("No packages found in Cargo.toml");
-        }
-        if app_name == None {
-            return Err(PistonError::CargoParseError("Could not parse app name from cargo.toml".to_string()))
-        }
+        let icon_path = Helper::get_icon_path(&metadata);
+        let app_name = Helper::get_app_name(&metadata)?;
         Ok(WindowsBuilder{release: release, target: target.to_string(), cwd: cwd, output_path: None, icon_path: icon_path, embed_resources_ok: embed_resources_ok, cargo_path: cargo_path, app_name: app_name})
     }
 
@@ -204,8 +185,8 @@ impl WindowsBuilder {
 
     fn post_build(&self) -> Result<(), PistonError>{
         println!("post building");
-        let binary_path = self.cwd.join("target").join(self.target.clone()).join(if self.release {"release"} else {"debug"}).join(format!("{}.exe", self.app_name.as_ref().unwrap()));
-        let bundle_path = self.output_path.as_ref().unwrap().join(format!("{}.exe", self.app_name.as_ref().unwrap()));
+        let binary_path = self.cwd.join("target").join(self.target.clone()).join(if self.release {"release"} else {"debug"}).join(format!("{}.exe", self.app_name.clone()));
+        let bundle_path = self.output_path.as_ref().unwrap().join(format!("{}.exe", self.app_name.clone()));
         //bundle path should be cwd + target + <target output> + <--release flag or None for debug> + <appname>.exe
         println!("binary path is: {}", &binary_path.display());
         println!("bundle path is: {}", &bundle_path.display());

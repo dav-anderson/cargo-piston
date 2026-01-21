@@ -1,7 +1,7 @@
 use std::path::{ Path, PathBuf };
 use std::collections::HashMap;
 use cargo_metadata::{ Metadata, MetadataCommand };
-use std::fs::{ File, create_dir_all};
+use std::fs::{ File, create_dir_all, copy};
 use std::io::{ Write, BufWriter };
 use std::process::{ Command, Stdio };
 use serde::Deserialize;
@@ -10,22 +10,6 @@ use crate::Helper;
 use crate::PistonError;
 
 //TODO reverse engineer cargo-apk
-
-//     fn add_lib(&self, base_dir: &Path, artifact_name: &str, target_triple: &str) -> Result<(), PistonError> {
-//         let abi = match target_triple {
-//             "aarch64-linux-android" => "arm64-v8a",
-//             // Add more mappings
-//             _ => return Err(PistonError::BuildError("Unsupported target".to_string())),
-//         };
-//         let lib_dir = base_dir.join("lib").join(abi);
-//         fs::create_dir_all(&lib_dir)?;
-
-//         let so_path = self.build_path.parent().unwrap().join(target_triple).join(if self.is_debug { "debug" } else { "release" }).join(format!("lib{}.so", artifact_name));  // Adjust path
-//         fs::copy(&so_path, lib_dir.join(format!("lib{}.so", artifact_name)))
-//             .map_err(|e| PistonError::BuildError(format!("Failed to copy .so: {}", e)))?;
-
-//         Ok(())
-//     }
 
 //     fn zip_base(&self, base_dir: &Path, base_zip: &Path) -> Result<(), PistonError> {
 //         let zip_command = format!(
@@ -172,7 +156,7 @@ struct AndroidManifest {
 }
 
 impl AndroidManifest {
-    pub fn build(metadata: &Metadata, app_name: String) -> Result<Self, PistonError> {
+    pub fn build(metadata: &Metadata, app_name: &String) -> Result<Self, PistonError> {
         let package = metadata.root_package()
             .ok_or_else(|| PistonError::ParseManifestError("No Root package found in metadata".to_string()))?;
         let crate_name = package.name.clone();
@@ -198,7 +182,7 @@ impl AndroidManifest {
             .unwrap_or(34);
         manifest.app_label = android_meta.label
             .unwrap_or(format!("{} App", crate_name));
-        manifest.app_name = app_name;
+        manifest.app_name = app_name.to_string();
         manifest.icon = "@mipmap/ic_launcher".to_string();
 
         Ok(manifest)
@@ -243,6 +227,10 @@ impl AndroidManifest {
         println!("writing manifest...");
         let path = dir.join("AndroidManifest.xml");
         println!("Manifest path: {:?}", path);
+        create_dir_all(&dir).map_err(|e| PistonError::CreateDirAllError {
+        path: dir.to_path_buf(),
+        source: e,
+        })?;
         let file = File::create(&path)
             .map_err(|e| PistonError::CreateManifestError(format!("Failed to create manifest file: {}", e)))?;
         
@@ -270,8 +258,9 @@ pub struct AndroidBuilder {
     output_path: Option<PathBuf>,
     icon_path: Option<String>,
     cargo_path: String,
-    app_name: Option<String>,
-    app_version: Option<String>,
+    app_name: String,
+    lib_name: String,
+    app_version: String,
     manifest: AndroidManifest,
     ndk_path: String,
     sdk_path: String,
@@ -316,29 +305,12 @@ impl AndroidBuilder {
             .exec()
             .map_err(|e| PistonError::CargoParseError(e.to_string()))?;
 
-        let mut icon_path: Option<String> = None;
-        let mut app_name: Option<String> = None;
-        let mut app_version: Option<String> = None;
-        // Read standard fields from the first package
-        if let Some(package) = metadata.root_package() {
-            println!("Package name: {}", package.name);
-            app_name = Some(package.name.to_string());
-            println!("Version: {}", package.version);
-            app_version = Some(package.version.to_string());
-            // Read custom [package.metadata] keys (if present)
-            if let serde_json::Value::Object(meta) = &package.metadata {
-                if let Some(value) = meta.get("icon_path") {
-                    if let serde_json::Value::String(s) = value {
-                        icon_path = Some(s.to_string());
-                    }
-                }
-            }
-        } else {
-            println!("No packages found in Cargo.toml");
-        } 
-
+        let lib_name = Helper::get_lib_name(&metadata)?;
+        let icon_path = Helper::get_icon_path(&metadata);
+        let app_name = Helper::get_app_name(&metadata)?;
+        let app_version = Helper::get_app_version(&metadata)?;
         //generate androidmanifest.xml
-        let manifest = AndroidManifest::build(&metadata, app_name.as_ref().unwrap().to_string())?;
+        let manifest = AndroidManifest::build(&metadata, &app_name)?;
         //manifest path is cwd/target/<release>/androidbuilder/android/AndroidManifest.xml
         let build_path: PathBuf = cwd.join("target").join(if release {"release"} else {"debug"}).join("androidbuilder").join("android");
         let resources_path: PathBuf = build_path.join("app").join("src").join("main").join("res");
@@ -354,6 +326,7 @@ impl AndroidBuilder {
             icon_path: icon_path, 
             cargo_path: cargo_path, 
             app_name: app_name, 
+            lib_name: lib_name,
             app_version: app_version, 
             manifest: manifest, 
             ndk_path: ndk_path.to_string(), 
@@ -469,8 +442,8 @@ impl AndroidBuilder {
 //             self.copy_dir_recursively(assets, &assets_dest)?;
 //         }
 
-        //TODO add the .so lib for single lib/no recursion
-        // self.add_lib(&base_dir, artifact_name, target_triple)?;
+        //add the .so lib for single lib/no recursion
+        self.add_lib(&base_dir, self.target.as_ref())?;
 
 
         //TODO zip base module
@@ -518,7 +491,7 @@ impl AndroidBuilder {
         let linker_env_key = format!("CARGO_TARGET_{}_LINKER", target_upper);
         let ar_env_key = format!("CARGO_TARGET_{}_AR", target_upper);
         let release = if self.release {"--release"} else {""};
-        let cargo_command = format!("cargo build --target {}  {}", self.target, release); 
+        let cargo_command = format!("cargo build --target {}  {} --lib", self.target, release); 
         //run the cargo build command
         Command::new("bash")
             .arg("-c")
@@ -590,6 +563,29 @@ impl AndroidBuilder {
             .map_err(|e| PistonError::BuildError(format!("aapt2 link failed: {}", e)))?;
         
         println!("done linking manifest and resources");
+
+        Ok(())
+    }
+
+        fn add_lib(&self, base_dir: &Path, target: &str) -> Result<(), PistonError> {
+        let abi = match target {
+            "aarch64-linux-android" => "arm64-v8a",
+            //Add more mappings here as required if updating android support for other outputs
+            _ => return Err(PistonError::BuildError("Unsupported target".to_string())),
+        };
+        let lib_dir = base_dir.join("lib").join(abi);
+        create_dir_all(&lib_dir).map_err(|e| PistonError::CreateDirAllError {
+        path: lib_dir.clone(),
+        source: e,
+        })?;
+
+        let lib_file = format!("lib{}.so", self.lib_name);
+        println!("library file name: {}", lib_file);
+
+        let so_path = self.cwd.join("target").join(target).join(if self.release { "release" } else { "debug" }).join(&lib_file);
+        println!(".so path: {:?}", so_path);
+        copy(&so_path, lib_dir.join(&lib_file))
+            .map_err(|e| PistonError::BuildError(format!("Failed to copy .so: {}", e)))?;
 
         Ok(())
     }
