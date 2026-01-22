@@ -30,6 +30,10 @@ pub enum PistonError {
 
     AndroidConfigError(String),
 
+    ProtoLinkError(String),
+
+    UnsupportedTargetError(String),
+
     UnsupportedOSError{ os: String, target: String },
 
     CopyFileError{ input_path: PathBuf, output_path: PathBuf, source: IoError },
@@ -43,6 +47,8 @@ pub enum PistonError {
     RemoveFileError{ path: PathBuf, source: IoError },
 
     CreateFileError{ path: PathBuf, source: IoError },
+
+    RenameFileError{ path: PathBuf, source: IoError },
 
     CreateDirAllError{ path: PathBuf, source: IoError },
 
@@ -66,6 +72,8 @@ impl fmt::Display for PistonError {
             PistonError::CreateManifestError(err) => write!(f, "Failed to create AndroidManifest.xml file: {}", err),
             PistonError::WriteManifestError(err) => write!(f, "Failed to write AndroidManifest.xml contents: {}", err),
             PistonError::AndroidConfigError(err) => write!(f, "Failed to read android config path from .env: {}", err),
+            PistonError::ProtoLinkError(err) => write!(f, "Failed to proto link android build directory: {}", err),
+            PistonError::UnsupportedTargetError(err) => write!(f, "User Specified Target is Unsupported: {}", err),
             PistonError::UnsupportedOSError{ os, target, .. } => write!(f, "Host system: {:?} does not support the target: {:?}", os, target),
             PistonError::CopyFileError { input_path, output_path, .. } => write!(f, "Failed to copy {:?} to {:?}", input_path, output_path),
             PistonError::MacOSIconError { input_path, output_path, .. } => write!(f, "Failed to format icon {:?} to {:?}", input_path, output_path),
@@ -73,6 +81,7 @@ impl fmt::Display for PistonError {
             PistonError::RemoveSubdirError { path, .. } => write!(f, "Failed to remove subdirectory {:?}", path),
             PistonError::RemoveFileError { path, .. } => write!(f, "Failed to remove file {:?}", path),
             PistonError::CreateFileError { path, .. } => write!(f, "Failed to Create file {:?}", path),
+            PistonError::RenameFileError { path, .. } => write!(f, "Failed to Rename file {:?}", path),
             PistonError::CreateDirAllError { path, .. } => write!(f, "Failed to create dir all {:?}", path),
             PistonError::OpenImageError { path, .. } => write!(f, "Failed to open image {:?}", path),
             PistonError::Generic(err) => write!(f, "Generic Error: {}", err)
@@ -90,6 +99,7 @@ impl StdError for PistonError {
             PistonError::RemoveFileError { source, .. } => Some(source),
             PistonError::CreateFileError { source, .. } => Some(source),
             PistonError::CreateDirAllError { source, .. } => Some(source),
+            PistonError::RenameFileError { source, .. } => Some(source),
             PistonError::OpenImageError { source, .. } => Some(source),
             _ => None,
         }

@@ -82,9 +82,8 @@ fn new(release: bool, target: String, cwd: PathBuf, env_vars: HashMap<String, St
         }
         //Empty the directory if it already exists
         let path = res_path.as_path();
-        if path.exists() && path.is_dir(){
-            Helper::empty_directory(path)?
-        }
+        //empty the dir if it exists
+        Helper::empty_directory(path)?;
         //create the target directories
         create_dir_all(path).map_err(|e| PistonError::CreateDirAllError {
         path: self.output_path.as_ref().unwrap().to_path_buf(),

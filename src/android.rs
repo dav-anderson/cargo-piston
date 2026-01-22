@@ -1,7 +1,7 @@
 use std::path::{ Path, PathBuf };
 use std::collections::HashMap;
 use cargo_metadata::{ Metadata, MetadataCommand };
-use std::fs::{ File, create_dir_all, copy};
+use std::fs::{ File, create_dir_all, copy, rename, remove_file};
 use std::io::{ Write, BufWriter };
 use std::process::{ Command, Stdio };
 use serde::Deserialize;
@@ -9,46 +9,11 @@ use serde_json::Value;
 use crate::Helper;
 use crate::PistonError;
 
+//TODO build out intent filters with more robust cargo.toml parameters  
 //TODO reverse engineer cargo-apk
 
-//     fn zip_base(&self, base_dir: &Path, base_zip: &Path) -> Result<(), PistonError> {
-//         let zip_command = format!(
-//             "cd {} && zip -r ../base.zip *",
-//             base_dir.display()
-//         );
+//TODO derive APK from aab
 
-//         Command::new("bash")
-//             .arg("-c")
-//             .arg(&zip_command)
-//             .current_dir(&self.build_path)
-//             .stdout(Stdio::inherit())
-//             .stderr(Stdio::inherit())
-//             .output()
-//             .map_err(|e| PistonError::BuildError(format!("Zip failed: {}", e)))?;
-
-//         Ok(())
-//     }
-
-//     fn build_bundle(&self, base_zip: &Path, aab_path: &Path) -> Result<(), PistonError> {
-//         let bundle_command = format!(
-//             "java -jar {} build-bundle --modules={} --output={}",
-//             self.bundletool_jar_path.display(),
-//             base_zip.display(),
-//             aab_path.display()
-//         );
-
-//         Command::new("bash")
-//             .arg("-c")
-//             .arg(&bundle_command)
-//             .current_dir(&self.build_path)
-//             .env("JAVA_HOME", self.java_path.to_str().unwrap())
-//             .stdout(Stdio::inherit())
-//             .stderr(Stdio::inherit())
-//             .output()
-//             .map_err(|e| PistonError::BuildError(format!("bundletool failed: {}", e)))?;
-
-//         Ok(())
-//     }
 
 //     fn sign_aab(&self, aab_path: &Path) -> Result<(), PistonError> {
 //         let profile_name = if self.is_debug { "dev" } else { "release" };
@@ -126,6 +91,7 @@ use crate::PistonError;
 //         Ok(())
 //     }
 // }
+
 
 #[derive(Deserialize, Default)]
 struct AndroidMetadata {
@@ -224,14 +190,15 @@ impl AndroidManifest {
     }
 
     pub fn write_to(&self, dir: &Path) -> Result<(), PistonError> {
-        println!("writing manifest...");
-        let path = dir.join("AndroidManifest.xml");
-        println!("Manifest path: {:?}", path);
+        let file_path = dir.join("AndroidManifest.xml");
+        println!("writing {:?}...", file_path);
+        //empty dir if exists
+        Helper::empty_directory(&dir)?;
         create_dir_all(&dir).map_err(|e| PistonError::CreateDirAllError {
         path: dir.to_path_buf(),
         source: e,
         })?;
-        let file = File::create(&path)
+        let file = File::create(&file_path)
             .map_err(|e| PistonError::CreateManifestError(format!("Failed to create manifest file: {}", e)))?;
         
         let mut writer = BufWriter::new(file);
@@ -262,6 +229,7 @@ pub struct AndroidBuilder {
     lib_name: String,
     app_version: String,
     manifest: AndroidManifest,
+    manifest_path: PathBuf,
     ndk_path: String,
     sdk_path: String,
     java_path: String,
@@ -311,12 +279,13 @@ impl AndroidBuilder {
         let app_version = Helper::get_app_version(&metadata)?;
         //generate androidmanifest.xml
         let manifest = AndroidManifest::build(&metadata, &app_name)?;
-        //manifest path is cwd/target/<release>/androidbuilder/android/AndroidManifest.xml
         let build_path: PathBuf = cwd.join("target").join(if release {"release"} else {"debug"}).join("androidbuilder").join("android");
+        //manifest path is cwd/target/<release>/androidbuilder/android/manifest
+        let manifest_path: PathBuf = build_path.join("manifest");
         let resources_path: PathBuf = build_path.join("app").join("src").join("main").join("res");
         println!("build path: {:?}", build_path);
         //write AndroidManifest.xml to file
-        manifest.write_to(&build_path.as_path())?;
+        manifest.write_to(&manifest_path.as_path())?;
         Ok(AndroidBuilder{
             release: release, 
             target: target.to_string(), 
@@ -329,6 +298,7 @@ impl AndroidBuilder {
             lib_name: lib_name,
             app_version: app_version, 
             manifest: manifest, 
+            manifest_path: manifest_path,
             ndk_path: ndk_path.to_string(), 
             sdk_path: sdk_path.to_string(), 
             java_path: java_path.to_string(),
@@ -347,11 +317,9 @@ impl AndroidBuilder {
         //set the absolute build path
         println!("working build path: {:?}", self.build_path);
         println!("full build path with children {:?}", self.resources);
-        //Empty the directory if it already exists
         let path = self.resources.as_path();
-        if path.exists() && path.is_dir(){
-            Helper::empty_directory(path)?
-        }
+        //Empty the directory if it already exists
+        Helper::empty_directory(path)?;
         //create the target directories
         create_dir_all(&self.resources).map_err(|e| PistonError::CreateDirAllError {
         path: self.resources.clone(),
@@ -366,11 +334,9 @@ impl AndroidBuilder {
         if self.output_path.as_ref().is_none() {
             return Err(PistonError::Generic("output path not provided".to_string()))
         }
-        //empty dir if it exists
         let path = output_path.as_path();
-        if path.exists() && path.is_dir(){
-            Helper::empty_directory(path)?
-        }
+        //empty dir if it exists
+        Helper::empty_directory(path)?;
         //create target dirs
         create_dir_all(self.output_path.as_ref().unwrap()).map_err(|e| PistonError::CreateDirAllError {
         path: self.output_path.as_ref().unwrap().to_path_buf(),
@@ -428,6 +394,8 @@ impl AndroidBuilder {
         let resources = self.compile_resources()?;
         //Link manifest and resources (aapt2 link)
         let base_dir = self.build_path.join("base");
+        //empty the dir if it exists
+        Helper::empty_directory(&base_dir)?;
         create_dir_all(&base_dir).map_err(|e| PistonError::CreateDirAllError {
         path: base_dir.clone(),
         source: e,
@@ -442,17 +410,14 @@ impl AndroidBuilder {
 //             self.copy_dir_recursively(assets, &assets_dest)?;
 //         }
 
-        //add the .so lib for single lib/no recursion
+        //add the .so lib for a single lib
         self.add_lib(&base_dir, self.target.as_ref())?;
-
-
-        //TODO zip base module
-        // let base_zip = self.build_path.join("base.zip");
-//         self.zip_base(&base_dir, &base_zip)?;
-
-        //TODO build AAB with bundletool? Can we just use cargo commands?
-        // let aab_path = self.build_path.join(format!("{}.aab", self.aab_name));
-//         self.build_bundle(&base_zip, &aab_path)?;
+        //zip base module
+        let base_zip = self.build_path.join("base.zip");
+        self.zip_base(&base_dir, &base_zip)?;
+        //build AAB with bundletool
+        let aab_path = self.build_path.join(format!("{}.aab", self.app_name));
+        self.build_bundle(&base_zip, &aab_path)?;
 
         //TODO sign AAB
         // self.sign_aab(&aab_path)?;
@@ -467,6 +432,7 @@ impl AndroidBuilder {
     }
 
     fn build_so(&mut self) -> Result<(), PistonError>{
+        println!("building the .so library");
         //build the .so with cargo
         let host_platform = Helper::get_host_platform(self.ndk_path.as_ref())?;
         //set linker
@@ -506,39 +472,48 @@ impl AndroidBuilder {
             .stderr(Stdio::inherit())
             .output()
             .map_err(|e| PistonError::BuildError(format!("Cargo build failed: {}", e)))?;
+        println!("finished building .so library");
         Ok(())
     }
 
     fn compile_resources(&self) -> Result<PathBuf, PistonError> {
         println!("compiling resources at {:?}", &self.resources);
-            let compiled_res = self.build_path.join("compiled_resources.zip");
-            let sdk = PathBuf::from(&self.sdk_path);
-            let aapt2_path = sdk.join(format!("build-tools/{}/aapt2", self.build_tools_version));
+        //remove compiled_resources.zip if it exists
+        let compiled_res = self.build_path.join("compiled_resources.zip");
+        if compiled_res.exists() {
+            remove_file(&compiled_res).map_err(|e| PistonError::RemoveFileError {
+                path: compiled_res.clone().to_path_buf(),
+                source: e,
+            })?;
+            println!("removed compiled_resources.zip at: {:?}", compiled_res);
+        }
+        let sdk = PathBuf::from(&self.sdk_path);
+        let aapt2_path = sdk.join(format!("build-tools/{}/aapt2", self.build_tools_version));
 
-            let compile_command = format!(
-                "{} compile --dir {} -o {}",
-                aapt2_path.display(),
-                self.resources.display(),
-                compiled_res.display()
-            );
+        let compile_command = format!(
+            "{} compile --dir {} -o {}",
+            aapt2_path.display(),
+            self.resources.display(),
+            compiled_res.display()
+        );
 
-            Command::new("bash")
-                .arg("-c")
-                .arg(&compile_command)
-                .current_dir(self.build_path.clone())
-                .env("ANDROID_HOME", self.sdk_path.clone())
-                .stdout(Stdio::inherit())
-                .stderr(Stdio::inherit())
-                .output()
-                .map_err(|e| PistonError::BuildError(format!("aapt2 compile failed: {}", e)))?;
-            println!("done compiling resources");
-            Ok(compiled_res)
+        Command::new("bash")
+            .arg("-c")
+            .arg(&compile_command)
+            .current_dir(self.build_path.clone())
+            .env("ANDROID_HOME", self.sdk_path.clone())
+            .stdout(Stdio::inherit())
+            .stderr(Stdio::inherit())
+            .output()
+            .map_err(|e| PistonError::BuildError(format!("aapt2 compile failed: {}", e)))?;
+        println!("done compiling resources");
+        Ok(compiled_res)
     }
 
     fn link_manifest_and_resources(&self, compiled_res: &Path, base_dir: &Path) -> Result<(), PistonError> {
         let aapt2_path: PathBuf = PathBuf::from(self.sdk_path.clone()).join(format!("build-tools/{}/aapt2", self.build_tools_version));
         let android_jar: PathBuf = PathBuf::from(self.sdk_path.clone()).join(format!("platforms/android-{}/android.jar", self.manifest.target_sdk_version));
-        let manifest_path: PathBuf = self.build_path.join("AndroidManifest.xml");
+        let manifest_path: PathBuf = self.manifest_path.join("AndroidManifest.xml");
         let res_arg = if compiled_res.exists() { format!(" {}", compiled_res.display()) } else { String::new() };
         println!("linking manifest & resources");
         let link_command = format!(
@@ -560,20 +535,42 @@ impl AndroidBuilder {
             .stdout(Stdio::inherit())
             .stderr(Stdio::inherit())
             .output()
-            .map_err(|e| PistonError::BuildError(format!("aapt2 link failed: {}", e)))?;
+            .map_err(|e| PistonError::ProtoLinkError(format!("aapt2 link failed: {}", e)))?;
+
+        //TODO THIS IS BUSTED AND PROBABLY UNNCESSARY FIX HIGHER UP LOGIC FLOW Ensure proto manifest is in a manifest/ subdir
+        // let proto_manifest_root = base_dir.join("AndroidManifest.xml");
+        // if proto_manifest_root.exists() {
+        //     let manifest_dir = base_dir.join("manifest");
+        //     //empty the dir if it exists
+        //     Helper::empty_directory(&manifest_dir)?;
+        //     create_dir_all(&manifest_dir)
+        //         .map_err(|e| PistonError::CreateDirAllError {
+        //             path: manifest_dir.clone(),
+        //             source: e,
+        //         })?;
+        //     rename(&proto_manifest_root, manifest_dir.join("AndroidManifest.xml"))
+        //         .map_err(|e| PistonError::RenameFileError {
+        //             path: proto_manifest_root.clone(),
+        //             source: e,
+        //         })?;
+        // } else {
+        //     return Err(PistonError::ProtoLinkError("Proto AndroidManifest.xml not generated and linked by AAPT2".to_string()))
+        // }
         
         println!("done linking manifest and resources");
 
         Ok(())
     }
 
-        fn add_lib(&self, base_dir: &Path, target: &str) -> Result<(), PistonError> {
+    fn add_lib(&self, base_dir: &Path, target: &str) -> Result<(), PistonError> {
+        println!("adding .so library to base directory");
         let abi = match target {
             "aarch64-linux-android" => "arm64-v8a",
             //Add more mappings here as required if updating android support for other outputs
-            _ => return Err(PistonError::BuildError("Unsupported target".to_string())),
+            _ => return Err(PistonError::UnsupportedTargetError(format!("Unsupported target {}", target).to_string())),
         };
         let lib_dir = base_dir.join("lib").join(abi);
+        Helper::empty_directory(&lib_dir)?;
         create_dir_all(&lib_dir).map_err(|e| PistonError::CreateDirAllError {
         path: lib_dir.clone(),
         source: e,
@@ -586,6 +583,56 @@ impl AndroidBuilder {
         println!(".so path: {:?}", so_path);
         copy(&so_path, lib_dir.join(&lib_file))
             .map_err(|e| PistonError::BuildError(format!("Failed to copy .so: {}", e)))?;
+
+        Ok(())
+    }
+
+    fn zip_base(&self, base_dir: &Path, base_zip: &Path) -> Result<(), PistonError> {
+        let zip_path = base_dir.join("base.zip");
+        if zip_path.exists(){
+            remove_file(&zip_path).map_err(|e| PistonError::RemoveFileError {
+                path: zip_path.clone().to_path_buf(),
+                source: e,
+            })?;
+            println!("removed old zip from: {:?}", zip_path);
+        }
+        println!("zipping base dir");
+        let zip_command = format!(
+            "cd {} && zip -r ../base.zip *",
+            base_dir.display()
+        );
+
+        Command::new("bash")
+            .arg("-c")
+            .arg(&zip_command)
+            .current_dir(&self.build_path)
+            .stdout(Stdio::inherit())
+            .stderr(Stdio::inherit())
+            .output()
+            .map_err(|e| PistonError::BuildError(format!("Zip failed: {}", e)))?;
+
+        Ok(())
+    }
+
+    fn build_bundle(&self, base_zip: &Path, aab_path: &Path) -> Result<(), PistonError> {
+        println!("building .aab bundle with bundletool");
+        let bundle_command = format!(
+            "java -jar {} build-bundle --modules={} --output={}",
+            self.bundletool_path,
+            base_zip.display(),
+            aab_path.display()
+        );
+
+        Command::new("bash")
+            .arg("-c")
+            .arg(&bundle_command)
+            .current_dir(&self.build_path)
+            .env("JAVA_HOME", self.java_path.clone())
+            .stdout(Stdio::inherit())
+            .stderr(Stdio::inherit())
+            .output()
+            .map_err(|e| PistonError::BuildError(format!("bundletool failed: {}", e)))?;
+        println!("finished .aab bulding bundle with bundletool");
 
         Ok(())
     }

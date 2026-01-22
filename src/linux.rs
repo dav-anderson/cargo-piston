@@ -80,9 +80,8 @@ impl LinuxBuilder {
             return Err(PistonError::Generic("output path not provided".to_string()))
         }
         let path = self.output_path.as_ref().unwrap().as_path();
-        if path.exists() && path.is_dir(){
-            Helper::empty_directory(path)?
-        }
+        //empty the dir if it exists
+        Helper::empty_directory(path)?;
         //create the target directory
         create_dir_all(path).map_err(|e| PistonError::CreateDirAllError {
         path: self.output_path.as_ref().unwrap().to_path_buf(),

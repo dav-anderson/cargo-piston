@@ -19,6 +19,9 @@ pub struct Helper {
 
 impl Helper {
     pub fn empty_directory(dir_path: &Path) -> Result<(), PistonError>{
+        if !dir_path.exists() && !dir_path.is_dir(){
+            return Ok(())
+        }
         println!("Emptying {:?}", dir_path);
         let entries = read_dir(dir_path).map_err(|e| PistonError::ReadDirError {
             path: dir_path.to_path_buf(),
