@@ -419,6 +419,8 @@ impl AndroidBuilder {
         let aab_path = self.build_path.join(format!("{}.aab", self.app_name));
         self.build_bundle(&base_zip, &aab_path)?;
 
+        println!("Success in building Android App Bundle. Bundle is available at: {:?}", aab_path);
+
         //TODO sign AAB
         // self.sign_aab(&aab_path)?;
 
