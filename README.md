@@ -109,7 +109,11 @@ provide a path to your homebrew binaries (somewhere like `/opt/homebrew/bin`) in
 
 ## MacOS Output Configuration
 
+Not yet implemented
+
 ## IOS Output Configuration
+
+Not yet implemented
 
 ## Android Output Configuration
 
