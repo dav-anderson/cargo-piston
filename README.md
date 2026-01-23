@@ -117,18 +117,26 @@ provide a path to your homebrew binaries (somewhere like `/opt/homebrew/bin`) in
 
 Install Java and provide the path to the installation in your .env file
 
-Example install command (Macos)
+One option is to download the Java installer
+
+`https://www.oracle.com/in/java/technologies/downloads/#jdk25-mac`
+
+
+Example terminal install command (Macos)
 
 `brew install openjdk@17`
 
-Example .env entries (Macos)
-
 set the path to the binary in your .env
 
-aarch64
+Example .env entries (Macos)
+
+macos arm64 installer
+`/usr/bin/java`
+
+aarch64 (homebrew)
 `java_path=/opt/homebrew/openjdk@17`
 
-silicone chipset
+silicone chipset (homebrew)
 `java_path=/usr/local/opt/openjdk@17`
 
 Example install command (Linux)
@@ -173,23 +181,25 @@ Accept android SDK licenses
 
 `yes | JAVA_HOME=<PATH/TO/JAVA> sudo <$HOME>/Android/sdk/cmdline-tools/bin/sdkmanager --licenses --sdk_root=<$HOME>/Android/sdk || echo "Failed to accept the license"`
 
+Note: if you installed java manually instead of using the installer you may need to set the JAVA_HOME var in your PATH or pass in the environment variabnle as shown above and below.
+
 ### Install Android SDK & NDK
 
 Install platform-tools
 
-`JAVA_HOME="</path/to/java>" sudo </path/to/sdkmanager> "platform-tools" --sdk_root=</path/to/sdk> 2> stderr.log || (echo "Failed: $(cat stderr.log)" && exit 1)`
+`JAVA_HOME="</path/to/java>" sudo </path/to/sdkmanager> "platform-tools" --sdk_root=</path/to/sdk>`
 
 Install build-tools;34.0.0
 
-`JAVA_HOME="</path/to/java>" sudo </path/to/sdkmanager> "build-tools;34.0.0" --sdk_root=</path/to/sdk> 2> stderr.log || (echo "Failed: $(cat stderr.log)" && exit 1)`
+`JAVA_HOME="</path/to/java>" sudo </path/to/sdkmanager> "build-tools;34.0.0" --sdk_root=</path/to/sdk>`
 
 Install platforms;android-34
 
-`JAVA_HOME="</path/to/java>" sudo </path/to/sdkmanager> "platforms;android-34" --sdk_root=</path/to/sdk> 2> stderr.log || (echo "Failed: $(cat stderr.log)" && exit 1)`
+`JAVA_HOME="</path/to/java>" sudo </path/to/sdkmanager> "platforms;android-34" --sdk_root=</path/to/sdk>`
 
 Install ndk;25.1.8937393
 
-`JAVA_HOME="</path/to/java>" sudo </path/to/sdkmanager> "ndk;25.1.8937393" --sdk_root=</path/to/sdk> 2> stderr.log || (echo "Failed: $(cat stderr.log)" && exit 1)`
+`JAVA_HOME="</path/to/java>" sudo </path/to/sdkmanager> "ndk;25.1.8937393" --sdk_root=</path/to/sdk>`
 
 
 Set the paths to the binaries in your .env (replace $HOME with your absolute path)

@@ -190,15 +190,15 @@ impl AndroidManifest {
     }
 
     pub fn write_to(&self, dir: &Path) -> Result<(), PistonError> {
-        let file_path = dir.join("AndroidManifest.xml");
-        println!("writing {:?}...", file_path);
+        // let file_path = dir.join("AndroidManifest.xml");
+        println!("writing {:?}...", dir);
         //empty dir if exists
-        Helper::empty_directory(&dir)?;
-        create_dir_all(&dir).map_err(|e| PistonError::CreateDirAllError {
-        path: dir.to_path_buf(),
-        source: e,
-        })?;
-        let file = File::create(&file_path)
+        // Helper::empty_directory(&dir)?;
+        // create_dir_all(&dir).map_err(|e| PistonError::CreateDirAllError {
+        // path: dir.to_path_buf(),
+        // source: e,
+        // })?;
+        let file = File::create(&dir)
             .map_err(|e| PistonError::CreateManifestError(format!("Failed to create manifest file: {}", e)))?;
         
         let mut writer = BufWriter::new(file);
@@ -281,7 +281,7 @@ impl AndroidBuilder {
         let manifest = AndroidManifest::build(&metadata, &app_name)?;
         let build_path: PathBuf = cwd.join("target").join(if release {"release"} else {"debug"}).join("androidbuilder").join("android");
         //manifest path is cwd/target/<release>/androidbuilder/android/manifest
-        let manifest_path: PathBuf = build_path.join("manifest");
+        let manifest_path: PathBuf = build_path.join("AndroidManifest.xml");
         let resources_path: PathBuf = build_path.join("app").join("src").join("main").join("res");
         println!("build path: {:?}", build_path);
         //write AndroidManifest.xml to file
@@ -513,14 +513,14 @@ impl AndroidBuilder {
     fn link_manifest_and_resources(&self, compiled_res: &Path, base_dir: &Path) -> Result<(), PistonError> {
         let aapt2_path: PathBuf = PathBuf::from(self.sdk_path.clone()).join(format!("build-tools/{}/aapt2", self.build_tools_version));
         let android_jar: PathBuf = PathBuf::from(self.sdk_path.clone()).join(format!("platforms/android-{}/android.jar", self.manifest.target_sdk_version));
-        let manifest_path: PathBuf = self.manifest_path.join("AndroidManifest.xml");
+        
         let res_arg = if compiled_res.exists() { format!(" {}", compiled_res.display()) } else { String::new() };
         println!("linking manifest & resources");
         let link_command = format!(
             "{} link --proto-format --output-to-dir -o {} --manifest {} -I {} {}",
             aapt2_path.display(),
             base_dir.display(),
-            manifest_path.display(),
+            self.manifest_path.display(),
             android_jar.display(),
             res_arg
         );
@@ -538,24 +538,24 @@ impl AndroidBuilder {
             .map_err(|e| PistonError::ProtoLinkError(format!("aapt2 link failed: {}", e)))?;
 
         //TODO THIS IS BUSTED AND PROBABLY UNNCESSARY FIX HIGHER UP LOGIC FLOW Ensure proto manifest is in a manifest/ subdir
-        // let proto_manifest_root = base_dir.join("AndroidManifest.xml");
-        // if proto_manifest_root.exists() {
-        //     let manifest_dir = base_dir.join("manifest");
-        //     //empty the dir if it exists
-        //     Helper::empty_directory(&manifest_dir)?;
-        //     create_dir_all(&manifest_dir)
-        //         .map_err(|e| PistonError::CreateDirAllError {
-        //             path: manifest_dir.clone(),
-        //             source: e,
-        //         })?;
-        //     rename(&proto_manifest_root, manifest_dir.join("AndroidManifest.xml"))
-        //         .map_err(|e| PistonError::RenameFileError {
-        //             path: proto_manifest_root.clone(),
-        //             source: e,
-        //         })?;
-        // } else {
-        //     return Err(PistonError::ProtoLinkError("Proto AndroidManifest.xml not generated and linked by AAPT2".to_string()))
-        // }
+        let proto_manifest_root = base_dir.join("AndroidManifest.xml");
+        if proto_manifest_root.exists() {
+            let manifest_dir = base_dir.join("manifest");
+            //empty the dir if it exists
+            Helper::empty_directory(&manifest_dir)?;
+            create_dir_all(&manifest_dir)
+                .map_err(|e| PistonError::CreateDirAllError {
+                    path: manifest_dir.clone(),
+                    source: e,
+                })?;
+            rename(&proto_manifest_root, manifest_dir.join("AndroidManifest.xml"))
+                .map_err(|e| PistonError::RenameFileError {
+                    path: proto_manifest_root.clone(),
+                    source: e,
+                })?;
+        } else {
+            return Err(PistonError::ProtoLinkError("Proto AndroidManifest.xml not generated and linked by AAPT2".to_string()))
+        }
         
         println!("done linking manifest and resources");
 
@@ -588,8 +588,9 @@ impl AndroidBuilder {
     }
 
     fn zip_base(&self, base_dir: &Path, base_zip: &Path) -> Result<(), PistonError> {
-        let zip_path = base_dir.join("base.zip");
-        if zip_path.exists(){
+        let zip_path = self.build_path.join("base.zip");
+        if zip_path.exists() {
+            println!("removing stale zip");
             remove_file(&zip_path).map_err(|e| PistonError::RemoveFileError {
                 path: zip_path.clone().to_path_buf(),
                 source: e,
@@ -616,6 +617,13 @@ impl AndroidBuilder {
 
     fn build_bundle(&self, base_zip: &Path, aab_path: &Path) -> Result<(), PistonError> {
         println!("building .aab bundle with bundletool");
+        if aab_path.exists() {
+            remove_file(&aab_path).map_err(|e| PistonError::RemoveFileError {
+                path: aab_path.to_path_buf(),
+                source: e,
+            })?;
+            println!("removed .aab at: {:?}", aab_path);
+        }
         let bundle_command = format!(
             "java -jar {} build-bundle --modules={} --output={}",
             self.bundletool_path,
