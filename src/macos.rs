@@ -58,6 +58,12 @@ fn new(release: bool, target: String, cwd: PathBuf, env_vars: HashMap<String, St
 
      fn pre_build(&mut self) -> Result <(), PistonError>{
         println!("Pre build for macos");
+        //TODO check for xcode installation
+        //Check for x code select pathing
+        //check for xcode command line tools
+        //check xcode for updates
+   
+
         println!("building the dynamic app bundle");
         let cwd: PathBuf = self.cwd.clone();
         println!("working dir: {:?}", cwd);

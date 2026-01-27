@@ -26,18 +26,17 @@ aarch64-linux-android
 
 x86_64-linux-android
 
-### IOS
-
-aarch64-apple-ios
-
-x86_64-apple-ios
-
 ### MacOS
 
 aarch64-apple-darwin
 
 x86_64-apple-darwin
 
+### IOS
+
+aarch64-apple-ios
+
+x86_64-apple-ios
 
 ### Linux
 
@@ -51,10 +50,6 @@ x86_64-unknown-linux-gnu
 
 ### Path to cargo binary (if not in your local PATH) example
 `cargo_path=/Users/<username>/.cargo/bin/cargo`
-
-### If Building for Linux on MacOS
-`zigbuild_path=/Users/<username>/.cargo/bin/cargo-zigbuild`
-`homebrew_path=/opt/homebrew/bin`
 
 ## General Cargo.toml configuration 
 ### App Icon example
@@ -98,26 +93,68 @@ OriginalFilename = "<appname>.exe"
 
 ## Linux Output Configuration
 
-### Install zigbuild via (required on MACOS ONLY)
+### Cofingure paths in .env (MACOS ONLY)
+`zigbuild_path=/Users/<username>/.cargo/bin/cargo-zigbuild`
+`homebrew_path=/opt/homebrew/bin`
+
+### Install zigbuild via (MACOS ONLY)
 `cargo install cargo-zigbuild`
 Provide a path to your cargo dependency binaries (somewhere like `~/.cargo/bin`)
 `zigbuild_path=/Users/<username>/.cargo/bin/cargo-zigbuild`
 
-### Install Zig via homebrew (required on MACOS ONLY)
+### Install Zig via homebrew (MACOS ONLY)
 provide a path to your homebrew binaries (somewhere like `/opt/homebrew/bin`) in your .env
 `homebrew_path=/opt/homebrew/bin`
 
-## MacOS Output Configuration
+## MacOS & IOS Output Configuration (MACOS ONLY)
 
-Not yet implemented
+### install the X code app via the apple app store
 
-## IOS Output Configuration
+Navigate to the following URL in safari and download the x code app
+
+`https://apps.apple.com/us/app/xcode/id497799835`
+
+After you've installed the X code app, point xcode-select to the proper path, you may need to replace the path to your Xcode.app installation if the path is different
+
+`sudo xcode-select -s /Applications/Xcode.app/Contents/Developer`
+
+### install X code command line tools
+
+`xcode-select --install`
+
+### Accept x code licenses
+
+`sudo xcodebuild -license accept`
+
+### Create Apple Dev API key
+
+Create an Apple Developer API key through your apple developer portal and add your API key to the .env
+
+When obtained from apple developer portal, the key file will look like this
+
+`AuthKey_1AB23CDEFG.p8`
+
+`apple_api=path/to/authkey`
+
+## IOS Output Configuration (MACOS ONLY & after completing the MacOS setup above)
+
+<!-- Install the Xcode IOS SDK
+
+`xcodebuild -downloadPlatform iOS`
+
+Accept the Xcode license
+
+`sudo xcodebuild -license accept`
+
+Install libimobile device via homebrew
+
+`brew install libimobiledevice` -->
 
 Not yet implemented
 
 ## Android Output Configuration
 
- ### Install Java
+### Install Java
 
 Install Java and provide the path to the installation in your .env file
 
