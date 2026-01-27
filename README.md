@@ -280,6 +280,8 @@ Add the following dependencies
 
 ```
 [dependencies]
+
+[target.'cfg(target_os = "android")'.dependencies]
 android-activity = { version = "0.5", features = ["native-activity"] }
 log = "0.4"
 ```
@@ -301,13 +303,15 @@ target_sdk_version=31
 
 ### Create a Lib.rs in ~/src
 
-Unlike other outputs, android apps require first building a cdylib, we've already designated those settings in the cargo.toml, however, your project must also contain a `~/src/lib.rs` file with a main activity.
+Unlike other outputs, android apps require first building a cdylib, we've already designated those settings in the cargo.toml, however, your project must also contain a `~/src/lib.rs` file with a main activity. It is important that if you are maintaing a cross compiled code base for multiple output types, that you wrap android specific logic in `#[cfg(target_os = "android")]` flags as shown below. 
 
 Example `lib.rs`
 
 ```
+#[cfg(target_os = "android")]
 use android_activity::AndroidApp;
 
+#[cfg(target_os = "android")]
 #[unsafe(no_mangle)]
 pub extern "C" fn android_main(app: AndroidApp) {
     loop {
