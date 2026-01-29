@@ -1,6 +1,9 @@
-use std::path::PathBuf;
+use std::path::{ PathBuf, Path };
 use std::collections::HashMap;
+use std::process::{ Command, Stdio };
+use std::io::{ Write };
 use cargo_metadata::{ Metadata, MetadataCommand };
+use std::fs::{ copy,File, create_dir_all, remove_file };
 use crate::Helper;
 use crate::PistonError;
 
@@ -71,14 +74,150 @@ impl IOSBuilder {
     }
 
     fn pre_build(&mut self) -> Result <(), PistonError>{
+        println!("Pre build for ios");
+        //TODO check for xcode installation
+        //Check for x code select pathing
+        //check for xcode command line tools
+        //check xcode for updates
+        //check for xcode ios sdk
+   
+
+        println!("building the dynamic app bundle");
+        let cwd: PathBuf = self.cwd.clone();
+        println!("working dir: {:?}", cwd);
+        let capitalized = Helper::capitalize_first(&self.app_name.clone());
+        println!("capitalized app name: {}", capitalized);
+        let release = if self.release {"release"} else {"debug"};
+        let partial_path: PathBuf = if self.release {
+            format!("target/{}/ios/{}.app/Contents",release, capitalized).into()
+        }else {
+            format!("target/{}/ios/{}.app/Contents",release, capitalized).into()
+        };
+        println!("partial path: {:?}", partial_path);
+        //establish ~/target/<release>/ios/Appname.app/Contents/Resources
+        let res_path: PathBuf = partial_path.join("Resources");
+        println!("res path: {:?}", res_path);
+        let ios_path = partial_path.join("ios");
+        self.output_path = Some(cwd.join(&ios_path));
+        println!("full path to ios dir: {:?}", self.output_path);
+        //empty the target directory if it exists
+        if self.output_path.as_ref().is_none() {
+            return Err(PistonError::Generic("output path not provided".to_string()))
+        }
+        //Empty the directory if it already exists
+        let path = res_path.as_path();
+        //empty the dir if it exists
+        Helper::empty_directory(path)?;
+        //create the target directories
+        create_dir_all(path).map_err(|e| PistonError::CreateDirAllError {
+        path: self.output_path.as_ref().unwrap().to_path_buf(),
+        source: e,
+        })?;
+        //create binary directories
+        create_dir_all(ios_path).map_err(|e| PistonError::CreateDirAllError {
+            path: self.output_path.as_ref().unwrap().to_path_buf(),
+            source: e,
+        })?;
+        //establish app icon target path ~/ios/release/Appname.app/Contents/Resources/ios_icon.icns
+        let icon_path: PathBuf = res_path.join("ios_icon.icns");
+        //establish Info.plist path ~/ios/release/Appname.app/Contents/Info.plist
+        let plist_path: PathBuf = partial_path.join("Info.plist");
+        println!("plist path: {:?}", plist_path);
+        //if a plist file exists, first remove it.
+        if plist_path.exists() {
+            remove_file(&plist_path).map_err(|e| PistonError::RemoveFileError {
+                path: plist_path.clone().to_path_buf(),
+                source: e,
+            })?;
+        }
+        //create a new Info.plist file
+        let mut plist_file = File::create(&plist_path).map_err(|e| PistonError::CreateFileError {
+                path: plist_path.clone().to_path_buf(),
+                source: e,
+            })?;
+        //populate the Info.plist file
+        let plist_content = format!(
+            r#"
+            <?xml version="1.0" encoding="UTF-8"?>
+            <!DOCTYPE plist PUBLIC "-//Apple Computer//DTD PLIST 1.0//EN"
+            "https://www.apple.com/DTDs/PropertyList-1.0.dtd">
+            <plist version="1.0">
+            <dict>
+                <key>CFBundleName</key>
+                <string>{}</string>
+                <key>CFBundleExecutable</key>
+                <string>{}</string>
+                <key>CFBundleIconFile</key>
+                <string>ios_icon</string>
+                <key>CFBundleVersion</key>
+                <string>{}</string>
+            </dict>
+            </plist>
+            "#,
+            &capitalized,
+            &self.app_name.clone(),
+            &self.app_version.clone(),
+        );
+        plist_file.write_all(plist_content.as_bytes()).map_err(|e| PistonError::WriteFileError(e.to_string()))?;
+        println!("Info.plist created");
+        //if icon path was provided...convert
+        if !self.icon_path.is_none(){
+            println!("icon path provided, configuring icon");
+            //convert the .png at icon_path to an .icns which resides in the app bundle
+            println!("icon output path: {}", icon_path.display());
+            let img_path_clone = self.icon_path.clone().unwrap();
+            println!("image path clone: {}", &img_path_clone);
+            let img_path = Path::new(&img_path_clone);
+            println!("image path as path: {}", &img_path.display());
+            //Configure icon
+            Command::new("sips")
+                .args(["-s", "format", "icns", &img_path_clone, "--out", &icon_path.display().to_string()])
+                .output()
+                .map_err(|e| PistonError::MacOSIconError {
+                    input_path: img_path.to_path_buf(),
+                    output_path: icon_path,
+                    source: e,
+                })?;
+            println!("done configuring ios icon");
+        }
+        println!("done configuring ios bundle");
         Ok(())
+        
     }
 
     fn build(&mut self) -> Result <(), PistonError>{
+        println!("build for ios");
+        //build the binary for the specified target
+        let cargo_args = format!("build --target {} {}", self.target, if self.release {"--release"} else {""});
+        let cargo_cmd = format!("{} {}", self.cargo_path, cargo_args);
+        Command::new("bash")
+            .arg("-c")
+            .arg(&cargo_cmd)
+            .current_dir(self.cwd.clone())
+            .stdout(Stdio::inherit())
+            .stderr(Stdio::inherit())
+            .output()
+            .map_err(|e| PistonError::BuildError(format!("Cargo build failed: {}", e)))?;
+
         Ok(())
     }
 
     fn post_build(&mut self) -> Result <(), PistonError>{
+        println!("post build for ios");
+        let binary_path = self.cwd.join("target").join(self.target.clone()).join(if self.release {"release"} else {"debug"}).join(self.app_name.clone());
+        let bundle_path = self.output_path.as_ref().unwrap().join(self.app_name.clone());
+        //bundle path should be cwd + target + <target output> + <--release flag or None for debug> + <appname>.exe
+        println!("binary path is: {}", &binary_path.display());
+        println!("bundle path is: {}", &bundle_path.display());
+        println!("copying binary to app bundle");
+        //move the target binary into the app bundle at the proper location
+        copy(&binary_path, &bundle_path).map_err(|e| PistonError::CopyFileError {
+            input_path: binary_path.clone().to_path_buf(),
+            output_path: bundle_path.clone().to_path_buf(),
+            source: e,
+        })?;
+        //output the proper location in the terminal for the user to see 
+        println!("iOS app bundle available at: {}", &bundle_path.display());
         Ok(())
     }
 
