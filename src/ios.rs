@@ -1,5 +1,7 @@
 use std::path::PathBuf;
 use std::collections::HashMap;
+use cargo_metadata::{ Metadata, MetadataCommand };
+use crate::Helper;
 use crate::PistonError;
 
 // use anyhow::{Context, Result};
@@ -21,36 +23,65 @@ use crate::PistonError;
 pub struct IOSBuilder {
     release: bool,
     target: String,
+    cwd: PathBuf,
+    output_path: Option<PathBuf>,
+    icon_path: Option<String>,
+    cargo_path: String,
+    app_name: String,
+    app_version: String,
 }
 
 impl IOSBuilder {
 
-    pub fn start(_release: bool, target: String, _cwd: PathBuf, _env_vars: HashMap<String, String>) -> Result<(), PistonError> {
-        println!("building for IOS");
+    pub fn start(release: bool, target: String, cwd: PathBuf, env_vars: HashMap<String, String>) -> Result<(), PistonError> {
+        println!("building for iOS");
+        //check operating system (requires MacOS)
         if std::env::consts::OS != "macos"{
             return Err(PistonError::UnsupportedOSError{os: std::env::consts::OS.to_string(), target: target})
         }
+        let mut op = IOSBuilder::new(release, target, cwd, env_vars)?;
+        //TODO check for signing certificate & sign?
+        //>>prebuild
+        op.pre_build()?;
+
+        //>>build
+        op.build()?;
+
+        //>>Postbuild
+        op.post_build()?;
+
         Ok(())
     }
 
-    fn new() -> Self {
-    //>>prebuild
-    //-check for signing certificate
-    //setup the app bundle
+    fn new(release: bool, target: String, cwd: PathBuf, env_vars: HashMap<String, String>) -> Result<Self, PistonError> {
+        println!("creating IOSBuilder: release: {:?}, target: {:?}, cwd: {:?}", release, target.to_string(), cwd);
+        //parse env vars
+        let cargo_path = env_vars.get("cargo_path").cloned().unwrap_or("cargo".to_string());
+        println!("Cargo path determined: {}", &cargo_path);
+        //parse cargo.toml
+        let metadata: Metadata = MetadataCommand::new()
+            .current_dir(cwd.clone())
+            .exec()
+            .map_err(|e| PistonError::CargoParseError(e.to_string()))?;
 
-    //>>build
-
-    //>>Postbuild
-    //move binary to the app bundle and sign
-
-     //SEE HERE FOR ENV IMPLEMENTATIONS
-    //load the .env if it exists
-    //  dotenv::dotenv().ok();
-    //  //print the test value from the .env
-    //  let test_value = env::var("test").unwrap_or_else(|_| "not set".to_string());
-    //  println!("Printing .env test key: {}", test_value);
-    IOSBuilder{release: false, target: "target".to_string()}
+        let icon_path = Helper::get_icon_path(&metadata);
+        let app_name = Helper::get_app_name(&metadata)?;
+        let app_version = Helper::get_app_version(&metadata)?;
+        Ok(IOSBuilder{release: release, target: target.to_string(), cwd: cwd, output_path: None, icon_path: icon_path, cargo_path: cargo_path, app_name: app_name, app_version: app_version})
     }
+
+    fn pre_build(&mut self) -> Result <(), PistonError>{
+        Ok(())
+    }
+
+    fn build(&mut self) -> Result <(), PistonError>{
+        Ok(())
+    }
+
+    fn post_build(&mut self) -> Result <(), PistonError>{
+        Ok(())
+    }
+
 }
 
 struct IOSRunner{

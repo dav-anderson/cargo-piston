@@ -51,7 +51,16 @@ x86_64-unknown-linux-gnu
 ### Path to cargo binary (if not in your local PATH) example
 `cargo_path=/Users/<username>/.cargo/bin/cargo`
 
+### Path to keystore (required for IOS or building/signing an output for release)
+`keystore_path=/path/to/keystore`
+
 ## General Cargo.toml configuration 
+
+```
+name = "appname"
+version = "0.0.1"
+```
+
 ### App Icon example
 
 ```
