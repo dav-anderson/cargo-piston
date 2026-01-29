@@ -88,6 +88,7 @@ impl IOSBuilder {
         let capitalized = Helper::capitalize_first(&self.app_name.clone());
         println!("capitalized app name: {}", capitalized);
         let release = if self.release {"release"} else {"debug"};
+        //TODO fix the path to match ios convention
         let partial_path: PathBuf = if self.release {
             format!("target/{}/ios/{}.app/Contents",release, capitalized).into()
         }else {
@@ -119,6 +120,7 @@ impl IOSBuilder {
             source: e,
         })?;
         //establish app icon target path ~/ios/release/Appname.app/Contents/Resources/ios_icon.icns
+        //TODO fix the icon paths to use the two different png variants
         let icon_path: PathBuf = res_path.join("ios_icon.icns");
         //establish Info.plist path ~/ios/release/Appname.app/Contents/Info.plist
         let plist_path: PathBuf = partial_path.join("Info.plist");
@@ -135,7 +137,10 @@ impl IOSBuilder {
                 path: plist_path.clone().to_path_buf(),
                 source: e,
             })?;
+        //TODO dynamic bundle id
+        let bundle_id = "placeholder.com";
         //populate the Info.plist file
+        //TODO make min os version dynamic
         let plist_content = format!(
             r#"
             <?xml version="1.0" encoding="UTF-8"?>
@@ -145,17 +150,42 @@ impl IOSBuilder {
             <dict>
                 <key>CFBundleName</key>
                 <string>{}</string>
+                <key>CFBundleIdentifier</key>
+                <string>{}</string>
+                <key>CFBundleInfoDictionaryVersion</key>
+                <string>6.0</string>
                 <key>CFBundleExecutable</key>
                 <string>{}</string>
-                <key>CFBundleIconFile</key>
-                <string>ios_icon</string>
+                <key>CFBundlePackageType</key>
+                <string>AAPL</string>
+                <key>CFBundleShortVersionString</key>
+                <string>{}</string>
                 <key>CFBundleVersion</key>
                 <string>{}</string>
+                <key>LSRequiresIphoneOS</key>
+                <true/>
+                <key>MinimumOSVersion</key>
+                <string>17.5</string>
+                <key>CFBundleIcons</key>
+                <dict>
+                    <key>CFBundlePrimaryIcon</key>
+                    <dict>
+                        <key>CFBundleIconFiles</key>
+                        <array>
+                            <string>Resources/ios_icon120</string>
+                            <string>Resources/ios_icon180</string>
+                        </array>
+                        <key>UIPrerenderedIcon</key>
+                        <false/>
+                    </dict>
+                </dict>
             </dict>
             </plist>
             "#,
             &capitalized,
+            &bundle_id,
             &self.app_name.clone(),
+            &self.app_version.clone(),
             &self.app_version.clone(),
         );
         plist_file.write_all(plist_content.as_bytes()).map_err(|e| PistonError::WriteFileError(e.to_string()))?;
