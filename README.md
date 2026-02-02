@@ -147,7 +147,7 @@ When obtained from apple developer portal, the key file will look like this
 
 ## IOS Output Configuration (MACOS ONLY & after completing the MacOS setup above)
 
-<!-- Install the Xcode IOS SDK
+### Install the Xcode IOS SDK
 
 `xcodebuild -downloadPlatform iOS`
 
@@ -155,7 +155,7 @@ Accept the Xcode license
 
 `sudo xcodebuild -license accept`
 
-Install libimobile device via homebrew
+<!-- Install libimobile device via homebrew
 
 `brew install libimobiledevice` -->
 
