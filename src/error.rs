@@ -34,6 +34,12 @@ pub enum PistonError {
 
     UnsupportedTargetError(String),
 
+    XcodeInstallError(String),
+
+    XcodeSelectInstallError(String),
+
+    XcodeSelectPathingError(String),
+
     UnsupportedOSError{ os: String, target: String },
 
     CopyFileError{ input_path: PathBuf, output_path: PathBuf, source: IoError },
@@ -74,6 +80,9 @@ impl fmt::Display for PistonError {
             PistonError::AndroidConfigError(err) => write!(f, "Failed to read android config path from .env: {}", err),
             PistonError::ProtoLinkError(err) => write!(f, "Failed to proto link android build directory: {}", err),
             PistonError::UnsupportedTargetError(err) => write!(f, "User Specified Target is Unsupported: {}", err),
+            PistonError::XcodeInstallError(err) => write!(f, "Xcode Installation not Found: {}", err),
+            PistonError::XcodeSelectInstallError(err) => write!(f, "Xcode-select Installation verification failed: {}", err),
+            PistonError::XcodeSelectPathingError(err) => write!(f, "Xcode-select pathing does not match expected value: {}", err),
             PistonError::UnsupportedOSError{ os, target, .. } => write!(f, "Host system: {:?} does not support the target: {:?}", os, target),
             PistonError::CopyFileError { input_path, output_path, .. } => write!(f, "Failed to copy {:?} to {:?}", input_path, output_path),
             PistonError::MacOSIconError { input_path, output_path, .. } => write!(f, "Failed to format icon {:?} to {:?}", input_path, output_path),

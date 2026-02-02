@@ -123,13 +123,13 @@ Navigate to the following URL in safari and download the x code app
 
 `https://apps.apple.com/us/app/xcode/id497799835`
 
-After you've installed the X code app, point xcode-select to the proper path, you may need to replace the path to your Xcode.app installation if the path is different
-
-`sudo xcode-select -s /Applications/Xcode.app/Contents/Developer`
-
 ### install X code command line tools
 
 `xcode-select --install`
+
+After you've installed the X code app and command line tools, point xcode-select to the proper installation path
+
+`sudo xcode-select -s /Applications/Xcode.app/Contents/Developer`
 
 ### Accept x code licenses
 

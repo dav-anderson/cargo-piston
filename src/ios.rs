@@ -75,11 +75,32 @@ impl IOSBuilder {
 
     fn pre_build(&mut self) -> Result <(), PistonError>{
         println!("Pre build for ios");
-        //TODO check for xcode installation
-        //Check for x code select pathing
-        //check for xcode command line tools
-        //check xcode for updates
-        //check for xcode ios sdk
+        //check for xcode installation
+        let xcode_app = "/Applications/Xcode.app";
+        if !Path::new(xcode_app).exists() {
+            return Err(PistonError::XcodeInstallError(format!("Xcode installation not found at {} Please download xcode from the apple app store at https://apps.apple.com/us/app/xcode/id497799835", xcode_app)))?;
+        }
+        //Check for xcode-select command line tools installation and pathing
+        let xcode_select = Command::new("xcode-select")
+            .arg("-p")
+            .output()
+            .map_err(|e| PistonError::XcodeSelectInstallError("Failed to verify xcode tools installation".to_string()));
+
+        let expected_path = format!("{}/Contents/Developer", xcode_app);
+
+        let path = String::from_utf8(xcode_select.unwrap().stdout)
+            .unwrap()
+            .trim()
+            .to_string();
+        //verify that xcode-select path matches the expected query
+        if path == expected_path {
+            println!("xcode-select path match")
+        }else {
+            return Err(PistonError::XcodeSelectPathingError(format!("Xcode-select path query of {} does not match the expected value of {}...set the path with 'sudo xcode-select -s /Applications/Xcode.app/Contents/Developer'",path, expected_path)))
+        }
+        //TODO check xcode for updates?
+        //TODO check for xcode ios sdk?
+        //TODO check for libimobiledevice?
    
 
         println!("building the dynamic app bundle");
