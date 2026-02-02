@@ -98,8 +98,18 @@ impl IOSBuilder {
         }else {
             return Err(PistonError::XcodeSelectPathingError(format!("Xcode-select path query of {} does not match the expected value of {}...set the path with 'sudo xcode-select -s /Applications/Xcode.app/Contents/Developer'",path, expected_path)))
         }
+        //check for xcode ios sdk
+        let sdk_output = Command::new("xcodebuild")
+            .arg("-showsdks")
+            .output()
+            .map_err(|e| PistonError::XcodeBuildError("Failed to run xcodebuild -showsdks. Something is likely missing from your installation".to_string()));
+
+        let sdk_binding = sdk_output.unwrap();
+        let sdks = String::from_utf8_lossy(&sdk_binding.stdout);
+        if !sdks.contains("iOS") {
+            return Err(PistonError::IOSSdkMissingError("IOS sdk is missing. Try running 'xcodebuild -downloadPlatform iOS'".to_string()))
+        }
         //TODO check xcode for updates?
-        //TODO check for xcode ios sdk?
         //TODO check for libimobiledevice?
    
 

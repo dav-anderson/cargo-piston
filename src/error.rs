@@ -40,6 +40,10 @@ pub enum PistonError {
 
     XcodeSelectPathingError(String),
 
+    XcodeBuildError(String),
+
+    IOSSdkMissingError(String),
+
     UnsupportedOSError{ os: String, target: String },
 
     CopyFileError{ input_path: PathBuf, output_path: PathBuf, source: IoError },
@@ -83,6 +87,8 @@ impl fmt::Display for PistonError {
             PistonError::XcodeInstallError(err) => write!(f, "Xcode Installation not Found: {}", err),
             PistonError::XcodeSelectInstallError(err) => write!(f, "Xcode-select Installation verification failed: {}", err),
             PistonError::XcodeSelectPathingError(err) => write!(f, "Xcode-select pathing does not match expected value: {}", err),
+            PistonError::XcodeBuildError(err) => write!(f, "Xcodebuild missing iOS sdk: {}", err),
+            PistonError::IOSSdkMissingError(err) => write!(f, "IOS SDK missing from xcodebuild sdks: {}", err),
             PistonError::UnsupportedOSError{ os, target, .. } => write!(f, "Host system: {:?} does not support the target: {:?}", os, target),
             PistonError::CopyFileError { input_path, output_path, .. } => write!(f, "Failed to copy {:?} to {:?}", input_path, output_path),
             PistonError::MacOSIconError { input_path, output_path, .. } => write!(f, "Failed to format icon {:?} to {:?}", input_path, output_path),
