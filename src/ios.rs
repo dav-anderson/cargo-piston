@@ -74,6 +74,9 @@ impl IOSBuilder {
     }
 
     fn pre_build(&mut self) -> Result <(), PistonError>{
+        //TODO check xcode for updates?
+        //TODO check for libimobiledevice?
+
         println!("Pre build for ios");
         //check for xcode installation
         let xcode_app = "/Applications/Xcode.app";
@@ -109,28 +112,24 @@ impl IOSBuilder {
         if !sdks.contains("iOS") {
             return Err(PistonError::IOSSdkMissingError("IOS sdk is missing. Try running 'xcodebuild -downloadPlatform iOS'".to_string()))
         }
-        //TODO check xcode for updates?
-        //TODO check for libimobiledevice?
-   
-
+        //build the app bundle
         println!("building the dynamic app bundle");
         let cwd: PathBuf = self.cwd.clone();
         println!("working dir: {:?}", cwd);
         let capitalized = Helper::capitalize_first(&self.app_name.clone());
         println!("capitalized app name: {}", capitalized);
         let release = if self.release {"release"} else {"debug"};
-        //TODO fix the path to match ios convention
+        //fix the path to match ios convention
         let partial_path: PathBuf = if self.release {
-            format!("target/{}/ios/{}.app/Contents",release, capitalized).into()
+            format!("target/{}/ios/{}.app",release, capitalized).into()
         }else {
-            format!("target/{}/ios/{}.app/Contents",release, capitalized).into()
+            format!("target/{}/ios/{}.app",release, capitalized).into()
         };
         println!("partial path: {:?}", partial_path);
-        //establish ~/target/<release>/ios/Appname.app/Contents/Resources
+        //establish ~/target/<release>/ios/Appname.app/Resources
         let res_path: PathBuf = partial_path.join("Resources");
         println!("res path: {:?}", res_path);
-        let ios_path = partial_path.join("ios");
-        self.output_path = Some(cwd.join(&ios_path));
+        self.output_path = Some(cwd.join(&partial_path));
         println!("full path to ios dir: {:?}", self.output_path);
         //empty the target directory if it exists
         if self.output_path.as_ref().is_none() {
@@ -145,15 +144,7 @@ impl IOSBuilder {
         path: self.output_path.as_ref().unwrap().to_path_buf(),
         source: e,
         })?;
-        //create binary directories
-        create_dir_all(ios_path).map_err(|e| PistonError::CreateDirAllError {
-            path: self.output_path.as_ref().unwrap().to_path_buf(),
-            source: e,
-        })?;
-        //establish app icon target path ~/ios/release/Appname.app/Contents/Resources/ios_icon.icns
-        //TODO fix the icon paths to use the two different png variants
-        let icon_path: PathBuf = res_path.join("ios_icon.icns");
-        //establish Info.plist path ~/ios/release/Appname.app/Contents/Info.plist
+        //establish Info.plist path ~/ios/release/Appname.app/Info.plist
         let plist_path: PathBuf = partial_path.join("Info.plist");
         println!("plist path: {:?}", plist_path);
         //if a plist file exists, first remove it.
@@ -168,7 +159,7 @@ impl IOSBuilder {
                 path: plist_path.clone().to_path_buf(),
                 source: e,
             })?;
-        //TODO dynamic bundle id
+        //TODO dynamic bundle id and store in state
         let bundle_id = "placeholder.com";
         //populate the Info.plist file
         //TODO make min os version dynamic
@@ -224,22 +215,11 @@ impl IOSBuilder {
         //if icon path was provided...convert
         if !self.icon_path.is_none(){
             println!("icon path provided, configuring icon");
-            //convert the .png at icon_path to an .icns which resides in the app bundle
-            println!("icon output path: {}", icon_path.display());
-            let img_path_clone = self.icon_path.clone().unwrap();
-            println!("image path clone: {}", &img_path_clone);
-            let img_path = Path::new(&img_path_clone);
-            println!("image path as path: {}", &img_path.display());
-            //Configure icon
-            Command::new("sips")
-                .args(["-s", "format", "icns", &img_path_clone, "--out", &icon_path.display().to_string()])
-                .output()
-                .map_err(|e| PistonError::MacOSIconError {
-                    input_path: img_path.to_path_buf(),
-                    output_path: icon_path,
-                    source: e,
-                })?;
-            println!("done configuring ios icon");
+            //resize the icon to both appropriate ios dimensions
+            let icon_path120: PathBuf = res_path.join("ios_icon120.png");
+            Helper::resize_png(&self.icon_path.as_ref().unwrap(), &icon_path120.display().to_string(), 120, 120)?;
+            let icon_path180: PathBuf = res_path.join("ios_icon180.png");
+            Helper::resize_png(&self.icon_path.as_ref().unwrap(), &icon_path180.display().to_string(), 180, 180)?;
         }
         println!("done configuring ios bundle");
         Ok(())
