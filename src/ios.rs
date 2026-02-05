@@ -42,6 +42,7 @@ pub struct IOSBuilder {
     app_name: String,
     app_version: String,
     bundle_id: String,
+    min_os_version: f32,
 }
 
 impl IOSBuilder {
@@ -81,8 +82,9 @@ impl IOSBuilder {
         let app_name = Helper::get_app_name(&metadata)?;
         let app_version = Helper::get_app_version(&metadata)?;
         let bundle_id = Helper::get_bundle_id(&metadata, &app_name);
+        let min_os_version = Helper::get_min_os(&metadata);
 
-        Ok(IOSBuilder{release: release, target: target.to_string(), cwd: cwd, output_path: None, icon_path: icon_path, cargo_path: cargo_path, app_name: app_name, app_version: app_version, bundle_id: bundle_id})
+        Ok(IOSBuilder{release: release, target: target.to_string(), cwd: cwd, output_path: None, icon_path: icon_path, cargo_path: cargo_path, app_name: app_name, app_version: app_version, bundle_id: bundle_id, min_os_version: min_os_version})
     }
 
     fn pre_build(&mut self) -> Result <(), PistonError>{
@@ -197,7 +199,7 @@ impl IOSBuilder {
                 <key>LSRequiresIphoneOS</key>
                 <true/>
                 <key>MinimumOSVersion</key>
-                <string>17.5</string>
+                <string>{}</string>
                 <key>CFBundleIcons</key>
                 <dict>
                     <key>CFBundlePrimaryIcon</key>
@@ -219,6 +221,7 @@ impl IOSBuilder {
             &self.app_name.clone(),
             &self.app_version.clone(),
             &self.app_version.clone(),
+            &self.min_os_version.clone(),
         );
         plist_file.write_all(plist_content.as_bytes()).map_err(|e| PistonError::WriteFileError(e.to_string()))?;
         println!("Info.plist created");

@@ -329,14 +329,17 @@ pub extern "C" fn android_main(app: AndroidApp) {
 }
 ```
 
-### Set a bundle ID in the Cargo.toml (optional)
+### Configure IOS Cargo.toml parameters (optional)
 
 ```
 [package.metadata.ios]
 bundle_id=com.<organization>.<appname>
+min_os_version=17.5
 ```
 
-if you do not set a bundle_id in your carg.toml, the bundle ID will default to
+if you do not set a bundle_id in your cargo.toml, the bundle ID will default to
 
 `com.piston.<appname>`
+
+if you do not set a min_os_version in your cargo.toml, the mininimumOSVersion will default to 17.5
 

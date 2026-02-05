@@ -222,4 +222,16 @@ impl Helper {
             .unwrap_or(default)
     }
 
+    pub fn get_min_os(metadata: &Metadata) -> f32 {
+        let default: f32 = 17.5;
+
+        metadata
+            .root_package()
+            .and_then(|pkg| pkg.metadata.get("ios"))
+            .and_then(|ios| ios.get("min_os_version"))
+            .and_then(|min| min.as_f64())
+            .map(|val| val as f32)
+            .unwrap_or(default)
+    }
+
 }
