@@ -329,3 +329,14 @@ pub extern "C" fn android_main(app: AndroidApp) {
 }
 ```
 
+### Set a bundle ID in the Cargo.toml (optional)
+
+```
+[package.metadata.ios]
+bundle_id=com.<organization>.<appname>
+```
+
+if you do not set a bundle_id in your carg.toml, the bundle ID will default to
+
+`com.piston.<appname>`
+

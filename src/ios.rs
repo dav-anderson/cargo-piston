@@ -4,6 +4,8 @@ use std::process::{ Command, Stdio };
 use std::io::{ Write };
 use cargo_metadata::{ Metadata, MetadataCommand };
 use std::fs::{ copy,File, create_dir_all, remove_file };
+use serde::Deserialize;
+use serde_json::Value;
 use crate::Helper;
 use crate::PistonError;
 
@@ -23,6 +25,13 @@ use crate::PistonError;
 // use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 
+#[derive(Deserialize, Default)]
+struct IOSMetadata {
+    #[serde(default)]
+    bundle_id: Option<String>,
+}
+
+
 pub struct IOSBuilder {
     release: bool,
     target: String,
@@ -32,6 +41,7 @@ pub struct IOSBuilder {
     cargo_path: String,
     app_name: String,
     app_version: String,
+    bundle_id: String,
 }
 
 impl IOSBuilder {
@@ -70,7 +80,9 @@ impl IOSBuilder {
         let icon_path = Helper::get_icon_path(&metadata);
         let app_name = Helper::get_app_name(&metadata)?;
         let app_version = Helper::get_app_version(&metadata)?;
-        Ok(IOSBuilder{release: release, target: target.to_string(), cwd: cwd, output_path: None, icon_path: icon_path, cargo_path: cargo_path, app_name: app_name, app_version: app_version})
+        let bundle_id = Helper::get_bundle_id(&metadata, &app_name);
+
+        Ok(IOSBuilder{release: release, target: target.to_string(), cwd: cwd, output_path: None, icon_path: icon_path, cargo_path: cargo_path, app_name: app_name, app_version: app_version, bundle_id: bundle_id})
     }
 
     fn pre_build(&mut self) -> Result <(), PistonError>{
@@ -159,8 +171,6 @@ impl IOSBuilder {
                 path: plist_path.clone().to_path_buf(),
                 source: e,
             })?;
-        //TODO dynamic bundle id and store in state
-        let bundle_id = "placeholder.com";
         //populate the Info.plist file
         //TODO make min os version dynamic
         let plist_content = format!(
@@ -205,7 +215,7 @@ impl IOSBuilder {
             </plist>
             "#,
             &capitalized,
-            &bundle_id,
+            &self.bundle_id.clone(),
             &self.app_name.clone(),
             &self.app_version.clone(),
             &self.app_version.clone(),

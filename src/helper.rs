@@ -209,4 +209,17 @@ impl Helper {
             .map(|pkg| pkg.version.to_string())
             .ok_or(PistonError::CargoParseError("app_version not found in [package]".to_string()))
     }
+
+    pub fn get_bundle_id(metadata: &Metadata, app_name: &str) -> String {
+        let default = format!("com.piston.{}", app_name);
+
+        metadata
+            .root_package()
+            .and_then(|pkg| pkg.metadata.get("ios"))
+            .and_then(|ios| ios.get("bundle_id"))
+            .and_then(|id| id.as_str())
+            .map(|s| s.to_string())
+            .unwrap_or(default)
+    }
+
 }
