@@ -135,7 +135,7 @@ After you've installed the X code app and command line tools, point xcode-select
 
 `sudo xcodebuild -license accept`
 
-### Create Apple Dev API key
+<!-- ### Create Apple Dev API key
 
 Create an Apple Developer API key through your apple developer portal and add your API key to the .env
 
@@ -143,7 +143,7 @@ When obtained from apple developer portal, the key file will look like this
 
 `AuthKey_1AB23CDEFG.p8`
 
-`apple_api=path/to/authkey`
+`apple_api=path/to/authkey` -->
 
 ## IOS Output Configuration (MACOS ONLY & after completing the MacOS setup above)
 
@@ -159,7 +159,21 @@ Accept the Xcode license
 
 `brew install libimobiledevice` -->
 
-Not yet implemented
+### Configure IOS Cargo.toml parameters (optional)
+
+```
+[package.metadata.ios]
+bundle_id=com.<organization>.<appname>
+min_os_version=17.5
+```
+
+if you do not set a bundle_id in your cargo.toml, the bundle ID will default to
+
+`com.piston.<appname>`
+
+if you do not set a min_os_version in your cargo.toml, the mininimumOSVersion will default to 17.5
+
+
 
 ## Android Output Configuration
 
@@ -328,18 +342,3 @@ pub extern "C" fn android_main(app: AndroidApp) {
     }
 }
 ```
-
-### Configure IOS Cargo.toml parameters (optional)
-
-```
-[package.metadata.ios]
-bundle_id=com.<organization>.<appname>
-min_os_version=17.5
-```
-
-if you do not set a bundle_id in your cargo.toml, the bundle ID will default to
-
-`com.piston.<appname>`
-
-if you do not set a min_os_version in your cargo.toml, the mininimumOSVersion will default to 17.5
-

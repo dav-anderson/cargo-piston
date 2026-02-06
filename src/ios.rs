@@ -174,7 +174,6 @@ impl IOSBuilder {
                 source: e,
             })?;
         //populate the Info.plist file
-        //TODO make min os version dynamic
         let plist_content = format!(
             r#"
             <?xml version="1.0" encoding="UTF-8"?>
