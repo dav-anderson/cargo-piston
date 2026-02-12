@@ -16,6 +16,7 @@ pub struct MacOSBuilder {
     cargo_path: String,
     app_name: String,
     app_version: String,
+    key_path: Option<String>,
 }
 
 impl MacOSBuilder {
@@ -43,6 +44,8 @@ fn new(release: bool, target: String, cwd: PathBuf, env_vars: HashMap<String, St
         println!("creating MacOSBuilder: release: {:?}, target: {:?}, cwd: {:?}", release, target.to_string(), cwd);
         //parse env vars
         let cargo_path = env_vars.get("cargo_path").cloned().unwrap_or("cargo".to_string());
+        let key_string = if release {"macos_release_keypath"} else {"macos_debug_keypath"};
+        let key_path = env_vars.get(key_string).cloned();
         println!("Cargo path determined: {}", &cargo_path);
         //parse cargo.toml
         let metadata: Metadata = MetadataCommand::new()
@@ -53,7 +56,7 @@ fn new(release: bool, target: String, cwd: PathBuf, env_vars: HashMap<String, St
         let icon_path = Helper::get_icon_path(&metadata);
         let app_name = Helper::get_app_name(&metadata)?;
         let app_version = Helper::get_app_version(&metadata)?;
-        Ok(MacOSBuilder{release: release, target: target.to_string(), cwd: cwd, output_path: None, icon_path: icon_path, cargo_path: cargo_path, app_name: app_name, app_version: app_version})
+        Ok(MacOSBuilder{release: release, target: target.to_string(), cwd: cwd, output_path: None, icon_path: icon_path, cargo_path: cargo_path, app_name: app_name, app_version: app_version, key_path: key_path})
     }
 
      fn pre_build(&mut self) -> Result <(), PistonError>{

@@ -43,6 +43,7 @@ pub struct IOSBuilder {
     app_version: String,
     bundle_id: String,
     min_os_version: f32,
+    key_path: Option<String>
 }
 
 impl IOSBuilder {
@@ -71,6 +72,8 @@ impl IOSBuilder {
         println!("creating IOSBuilder: release: {:?}, target: {:?}, cwd: {:?}", release, target.to_string(), cwd);
         //parse env vars
         let cargo_path = env_vars.get("cargo_path").cloned().unwrap_or("cargo".to_string());
+        let key_string = if release {"ios_release_keypath"} else {"ios_debug_keypath"};
+        let key_path = env_vars.get(key_string).cloned();
         println!("Cargo path determined: {}", &cargo_path);
         //parse cargo.toml
         let metadata: Metadata = MetadataCommand::new()
@@ -84,7 +87,7 @@ impl IOSBuilder {
         let bundle_id = Helper::get_bundle_id(&metadata, &app_name);
         let min_os_version = Helper::get_min_os(&metadata);
 
-        Ok(IOSBuilder{release: release, target: target.to_string(), cwd: cwd, output_path: None, icon_path: icon_path, cargo_path: cargo_path, app_name: app_name, app_version: app_version, bundle_id: bundle_id, min_os_version: min_os_version})
+        Ok(IOSBuilder{release: release, target: target.to_string(), cwd: cwd, output_path: None, icon_path: icon_path, cargo_path: cargo_path, app_name: app_name, app_version: app_version, bundle_id: bundle_id, min_os_version: min_os_version, key_path: key_path})
     }
 
     fn pre_build(&mut self) -> Result <(), PistonError>{

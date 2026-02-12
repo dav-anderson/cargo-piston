@@ -17,6 +17,7 @@ pub struct WindowsBuilder {
     embed_resources_ok: bool,
     cargo_path: String,
     app_name: String,
+    key_path: Option<String>,
 }
 
 impl WindowsBuilder {
@@ -40,6 +41,8 @@ impl WindowsBuilder {
         println!("creating windowsBuilder: release: {:?}, target: {:?}, cwd: {:?}", release, target.to_string(), cwd);
         //Read cargo_path with fallback
         let cargo_path = env_vars.get("cargo_path").cloned().unwrap_or("cargo".to_string());
+        let key_string = if release {"windows_release_keypath"} else {"windows_debug_keypath"};
+        let key_path = env_vars.get(key_string).cloned();
         println!("Cargo path determined: {}", &cargo_path);
         //parse cargo.toml
         let metadata: Metadata = MetadataCommand::new()
@@ -56,7 +59,7 @@ impl WindowsBuilder {
         println!("Embed Resources Installed: {}", embed_resources_ok);
         let icon_path = Helper::get_icon_path(&metadata);
         let app_name = Helper::get_app_name(&metadata)?;
-        Ok(WindowsBuilder{release: release, target: target.to_string(), cwd: cwd, output_path: None, icon_path: icon_path, embed_resources_ok: embed_resources_ok, cargo_path: cargo_path, app_name: app_name})
+        Ok(WindowsBuilder{release: release, target: target.to_string(), cwd: cwd, output_path: None, icon_path: icon_path, embed_resources_ok: embed_resources_ok, cargo_path: cargo_path, app_name: app_name, key_path: key_path})
     }
 
     fn pre_build(&mut self) -> Result <(), PistonError>{

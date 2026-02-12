@@ -236,6 +236,7 @@ pub struct AndroidBuilder {
     resources: PathBuf,
     build_tools_version: String,
     bundletool_path: String,
+    key_path: Option<String>,
     // assets: Option<PathBuf>,
 }
 
@@ -266,6 +267,8 @@ impl AndroidBuilder {
         let java_path: &String = Helper::get_or_err(&env_vars, "java_path")?;
         let bundletool_path: &String = Helper::get_or_err(&env_vars, "bundletool_path")?;
         let build_tools_version: String = Helper::get_build_tools_version(&sdk_path)?;
+        let key_string = if release {"android_release_keypath"} else {"android_debug_keypath"};
+        let key_path = env_vars.get(key_string).cloned();
         println!("Cargo path determined: {}", &cargo_path);
         //parse cargo.toml
         let metadata: Metadata = MetadataCommand::new()
@@ -304,7 +307,8 @@ impl AndroidBuilder {
             java_path: java_path.to_string(),
             resources: resources_path,
             build_tools_version: build_tools_version,
-            bundletool_path: bundletool_path.to_string()
+            bundletool_path: bundletool_path.to_string(),
+            key_path: key_path,
         })
     }
 
