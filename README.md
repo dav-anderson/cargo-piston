@@ -51,8 +51,21 @@ x86_64-unknown-linux-gnu
 ### Path to cargo binary (if not in your local PATH) example
 `cargo_path=/Users/<username>/.cargo/bin/cargo`
 
-### Path to keystore (required for IOS or building/signing an output for release)
-`keystore_path=/path/to/keystore`
+### Path to signing key (Optional)
+
+Note: if you do not designate a signing key for the appropriate build output, automated signing will be skipping. A signing key is only required for hot deployment to an ios device via usb tether. In all other cases signing is optional, however signing is usually required for distribution. For example, a release build must be signed prior to uploading to the apple app store.
+
+Examples:
+`ios_release_keypath=/path/to/release/key`
+
+`android_debug_keypath=/path/to/debug/key`
+
+`windows_release_keypath=/path/to/release/key`
+
+`linux_debug_keypath=/path/to/debug/key`
+
+`macos_release_keypath=/path/to/release/key`
+
 
 ## General Cargo.toml configuration 
 
