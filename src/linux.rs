@@ -24,7 +24,6 @@ impl LinuxBuilder {
     pub fn start(release: bool, target: String, cwd: PathBuf, env_vars: HashMap<String, String>) -> Result<(), PistonError> {
     println!("building for linux");
     let mut op = LinuxBuilder::new(release, target, cwd, env_vars)?;
-    //TODO check for signing certificate & sign?
     //TODO embed icon image?
     //>>prebuild
     op.pre_build()?;
@@ -142,6 +141,8 @@ impl LinuxBuilder {
             output_path: bundle_path.clone().to_path_buf(),
             source: e,
         })?;
+        //TODO check for valid key and sign
+        
         //output the proper location in the terminal for the user to see 
         println!("app bundle available at: {}", &bundle_path.display());
         Ok(())

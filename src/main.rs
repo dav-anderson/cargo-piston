@@ -2,6 +2,7 @@ use anyhow::{bail, Result};
 use clap::{Parser};
 use cargo_subcommand::Subcommand;
 use std::env;
+use std::process::Command;
 use crate::android::AndroidBuilder;
 use crate::ios::IOSBuilder;
 use crate::linux::LinuxBuilder;
@@ -244,8 +245,7 @@ let cwd = match env::current_dir(){
         let cmd = Subcommand::new(args.common.subcommand_args)?;
         //handle the target flag
         let target_opt = cmd.target();
-        //handle the release flag
-        let release: bool = cmd.args().release;
+        //determine the target platform
         let platform = match target_opt {
             Some(target) => Platform::from_target(target),
             //if no target flag, determine host platform as default (only macos and linux supported currently)
@@ -255,27 +255,45 @@ let cwd = match env::current_dir(){
                 _ => Platform::Unknown,  // unsupported
             }
         };
-        //determine the platform of the build target
+        //handle the release flag
+        let release: bool = cmd.args().release;
+        //determine the target to pass into the builder if no flag is provided
+        let target_string = if cmd.target().is_none() {
+            let output = Command::new("rustc")
+                .arg("-vV")
+                .output();
+            let stdout = output.unwrap().stdout;
+            let stdout_str = String::from_utf8_lossy(&stdout);
+            let value = stdout_str.lines()
+                .find(|line| line.starts_with("host:"))
+                .map(|line| line.trim_start_matches("host: ").trim().to_string())
+                .unwrap_or_else(|| "Unknown".to_string());
+            value
+            //flag provided, pass in provided value
+            } else {
+                cmd.target().unwrap().to_string()
+            };
+        //call the appropriate builder for the designated target
         match platform {
             Platform::Android => {
             println!("build orders received for Android targeting {:?}, release is set to {:?}", cmd.target(), release);
-            AndroidBuilder::start(release, cmd.target().unwrap().to_string(), cwd, env_vars)?;
+            AndroidBuilder::start(release, target_string, cwd, env_vars)?;
             },
             Platform::Ios => {
             println!("build orders received for IOS targeting {:?}, release is set to {:?}", cmd.target(), release);
-            IOSBuilder::start(release, cmd.target().unwrap().to_string(), cwd, env_vars)?;
+            IOSBuilder::start(release, target_string, cwd, env_vars)?;
             },
             Platform::Linux => {
             println!("build orders received for Linux targeting {:?}, release is set to {:?}", cmd.target(), release);
-            LinuxBuilder::start(release, cmd.target().unwrap().to_string(), cwd, env_vars)?;
+            LinuxBuilder::start(release, target_string, cwd, env_vars)?;
             },
             Platform::Windows => {
             println!("build orders received for Windows targeting {:?}, release is set to {:?}", cmd.target(), release);
-            WindowsBuilder::start(release, cmd.target().unwrap().to_string(), cwd, env_vars)?;
+            WindowsBuilder::start(release, target_string, cwd, env_vars)?;
             },
             Platform::Macos => {
             println!("build orders received for Macos targeting {:?}, release is set to {:?}", cmd.target(), release);
-            MacOSBuilder::start(release, cmd.target().unwrap().to_string(), cwd, env_vars)?;
+            MacOSBuilder::start(release, target_string, cwd, env_vars)?;
             },
             Platform::Unknown => bail!("Unknown or unsupported target: {:?}", target_opt),
         };
@@ -311,6 +329,8 @@ fn test_platform_from_target() {
     assert!(matches!(Platform::from_target("aarch64-linux-android"), Platform::Android));
     assert!(matches!(Platform::from_target("some-unknown-target"), Platform::Unknown));
 }
+
+//TODO add linux host machine support
 
 //TODO refactor main to use custom error types and remove anyhow as a dep
 

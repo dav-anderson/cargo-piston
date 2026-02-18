@@ -51,18 +51,38 @@ x86_64-unknown-linux-gnu
 ### Path to cargo binary (if not in your local PATH) example
 `cargo_path=/Users/<username>/.cargo/bin/cargo`
 
-### Path to signing key (Optional)
+### App Signing Key Examples (Optional)
+Note: if you do not designate a signing key for your chosen output in the `.env`, automated signing will be skipped. See details in your output specific section.
 
-Note: if you do not designate a signing key for the appropriate build output, automated signing will be skipping. A signing key is only required for hot deployment to an ios device via usb tether. In all other cases signing is optional, however signing is usually required for distribution. For example, a release build must be signed prior to uploading to the apple app store.
+Install GPG with brew (MACOS HOST)
 
-Examples:
+`brew install gnupg`
+
+Generate a keypair if you need one (Choose RSA [option 1], 2048+ bits, key does not expire [option 0], provide and email and passphrase)
+
+`gpg --full-generate-key`
+
+A standard gpg brew installation will store public keys within a keybox file at `~/.gnupg/pubring.kbx` and private keys at `~/.gnupg/private-keys-v1.d/` within individual files for each key, these keys are encrypted with an optional passphrase. 
+
+Signing key Examples:
+
+`ios_debug_keypath=/path/to/debug/key`
+
 `ios_release_keypath=/path/to/release/key`
 
 `android_debug_keypath=/path/to/debug/key`
 
+`android_release_keypath=/path/to/release/key`
+
+`windows_debug_keypath=/path/to/debug/key`
+
 `windows_release_keypath=/path/to/release/key`
 
 `linux_debug_keypath=/path/to/debug/key`
+
+`linux_release_keypath=/path/to/release/key`
+
+`macos_debug_keypath=/path/to/debug/key`
 
 `macos_release_keypath=/path/to/release/key`
 
@@ -115,18 +135,43 @@ OriginalFilename = "<appname>.exe"
 
 ## Linux Output Configuration
 
-### Cofingure paths in .env (MACOS ONLY)
+### Cofingure paths in .env (MACOS HOST ONLY)
 `zigbuild_path=/Users/<username>/.cargo/bin/cargo-zigbuild`
 `homebrew_path=/opt/homebrew/bin`
 
-### Install zigbuild via (MACOS ONLY)
+### Install zigbuild via (MACOS HOST ONLY)
 `cargo install cargo-zigbuild`
 Provide a path to your cargo dependency binaries (somewhere like `~/.cargo/bin`)
 `zigbuild_path=/Users/<username>/.cargo/bin/cargo-zigbuild`
 
-### Install Zig via homebrew (MACOS ONLY)
+### Install Zig via homebrew (MACOS HOST ONLY)
 provide a path to your homebrew binaries (somewhere like `/opt/homebrew/bin`) in your .env
 `homebrew_path=/opt/homebrew/bin`
+
+### Automated App Signing (Optional - MACOS HOST ONLY)
+
+Note: if you do not designate a signing key, automated signing will be skipped.
+
+Configure your `.env` with the path to your linux signing key
+
+`linux_release_key=/path/to/release/key`
+
+<!--
+### Automated App Signing (Optional - LINUX HOST ONLY)
+
+Note: if you do not designate a signing key, automated signing will be skipped.
+
+Ensure you have gpg installed on the host machine
+
+`sudo pat install gnupg`
+
+Generate a keypair with gpg, choose RSA, atleast 2048 bits, and set an email/passphrase.
+
+`gpg --ful-generate-key`
+
+Configure your `.env` with the path to your linux signing key
+
+`linux_release_key=/path/to/release/key` -->
 
 ## MacOS & IOS Output Configuration (MACOS ONLY)
 
