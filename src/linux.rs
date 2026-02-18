@@ -145,7 +145,12 @@ impl LinuxBuilder {
             source: e,
         })?;
         //TODO check for valid key and sign
-
+        if Helper::gpg_valid(self.key_id.clone(), self.gpg_path.clone()){
+            println!("key is valid");
+            //TODO sign the bundle with gpg
+            let sign = Helper::gpg_sign(self.key_id.clone(), self.key_pass.clone(), self.gpg_path.clone(), &bundle_path);
+            println!("{}", sign);
+        }
         //output the proper location in the terminal for the user to see 
         println!("app bundle available at: {}", &bundle_path.display());
         Ok(())

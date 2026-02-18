@@ -1,5 +1,7 @@
 use std::path::{Path};
 use std::fs;
+use std::io::Write;
+use std::process::Stdio;
 use std::fs::{read_dir, remove_dir_all, remove_file};
 use std::process::Command;
 use image::imageops;
@@ -232,6 +234,80 @@ impl Helper {
             .and_then(|min| min.as_f64())
             .map(|val| val as f32)
             .unwrap_or(default)
+    }
+
+    pub fn gpg_valid(key_id: Option<String>, gpg_bin: Option<String>) -> bool {
+        if key_id.is_none() {
+            return false
+        }else if gpg_bin.is_none() {
+            return false
+        }
+        let output = Command::new(gpg_bin.unwrap())
+            .arg("--list-keys")
+            .arg(key_id.unwrap())
+            .output();
+
+        match output {
+            Ok(o) if o.status.success() => true,
+            _=> false,
+        }
+    }
+
+    pub fn gpg_sign(key_id: Option<String>, key_pass: Option<String>, gpg_path: Option<String>, bundle_path: &PathBuf) -> String{
+        //prepare signature path: <binary>.asc
+        let mut sig_path = bundle_path.clone();
+        sig_path.set_extension("asc");
+
+        //build the gpg command
+        let mut cmd = Command::new(gpg_path.unwrap());
+
+        //handle the passphrase
+        cmd.arg("--batch");
+        cmd.arg("--no-tty");
+        cmd.arg("--yes");
+        cmd.arg("--pinentry-mode").arg("loopback");
+        cmd.arg("--passphrase-fd").arg("0");
+
+        //construct the signing command
+        cmd.arg("--armor")
+            .arg("--output")
+            .arg(&sig_path)
+            .arg("-u")
+            .arg(&key_id.unwrap())
+            .arg("--detach-sig")
+            .arg("--verbose")
+            .arg(&bundle_path.display().to_string())
+            .stdin(Stdio::piped());
+
+
+
+        //spawn the process
+        let mut child = match cmd.spawn(){
+            Ok(c) => c,
+            Err(..) => return "Error spawning child process, GPG signing failed".to_string()
+        };
+
+        //write passphrase to stdin
+        if let Some(pass) = key_pass {
+            if let Some(mut stdin) = child.stdin.take() {
+                match stdin.write(pass.as_bytes()) {
+                    Ok(res) => res,
+                    Err(..) => return "Error writing passphrase to bytes, GPG signing failed".to_string()
+                };
+            }
+        }
+
+        let output = match child.wait_with_output() {
+            Ok(c) => c,
+            Err(..) => return "Error with gpg child output spawn, GPG signing failed".to_string()
+        };
+        if !output.status.success() {
+            let err_msg = String::from_utf8_lossy(&output.stderr);
+            return format!("GPG signing failed: {}", err_msg).into();
+        }
+
+        return format!("successfully signed {} with signature at {:?}", bundle_path.display(), sig_path.display());
+        
     }
 
 }
