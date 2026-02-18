@@ -1,8 +1,8 @@
 # How to Use Cargo Piston
 
-Cargo piston currently supports building rust binaries on a MacOS host machines and supports building outputs for listed compatiable Android, Linux, MacOS, iOS, and Windows targets. Developed is planned to support building all outputs on a Linux host machine, with the exception of MacOS and iOS, in future releases. 
+Cargo piston currently supports building rust binaries on MacOS host machines only and supports building outputs for all of the listed compatiable Android, Linux, MacOS, iOS, and Windows targets. Development is planned to support building all outputs on a Linux host machine, with the exception of MacOS and iOS during to architecture constraints, in future releases. 
 
-Once you have cargo-piston installed (either locally within a repo or globally) and your .env and Cargo.toml are properly configured, you can use cargo-piston to build and run for various targets. Your desired targets should be installed via rustup and should match your host system's architecture.
+Once you have cargo-piston installed (either locally within a repo or globally) and your .env and Cargo.toml are properly configured, you can use cargo-piston to build and run for various rust targets. Your desired targets should be installed via rustup and should match your host system's architecture.
 
 Example
 
