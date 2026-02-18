@@ -17,7 +17,8 @@ pub struct LinuxBuilder {
     zigbuild_path: Option<String>,
     homebrew_path: Option<String>,
     app_name: String,
-    key_path: Option<String>
+    key_id: Option<String>,
+    key_pass: Option<String>,
 }
 
 impl LinuxBuilder {
@@ -41,8 +42,8 @@ impl LinuxBuilder {
         println!("creating LinuxBuilder: release: {:?}, target: {:?}, cwd: {:?}", release, target.to_string(), cwd);
         //parse env vars
         let cargo_path = env_vars.get("cargo_path").cloned().unwrap_or("cargo".to_string());
-        let key_string = if release {"linux_release_keypath"} else {"linux_debug_keypath"};
-        let key_path = env_vars.get(key_string).cloned();
+        let key_id = env_vars.get("linux_gpg_key_id").cloned();
+        let key_pass = env_vars.get("linux_gpg_key_pass").cloned();
         println!("Cargo path determined: {}", &cargo_path);
         //parse cargo.toml
         let metadata: Metadata = MetadataCommand::new()
@@ -64,7 +65,7 @@ impl LinuxBuilder {
             println!("Homebrew path determined: {}", &homebrew_path.clone().unwrap());
         }   
         
-        Ok(LinuxBuilder{release: release, target: target.to_string(), cwd: cwd, output_path: None, icon_path: icon_path, cargo_path: cargo_path, zigbuild_path: zigbuild_path, homebrew_path: homebrew_path, app_name: app_name, key_path: key_path})
+        Ok(LinuxBuilder{release: release, target: target.to_string(), cwd: cwd, output_path: None, icon_path: icon_path, cargo_path: cargo_path, zigbuild_path: zigbuild_path, homebrew_path: homebrew_path, app_name: app_name, key_id: key_id, key_pass: key_pass})
     }
 
     fn pre_build(&mut self) -> Result<(), PistonError>{
@@ -142,7 +143,7 @@ impl LinuxBuilder {
             source: e,
         })?;
         //TODO check for valid key and sign
-        
+
         //output the proper location in the terminal for the user to see 
         println!("app bundle available at: {}", &bundle_path.display());
         Ok(())

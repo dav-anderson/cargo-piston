@@ -58,10 +58,10 @@ use crate::PistonError;
 //         Ok(())
 //     }
 
-//     fn generate_debug_key(&self, key_path: &Path) -> Result<(), PistonError> {
+//     fn generate_debug_key(&self, key_id: &Path) -> Result<(), PistonError> {
 //         let keytool_command = format!(
 //             "keytool -genkeypair -v -keystore {} -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 -dname \"CN=Android Debug,O=Android,C=US\" -storepass android -keypass android",
-//             key_path.display()
+//             key_id.display()
 //         );
 
 //         Command::new("bash")
@@ -236,7 +236,8 @@ pub struct AndroidBuilder {
     resources: PathBuf,
     build_tools_version: String,
     bundletool_path: String,
-    key_path: Option<String>,
+    key_id: Option<String>,
+    key_pass: Option<String>,
     // assets: Option<PathBuf>,
 }
 
@@ -267,8 +268,8 @@ impl AndroidBuilder {
         let java_path: &String = Helper::get_or_err(&env_vars, "java_path")?;
         let bundletool_path: &String = Helper::get_or_err(&env_vars, "bundletool_path")?;
         let build_tools_version: String = Helper::get_build_tools_version(&sdk_path)?;
-        let key_string = if release {"android_release_keypath"} else {"android_debug_keypath"};
-        let key_path = env_vars.get(key_string).cloned();
+        let key_id = env_vars.get("android_gpg_key_id").cloned();
+        let key_pass = env_vars.get("android_gpg_key_pass").cloned();
         println!("Cargo path determined: {}", &cargo_path);
         //parse cargo.toml
         let metadata: Metadata = MetadataCommand::new()
@@ -308,7 +309,8 @@ impl AndroidBuilder {
             resources: resources_path,
             build_tools_version: build_tools_version,
             bundletool_path: bundletool_path.to_string(),
-            key_path: key_path,
+            key_id: key_id,
+            key_pass: key_pass,
         })
     }
 

@@ -52,7 +52,7 @@ x86_64-unknown-linux-gnu
 `cargo_path=/Users/<username>/.cargo/bin/cargo`
 
 ### App Signing Key Examples (Optional)
-Note: if you do not designate a signing key for your chosen output in the `.env`, automated signing will be skipped. See details in your output specific section.
+Note: if you do not designate a signing key ID and password for your chosen output in the `.env`, automated signing will be skipped. See details in your output specific section.
 
 Install GPG with brew (MACOS HOST)
 
@@ -64,27 +64,31 @@ Generate a keypair if you need one (Choose RSA [option 1], 2048+ bits, key does 
 
 A standard gpg brew installation will store public keys within a keybox file at `~/.gnupg/pubring.kbx` and private keys at `~/.gnupg/private-keys-v1.d/` within individual files for each key, these keys are encrypted with an optional passphrase. 
 
+To find a key id from your gpg keyring run the following command
+`gpg --list-secret-keys`
+
 Signing key Examples:
 
 `ios_debug_keypath=/path/to/debug/key`
 
 `ios_release_keypath=/path/to/release/key`
 
-`android_debug_keypath=/path/to/debug/key`
-
-`android_release_keypath=/path/to/release/key`
-
-`windows_debug_keypath=/path/to/debug/key`
-
-`windows_release_keypath=/path/to/release/key`
-
-`linux_debug_keypath=/path/to/debug/key`
-
-`linux_release_keypath=/path/to/release/key`
-
 `macos_debug_keypath=/path/to/debug/key`
 
 `macos_release_keypath=/path/to/release/key`
+
+`android_gpg_key_id=<key_id>`
+
+`android_gpg_key_pass=<passphrase>`
+
+`windows_gpg_key_id=<key_id>`
+
+`windows_gpg_key_pass=<passphrase>`
+
+`linux_gpg_key_id=<key_id>`
+
+`linux_gpg_key_pass=<passphrase>`
+
 
 
 ## General Cargo.toml configuration 
@@ -150,11 +154,13 @@ provide a path to your homebrew binaries (somewhere like `/opt/homebrew/bin`) in
 
 ### Automated App Signing (Optional - MACOS HOST ONLY)
 
-Note: if you do not designate a signing key, automated signing will be skipped.
+Note: if you do not designate a signing key and password, automated signing will be skipped.
 
-Configure your `.env` with the path to your linux signing key
+Configure your `.env` with your gpg key and passphrase
 
-`linux_release_key=/path/to/release/key`
+`linux_gpg_key_id=<key_id>`
+
+`linux_gpg_key_pass=<passphrase>`
 
 <!--
 ### Automated App Signing (Optional - LINUX HOST ONLY)
