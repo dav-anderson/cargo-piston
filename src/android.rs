@@ -225,6 +225,7 @@ pub struct AndroidBuilder {
     output_path: Option<PathBuf>,
     icon_path: Option<String>,
     cargo_path: String,
+    gpg_path: Option<String>,
     app_name: String,
     lib_name: String,
     app_version: String,
@@ -263,13 +264,14 @@ impl AndroidBuilder {
         println!("creating AndroidBuilder: release: {:?}, target: {:?}, cwd: {:?}", release, target.to_string(), cwd);
         //parse env vars
         let cargo_path: String = env_vars.get("cargo_path").cloned().unwrap_or("cargo".to_string());
+        let gpg_path: Option<String> = env_vars.get("gpg_path").cloned();
         let ndk_path: &String = Helper::get_or_err(&env_vars, "ndk_path")?;
         let sdk_path: &String = Helper::get_or_err(&env_vars, "sdk_path")?;
         let java_path: &String = Helper::get_or_err(&env_vars, "java_path")?;
         let bundletool_path: &String = Helper::get_or_err(&env_vars, "bundletool_path")?;
         let build_tools_version: String = Helper::get_build_tools_version(&sdk_path)?;
-        let key_id = env_vars.get("android_gpg_key_id").cloned();
-        let key_pass = env_vars.get("android_gpg_key_pass").cloned();
+        let key_id: Option<String> = env_vars.get("android_gpg_key_id").cloned();
+        let key_pass: Option<String> = env_vars.get("android_gpg_key_pass").cloned();
         println!("Cargo path determined: {}", &cargo_path);
         //parse cargo.toml
         let metadata: Metadata = MetadataCommand::new()
@@ -297,7 +299,8 @@ impl AndroidBuilder {
             build_path: build_path, 
             output_path: None, 
             icon_path: icon_path, 
-            cargo_path: cargo_path, 
+            cargo_path: cargo_path,
+            gpg_path: gpg_path,
             app_name: app_name, 
             lib_name: lib_name,
             app_version: app_version, 

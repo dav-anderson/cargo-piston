@@ -58,6 +58,9 @@ Install GPG with brew (MACOS HOST)
 
 `brew install gnupg`
 
+Configure the path to your gpg installation in your `.env` (this is an example, use your actual path)
+`gpg_path=/opt/homebrew/bin/gpg`
+
 Generate a keypair if you need one (Choose RSA [option 1], 2048+ bits, key does not expire [option 0], provide and email and passphrase)
 
 `gpg --full-generate-key`

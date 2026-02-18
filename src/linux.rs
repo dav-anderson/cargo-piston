@@ -14,6 +14,7 @@ pub struct LinuxBuilder {
     output_path: Option<PathBuf>,
     icon_path: Option<String>,
     cargo_path: String,
+    gpg_path: Option<String>,
     zigbuild_path: Option<String>,
     homebrew_path: Option<String>,
     app_name: String,
@@ -41,9 +42,10 @@ impl LinuxBuilder {
     fn new(release: bool, target: String, cwd: PathBuf, env_vars: HashMap<String, String>) -> Result<Self, PistonError> {
         println!("creating LinuxBuilder: release: {:?}, target: {:?}, cwd: {:?}", release, target.to_string(), cwd);
         //parse env vars
-        let cargo_path = env_vars.get("cargo_path").cloned().unwrap_or("cargo".to_string());
-        let key_id = env_vars.get("linux_gpg_key_id").cloned();
-        let key_pass = env_vars.get("linux_gpg_key_pass").cloned();
+        let cargo_path: String = env_vars.get("cargo_path").cloned().unwrap_or("cargo".to_string());
+        let gpg_path: Option<String> = env_vars.get("gpg_path").cloned();
+        let key_id: Option<String> = env_vars.get("linux_gpg_key_id").cloned();
+        let key_pass: Option<String> = env_vars.get("linux_gpg_key_pass").cloned();
         println!("Cargo path determined: {}", &cargo_path);
         //parse cargo.toml
         let metadata: Metadata = MetadataCommand::new()
@@ -65,7 +67,7 @@ impl LinuxBuilder {
             println!("Homebrew path determined: {}", &homebrew_path.clone().unwrap());
         }   
         
-        Ok(LinuxBuilder{release: release, target: target.to_string(), cwd: cwd, output_path: None, icon_path: icon_path, cargo_path: cargo_path, zigbuild_path: zigbuild_path, homebrew_path: homebrew_path, app_name: app_name, key_id: key_id, key_pass: key_pass})
+        Ok(LinuxBuilder{release: release, target: target.to_string(), cwd: cwd, output_path: None, icon_path: icon_path, cargo_path: cargo_path, gpg_path: gpg_path, zigbuild_path: zigbuild_path, homebrew_path: homebrew_path, app_name: app_name, key_id: key_id, key_pass: key_pass})
     }
 
     fn pre_build(&mut self) -> Result<(), PistonError>{

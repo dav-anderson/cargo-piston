@@ -16,6 +16,7 @@ pub struct WindowsBuilder {
     icon_path: Option<String>,
     embed_resources_ok: bool,
     cargo_path: String,
+    gpg_path: Option<String>,
     app_name: String,
     key_id: Option<String>,
     key_pass: Option<String>,
@@ -41,9 +42,10 @@ impl WindowsBuilder {
     fn new(release: bool, target: String, cwd: PathBuf, env_vars: HashMap<String, String>) -> Result<Self, PistonError> {
         println!("creating windowsBuilder: release: {:?}, target: {:?}, cwd: {:?}", release, target.to_string(), cwd);
         //Read cargo_path with fallback
-        let cargo_path = env_vars.get("cargo_path").cloned().unwrap_or("cargo".to_string());
-        let key_id = env_vars.get("windows_gpg_key_id").cloned();
-        let key_pass = env_vars.get("windows_gpg_key_pass").cloned();
+        let cargo_path: String = env_vars.get("cargo_path").cloned().unwrap_or("cargo".to_string());
+        let gpg_path: Option<String> = env_vars.get("gpg_path").cloned();
+        let key_id: Option<String> = env_vars.get("windows_gpg_key_id").cloned();
+        let key_pass: Option<String> = env_vars.get("windows_gpg_key_pass").cloned();
         println!("Cargo path determined: {}", &cargo_path);
         //parse cargo.toml
         let metadata: Metadata = MetadataCommand::new()
@@ -60,7 +62,7 @@ impl WindowsBuilder {
         println!("Embed Resources Installed: {}", embed_resources_ok);
         let icon_path = Helper::get_icon_path(&metadata);
         let app_name = Helper::get_app_name(&metadata)?;
-        Ok(WindowsBuilder{release: release, target: target.to_string(), cwd: cwd, output_path: None, icon_path: icon_path, embed_resources_ok: embed_resources_ok, cargo_path: cargo_path, app_name: app_name, key_id: key_id, key_pass: key_pass})
+        Ok(WindowsBuilder{release: release, target: target.to_string(), cwd: cwd, output_path: None, icon_path: icon_path, embed_resources_ok: embed_resources_ok, cargo_path: cargo_path, gpg_path: gpg_path, app_name: app_name, key_id: key_id, key_pass: key_pass})
     }
 
     fn pre_build(&mut self) -> Result <(), PistonError>{
