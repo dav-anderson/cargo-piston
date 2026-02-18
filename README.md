@@ -51,58 +51,6 @@ x86_64-unknown-linux-gnu
 ### Path to cargo binary (if not in your local PATH) example
 `cargo_path=/Users/<username>/.cargo/bin/cargo`
 
-### App Signing Key Examples (Optional)
-Note: if you do not designate a signing key ID and password for your chosen output in the `.env`, automated signing will be skipped. See details in your output specific section.
-
-Install GPG with brew (MACOS HOST)
-
-`brew install gnupg`
-
-Configure the path to your gpg installation in your `.env` (this is an example, use your actual path)
-
-`gpg_path=/opt/homebrew/bin/gpg`
-
-Add the following line to your `~/.gnupg/gpg-agent.conf`
-
-`allow-loopback-pinentry`
-
-You can create this file and add the config option with a single terminal command as follows (ensure the correct path to your .gnupg is supplied)
-
-`echo allow-loopback-pinentry > /Users/$USER/.gnupg/gpg-agent.conf`
-
-Generate a keypair if you need one (Choose RSA [option 1], 2048+ bits, key does not expire [option 0], provide and email and passphrase)
-
-`gpg --full-generate-key`
-
-A standard gpg brew installation will store public keys within a keybox file at `~/.gnupg/pubring.kbx` and private keys at `~/.gnupg/private-keys-v1.d/` within individual files for each key, these keys are encrypted with an optional passphrase. 
-
-To find a key id from your gpg keyring run the following command
-`gpg --list-secret-keys`
-
-Signing key Examples:
-
-`ios_debug_keypath=/path/to/debug/key`
-
-`ios_release_keypath=/path/to/release/key`
-
-`macos_debug_keypath=/path/to/debug/key`
-
-`macos_release_keypath=/path/to/release/key`
-
-`android_gpg_key_id=<key_id>`
-
-`android_gpg_key_pass=<passphrase>`
-
-`windows_gpg_key_id=<key_id>`
-
-`windows_gpg_key_pass=<passphrase>`
-
-`linux_gpg_key_id=<key_id>`
-
-`linux_gpg_key_pass=<passphrase>`
-
-
-
 ## General Cargo.toml configuration 
 
 ```
@@ -166,7 +114,32 @@ provide a path to your homebrew binaries (somewhere like `/opt/homebrew/bin`) in
 
 ### Automated App Signing (Optional - MACOS HOST ONLY)
 
-Note: if you do not designate a signing key and password, automated signing will be skipped.
+Note: if you do not designate a signing key ID and password for your chosen output in the `.env`, automated signing will be skipped. See details in your output specific section.
+
+Install GPG with brew
+
+`brew install gnupg`
+
+Configure the path to your gpg installation in your `.env` (this is an example, use your actual path)
+
+`gpg_path=/opt/homebrew/bin/gpg`
+
+Add the following line to your `~/.gnupg/gpg-agent.conf`
+
+`allow-loopback-pinentry`
+
+You can create this file and add the config option with a single terminal command as follows (ensure the correct path to your .gnupg is supplied)
+
+`echo allow-loopback-pinentry > /Users/$USER/.gnupg/gpg-agent.conf`
+
+Generate a keypair if you need one (Choose RSA [option 1], 2048+ bits, key does not expire [option 0], provide and email and passphrase)
+
+`gpg --full-generate-key`
+
+A standard gpg brew installation will store public keys within a keybox file at `~/.gnupg/pubring.kbx` and private keys at `~/.gnupg/private-keys-v1.d/` within individual files for each key, these keys are encrypted with an optional passphrase. 
+
+To find a key id from your gpg keyring run the following command
+`gpg --list-secret-keys`
 
 Configure your `.env` with your gpg key and passphrase
 
