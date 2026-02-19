@@ -1,6 +1,6 @@
 # How to Use Cargo Piston
 
-Cargo piston is a utility tool for easily building & running rust binaries on MacOS and Linux host machines. Features are currently limited to MacOS host machines only. The crate supports building outputs for all of the listed compatiable Android, Linux, MacOS, iOS, and Windows targets. Development is planned to support building all outputs on a Linux host machine, with the exception of MacOS and iOS during to architecture constraints, as well as automatic deployment to USB tethered iOS and Android devices in future releases. 
+Cargo piston is a utility tool for easily building & running rust binaries on MacOS and Linux host machines. Features are currently limited to MacOS host machines only. The crate supports building outputs for all of the listed compatiable Android, Linux, MacOS, iOS, and Windows targets. Development is planned to support building all outputs on a Linux host machine, with the exception of MacOS and iOS outputs. Support is also planned for automatic deployment to USB tethered iOS and Android devices in future releases. 
 
 Once you have cargo-piston installed (either locally within a repo or globally) and your .env and Cargo.toml are properly configured, you can use cargo-piston to build and run for various rust targets. Your desired targets should be installed via rustup and should match your host system's architecture.
 
@@ -130,13 +130,17 @@ Provide a path to your cargo dependency binaries (somewhere like `~/.cargo/bin`)
 provide a path to your homebrew binaries (somewhere like `/opt/homebrew/bin`) in your .env
 `homebrew_path=/opt/homebrew/bin`
 
-### Automated App Signing (Optional - MACOS HOST ONLY)
+### Automated App Signing (Optional)
 
 Note: if you do not designate a signing key ID and password for your chosen output in the `.env`, automated signing will be skipped. See details in your output specific section.
 
-Install GPG with brew
+Install GPG with brew (MacOS Host Only)
 
 `brew install gnupg`
+
+Install GPG with apt (Linux Host Only)
+
+`sudo apt install gnupg2`
 
 Configure the path to your gpg installation in your `.env` (this is an example, use your actual path)
 
@@ -164,23 +168,6 @@ Configure your `.env` with your gpg key and passphrase
 `linux_gpg_key_id=<key_id>`
 
 `linux_gpg_key_pass=<passphrase>`
-
-<!--
-### Automated App Signing (Optional - LINUX HOST ONLY)
-
-Note: if you do not designate a signing key, automated signing will be skipped.
-
-Ensure you have gpg installed on the host machine
-
-`sudo pat install gnupg`
-
-Generate a keypair with gpg, choose RSA, atleast 2048 bits, and set an email/passphrase.
-
-`gpg --ful-generate-key`
-
-Configure your `.env` with the path to your linux signing key
-
-`linux_release_key=/path/to/release/key` -->
 
 ## MacOS & IOS Output Configuration (MACOS HOST ONLY)
 
