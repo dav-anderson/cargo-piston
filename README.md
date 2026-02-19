@@ -1,6 +1,6 @@
 # How to Use Cargo Piston
 
-Cargo piston currently supports building rust binaries on MacOS host machines only and supports building outputs for all of the listed compatiable Android, Linux, MacOS, iOS, and Windows targets. Development is planned to support building all outputs on a Linux host machine, with the exception of MacOS and iOS during to architecture constraints, in future releases. 
+Cargo piston is a utility tool for easily building & running rust binaries on MacOS and Linux host machines. Features are currently limited to MacOS host machines only. The crate supports building outputs for all of the listed compatiable Android, Linux, MacOS, iOS, and Windows targets. Development is planned to support building all outputs on a Linux host machine, with the exception of MacOS and iOS during to architecture constraints, as well as automatic deployment to USB tethered iOS and Android devices in future releases. 
 
 Once you have cargo-piston installed (either locally within a repo or globally) and your .env and Cargo.toml are properly configured, you can use cargo-piston to build and run for various rust targets. Your desired targets should be installed via rustup and should match your host system's architecture.
 
@@ -8,11 +8,27 @@ Example
 
 `rustup target add aarch64-apple-darwin`
 
-## Example command for building with piston
+## Example commands for using piston
+
+Build an app bundle for a target architecture. This command will build a Macos binary within a dynamically created app bundle derived from the information contained within your `cargo.toml` and `.env`. This includes ordinarily tedious minutia such as an Info.plist and app icon configuration.
 
 `cargo piston build --target aarch64-apple-darwin`
 
-This command will build a Macos binary within a dynamically created app bundle derived from the information contained within your `cargo.toml` and `.env`. This includes ordinarily tedious minutia such as an Info.plist and app icon configuration.
+Optionally, users can specify a release flag for the build.
+
+`cargo piston b --target aarch64-apple-darwin --release`
+
+Run an App locally on the host machine
+
+`cargo piston run`
+
+List viable USB tethered mobile devices (iOS & Android)
+
+`cargo piston list-devices`
+
+Deploy an app over USB tether to the target device
+
+`cargo piston run --device <deviceID>`
 
 ## Tested & Supported Build Targets
 
