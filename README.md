@@ -2,7 +2,7 @@
 
 Cargo piston is a utility tool for easily building & running rust binaries on MacOS and Linux host machines. Features are currently limited to MacOS host machines only. The crate supports building outputs for all of the listed compatiable Android, Linux, MacOS, iOS, and Windows targets. Development is planned to support building all outputs on a Linux host machine, with the exception of MacOS and iOS outputs. Support is also planned for automatic deployment to USB tethered iOS and Android devices in future releases. 
 
-Once you have cargo-piston installed (either locally within a repo or globally) and your .env and Cargo.toml are properly configured, you can use cargo-piston to build and run for various rust targets. Your desired targets should be installed via rustup and should match your host system's architecture.
+Once you have cargo-piston installed (either locally within a repo or globally) and your .env and `Cargo.toml` are properly configured, you can use cargo-piston to build and run for various rust targets. Your desired targets should be installed via rustup and should match your host system's architecture.
 
 Example
 
@@ -10,7 +10,7 @@ Example
 
 ## Example commands for using piston
 
-Build an app bundle for a target architecture. This command will build a Macos binary within a dynamically created app bundle derived from the information contained within your `cargo.toml` and `.env`. This includes ordinarily tedious minutia such as an Info.plist and app icon configuration.
+Build an app bundle for a target architecture. This command will build a Macos binary within a dynamically created app bundle derived from the information contained within your `Cargo.toml` and `.env`. This includes ordinarily tedious minutia such as an Info.plist and app icon configuration.
 
 `cargo piston build --target aarch64-apple-darwin`
 
@@ -101,7 +101,7 @@ linker = path/to/homebrew/bin/x86_64-w64-mingw32-gcc
 ```
 
 ### App Icon
-You must have embed-resource in your Cargo.toml as a `[build dependency]`
+You must have embed-resource in your `Cargo.toml` as a `[build dependency]`
 ```
 [build dependency]
 embed-resource = "3.0.2"
@@ -119,15 +119,20 @@ OriginalFilename = "<appname>.exe"
 
 ### Cofingure paths in .env (MACOS HOST ONLY)
 `zigbuild_path=/Users/<username>/.cargo/bin/cargo-zigbuild`
+
 `homebrew_path=/opt/homebrew/bin`
 
 ### Install zigbuild via (MACOS HOST ONLY)
 `cargo install cargo-zigbuild`
-Provide a path to your cargo dependency binaries (somewhere like `~/.cargo/bin`)
+
+Provide a path to your cargo dependency binaries in the `.env` (somewhere like `~/.cargo/bin`)
+
 `zigbuild_path=/Users/<username>/.cargo/bin/cargo-zigbuild`
 
 ### Install Zig via homebrew (MACOS HOST ONLY)
-provide a path to your homebrew binaries (somewhere like `/opt/homebrew/bin`) in your .env
+
+provide a path to your homebrew binaries (somewhere like `/opt/homebrew/bin`) in your `.env`
+
 `homebrew_path=/opt/homebrew/bin`
 
 ### Automated App Signing (Optional)
@@ -221,11 +226,11 @@ bundle_id=com.<organization>.<appname>
 min_os_version=17.5
 ```
 
-if you do not set a bundle_id in your cargo.toml, the bundle ID will default to
+if you do not set a bundle_id in your `Cargo.toml`, the bundle ID will default to
 
 `com.piston.<appname>`
 
-if you do not set a min_os_version in your cargo.toml, the mininimumOSVersion will default to 17.5
+if you do not set a min_os_version in your `Cargo.toml`, the mininimumOSVersion will default to 17.5
 
 
 
@@ -233,7 +238,7 @@ if you do not set a min_os_version in your cargo.toml, the mininimumOSVersion wi
 
 ### Install Java
 
-Install Java and provide the path to the installation in your .env file
+Install Java and provide the path to the installation in your `.env` file
 
 One option is to download the Java installer
 
@@ -244,9 +249,9 @@ Example terminal install command (Macos)
 
 `brew install openjdk@17`
 
-set the path to the binary in your .env
+set the path to the binary in your `.env`
 
-Example .env entries (Macos)
+Example `.env` entries (Macos)
 
 macos arm64 installer
 `/usr/bin/java`
@@ -263,14 +268,14 @@ Example install command (Linux)
 
 `sudo apt install -y openjdk-17-jdk`
 
-Example .env entry (Linux)
+Example `.env` entry (Linux)
 
 `java_path=/usr/lib/jvm/java-17-openjdk-amd64`
 
 
 ### Install Android Command-line tools
 
-Install the android NDK & SDK and provide the paths to the installation in your .env file.
+Install the android NDK & SDK and provide the paths to the installation in your `.env` file.
 
 Example install commands
 
@@ -320,7 +325,7 @@ Install ndk;25.1.8937393
 `JAVA_HOME="</path/to/java>" sudo </path/to/sdkmanager> "ndk;25.1.8937393" --sdk_root=</path/to/sdk>`
 
 
-Set the paths to the binaries in your .env (replace $HOME with your absolute path)
+Set the paths to the binaries in your `.env` (replace $HOME with your absolute path)
 
 Examples (MacOS)
 
@@ -341,7 +346,7 @@ or install with brew on macos
 It is reccomended that you install your bundletools .jar within your Android directory, something like
 `$HOME/Android/sdk/bundle-tools`
 
-Set the path to your bundle tool .jar in your .env
+Set the path to your bundle tool `.jar` in your `.env`
 
 Examples
 
@@ -363,7 +368,7 @@ android-activity = { version = "0.5", features = ["native-activity"] }
 log = "0.4"
 ```
 
-your Cargo.toml must have the following library designation 
+your `Cargo.toml` must have the following library designation 
 
 ```
 [lib]
@@ -380,7 +385,7 @@ target_sdk_version=31
 
 ### Create a Lib.rs in ~/src
 
-Unlike other outputs, android apps require first building a cdylib, we've already designated those settings in the cargo.toml, however, your project must also contain a `~/src/lib.rs` file with a main activity. It is important that if you are maintaing a cross compiled code base for multiple output types, that you wrap android specific logic in `#[cfg(target_os = "android")]` flags as shown below. 
+Unlike other outputs, android apps require first building a cdylib, we've already designated those settings in the `Cargo.toml`, however, your project must also contain a `~/src/lib.rs` file with a main activity. It is important that if you are maintaing a cross compiled code base for multiple output types, that you wrap android specific logic in `#[cfg(target_os = "android")]` flags as shown below. 
 
 Example `lib.rs`
 
