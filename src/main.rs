@@ -6,7 +6,7 @@ use std::process::Command;
 use crate::android::AndroidBuilder;
 use crate::ios::IOSBuilder;
 use crate::linux::LinuxBuilder;
-use crate::macos::MacOSBuilder;
+use crate::macos::{ MacOSBuilder, MacOSRunner };
 use crate::windows::WindowsBuilder;
 use crate::error::PistonError;
 use crate::helper::Helper;
@@ -223,6 +223,11 @@ impl Platform {
 }
 
 fn main() -> Result<()> {
+
+if std::env::consts::OS == "linux" {
+    bail!("Linux host support not yet implemented");
+}
+
 //init logs
  env_logger::init();
 
@@ -301,13 +306,29 @@ let cwd = match env::current_dir(){
             println!("(Dry run mode enabled)");
         }
     }
-    //TODO let user specify target
+    //TODO let user specify target or guess target based on device?
     PistonSubCmd::Run(args) =>{
-        let _cmd = Subcommand::new(args.common.subcommand_args)?;
+        let cmd = Subcommand::new(args.common.subcommand_args)?;
+        //handle the release flag
+        let release: bool = cmd.args().release;
         //TODO map target platform category with device, ensure compatibility. I.e make sure user isn't trying to deploy an android build to an ios device
         if args.device.is_none() {
             println!("run orders received with no device, run locally");
-            //TODO run locally
+            //MacOS host machine
+            if std::env::consts::OS == "macos" {
+                MacOSRunner::start(release, cwd, env_vars)?;
+            //Linux host machine
+            }else if std::env::consts::OS == "linux" {
+                println!("linux host not yet supported")
+                //TODO
+                // LinuxRunner::start(release, cwd, env_vars)?;
+            }
+            else {
+                bail!("Unsupported host system, cargo-piston only supports macos or linux host machines. Your host machine: {:?}", std::env::consts::OS)
+            }
+            //TODO determine host platform
+            //TODO trigger the appropriate runner based on the host platform
+        //TODO intercept and handle device deployment
         }else{
             println!("run orders received for a target device: {}", args.device.unwrap());
         }

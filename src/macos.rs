@@ -40,7 +40,7 @@ impl MacOSBuilder {
         Ok(())
     }
 
-fn new(release: bool, target: String, cwd: PathBuf, env_vars: HashMap<String, String>) -> Result<Self, PistonError> {
+    fn new(release: bool, target: String, cwd: PathBuf, env_vars: HashMap<String, String>) -> Result<Self, PistonError> {
         println!("creating MacOSBuilder: release: {:?}, target: {:?}, cwd: {:?}", release, target.to_string(), cwd);
         //parse env vars
         let cargo_path = env_vars.get("cargo_path").cloned().unwrap_or("cargo".to_string());
@@ -207,18 +207,19 @@ fn new(release: bool, target: String, cwd: PathBuf, env_vars: HashMap<String, St
     }
 }
 
-struct MacOSRunner{
-device: String, 
+pub struct MacOSRunner{
+release: bool,
+cwd: PathBuf,
+cargo_path: String,
 }
 
 impl MacOSRunner {
 
-    pub fn start() -> Result<(), PistonError> {
-        println!("running for MacOS");
-        if std::env::consts::OS != "macos"{
-            println!("error cannot run mac on linux");
-            // return Err(PistonError::UnsupportedOSError{os: std::env::consts::OS.to_string(), target: target})
-        }
+    pub fn start(release: bool, cwd: PathBuf, env_vars: HashMap<String, String>) -> Result<(), PistonError> {
+        println!("Initializing runner for MacOS");
+        let mut op = MacOSRunner::new(release, cwd, env_vars)?;
+
+        op.run()?;
         // let device = "device";
         // let mut op = MacOSRunner::new(device)?;
         //TODO check for signing certificate & sign?
@@ -227,9 +228,28 @@ impl MacOSRunner {
 
         Ok(())
     }
-    fn new() -> Self {
-        println!("Running for MacOS");
+    fn new(release: bool, cwd: PathBuf, env_vars: HashMap<String, String>) -> Result<Self, PistonError> {
+        println!("Creating MacOS Runner: release flag: {:?}, cwd: {:?}", release, cwd);
+        //parse env vars
+        let cargo_path = env_vars.get("cargo_path").cloned().unwrap_or("cargo".to_string());
 
-        MacOSRunner{device: "device".to_string()}
+        Ok(MacOSRunner{release: release, cwd: cwd, cargo_path: cargo_path})
+        
+    }
+
+    fn run(&mut self) -> Result<(), PistonError> {
+        println!("Running for MacOS");
+        //Run the binary for MacOS
+        let cargo_args = format!("run {}", if self.release {"--release"} else {""});
+        let cargo_cmd = format!("{} {}", self.cargo_path, cargo_args);
+        Command::new("bash")
+            .arg("-c")
+            .arg(&cargo_cmd)
+            .current_dir(self.cwd.clone())
+            .stdout(Stdio::inherit())
+            .stderr(Stdio::inherit())
+            .output()
+            .map_err(|e| PistonError::BuildError(format!("Cargo Run failed: {}", e)))?;
+        Ok(())
     }
 }
