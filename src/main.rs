@@ -45,7 +45,7 @@ struct CommonArgs {
 struct BuildArgs {
     #[clap(flatten)]
     common: CommonArgs,
-    //add custom global options here e.g. #[clap(short, long)] device: Option<String>
+    //add custom global options if needed e.g. #[clap(short, long)] device: Option<String>
     #[clap(long)]
     dry_run: bool
 }
@@ -55,7 +55,7 @@ struct BuildArgs {
 struct RunArgs {
     #[clap(flatten)]
     common: CommonArgs,
-    //can add custom global options here e.g. #[clap(short, long)] device: Option<String>
+    //can add custom global options if needed e.g. #[clap(short, long)] device: Option<String>
     #[clap(long)]
     device: Option<String>
 }
@@ -68,6 +68,11 @@ enum PistonSubCmd {
     //Run function
     #[clap(visible_alias = "r")]
     Run(RunArgs),
+    //List Devices function
+    #[clap(visible_alias = "l")]
+    ListDevices,
+    //Library Version function
+    #[clap(visible_alias = "v")]
     Version,
 }
 
@@ -311,6 +316,7 @@ let cwd = match env::current_dir(){
         let cmd = Subcommand::new(args.common.subcommand_args)?;
         //handle the release flag
         let release: bool = cmd.args().release;
+        //no device flag specificed, run locally
         if args.device.is_none() {
             println!("run orders received with no device, run locally");
             //MacOS host machine
@@ -328,6 +334,10 @@ let cwd = match env::current_dir(){
             println!("run orders received for a target device: {}", args.device.unwrap());
         }
         
+    }
+    PistonSubCmd::ListDevices => {
+        //TODO list devices
+        println!("list all available connected devices and relevant information");
     }
     PistonSubCmd::Version => {
         println!("{}, {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
@@ -350,12 +360,11 @@ fn test_platform_from_target() {
 
 //TODO refactor main to use custom error types and remove anyhow as a dep
 
-
 //TODO add a `cargo piston list-devices` command used to query relevant info on all connected compatible mobile devices
 
 //TODO refactor most of main into a lib.rs
 
-//TODO attempt to provision a devcie for an app via app store connect api
+//TODO attempt to provision a device for an app via app store connect api
 //TODO create a builder that dynamically creates app bundles at ~/maverick_target according to cargo.toml configs
 //TODO see how much we can automate on the IOS side with app store connect API access
 
@@ -367,13 +376,12 @@ fn test_platform_from_target() {
 
 //.env
 //android toolchain paths
+//path to platform specific signing key
 //app store connect API key
 
 //cargo.toml
-//path to platform specific signing key????
 //android permissions
 //ios permissions
-
 
 //pre_build ->
 //obtain a signing certificate if it doesn't exist
