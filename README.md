@@ -36,31 +36,31 @@ In theory this tool should support build targets for all of the supported Operti
 
 ### Windows
 
-x86_64-pc-windows-gnu
+`x86_64-pc-windows-gnu`
 
 ### Android
 
-aarch64-linux-android
+`aarch64-linux-android`
 
-x86_64-linux-android
+`x86_64-linux-android`
 
 ### MacOS
 
-aarch64-apple-darwin
+`aarch64-apple-darwin`
 
-x86_64-apple-darwin
+`x86_64-apple-darwin`
 
 ### IOS
 
-aarch64-apple-ios
+`aarch64-apple-ios`
 
-x86_64-apple-ios
+`x86_64-apple-ios`
 
 ### Linux
 
-aarch64-unknown-linux-gnu
+`aarch64-unknown-linux-gnu`
 
-x86_64-unknown-linux-gnu
+`x86_64-unknown-linux-gnu`
 
 # Configuration
 
