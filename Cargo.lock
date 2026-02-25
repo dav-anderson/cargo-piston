@@ -236,6 +236,7 @@ dependencies = [
  "clap",
  "env_logger",
  "image",
+ "regex",
  "serde",
  "serde_json",
 ]

@@ -158,6 +158,49 @@ impl LinuxBuilder {
     }
 }
 
+pub struct LinuxRunner{
+release: bool,
+cwd: PathBuf,
+cargo_path: String,
+}
+
+impl LinuxRunner {
+
+    pub fn start(release: bool, cwd: PathBuf, env_vars: HashMap<String, String>) -> Result<(), PistonError> {
+        println!("Initializing runner for Linux");
+        let mut op = LinuxRunner::new(release, cwd, env_vars)?;
+
+        op.run()?;
+
+        Ok(())
+    }
+    fn new(release: bool, cwd: PathBuf, env_vars: HashMap<String, String>) -> Result<Self, PistonError> {
+        println!("Creating Linux Runner: release flag: {:?}, cwd: {:?}", release, cwd);
+        //parse env vars
+        let cargo_path = env_vars.get("cargo_path").cloned().unwrap_or("cargo".to_string());
+
+        Ok(LinuxRunner{release: release, cwd: cwd, cargo_path: cargo_path})
+        
+    }
+
+    fn run(&mut self) -> Result<(), PistonError> {
+        println!("Running for Linux");
+        //Run the binary for Linux
+        let cargo_args = format!("run {}", if self.release {"--release"} else {""});
+        let cargo_cmd = format!("{} {}", self.cargo_path, cargo_args);
+        Command::new("bash")
+            .arg("-c")
+            .arg(&cargo_cmd)
+            .current_dir(self.cwd.clone())
+            .stdout(Stdio::inherit())
+            .stderr(Stdio::inherit())
+            .output()
+            .map_err(|e| PistonError::BuildError(format!("Cargo Run failed: {}", e)))?;
+        Ok(())
+    }
+}
+
+
 struct GPGSigner;
 
 impl GPGSigner{
@@ -233,47 +276,5 @@ impl GPGSigner{
 
         return format!("successfully signed {} with signature at {:?}", bundle_path.display(), sig_path.display());
         
-    }
-}
-
-pub struct LinuxRunner{
-release: bool,
-cwd: PathBuf,
-cargo_path: String,
-}
-
-impl LinuxRunner {
-
-    pub fn start(release: bool, cwd: PathBuf, env_vars: HashMap<String, String>) -> Result<(), PistonError> {
-        println!("Initializing runner for Linux");
-        let mut op = LinuxRunner::new(release, cwd, env_vars)?;
-
-        op.run()?;
-
-        Ok(())
-    }
-    fn new(release: bool, cwd: PathBuf, env_vars: HashMap<String, String>) -> Result<Self, PistonError> {
-        println!("Creating Linux Runner: release flag: {:?}, cwd: {:?}", release, cwd);
-        //parse env vars
-        let cargo_path = env_vars.get("cargo_path").cloned().unwrap_or("cargo".to_string());
-
-        Ok(LinuxRunner{release: release, cwd: cwd, cargo_path: cargo_path})
-        
-    }
-
-    fn run(&mut self) -> Result<(), PistonError> {
-        println!("Running for Linux");
-        //Run the binary for Linux
-        let cargo_args = format!("run {}", if self.release {"--release"} else {""});
-        let cargo_cmd = format!("{} {}", self.cargo_path, cargo_args);
-        Command::new("bash")
-            .arg("-c")
-            .arg(&cargo_cmd)
-            .current_dir(self.cwd.clone())
-            .stdout(Stdio::inherit())
-            .stderr(Stdio::inherit())
-            .output()
-            .map_err(|e| PistonError::BuildError(format!("Cargo Run failed: {}", e)))?;
-        Ok(())
     }
 }

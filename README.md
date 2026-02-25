@@ -214,7 +214,7 @@ Accept the Xcode license
 
 `sudo xcodebuild -license accept`
 
-<!-- Install libimobile device via homebrew
+<!-- Install libimobile device via homebrew (if you wish to deploy directly to iOS devices via USB cable)
 
 `brew install libimobiledevice` -->
 

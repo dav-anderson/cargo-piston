@@ -10,6 +10,8 @@ use crate::macos::{ MacOSBuilder, MacOSRunner };
 use crate::windows::WindowsBuilder;
 use crate::error::PistonError;
 use crate::helper::Helper;
+use crate::devices::Devices;
+mod devices;
 mod android;
 mod ios;
 mod linux;
@@ -336,8 +338,8 @@ let cwd = match env::current_dir(){
         
     }
     PistonSubCmd::ListDevices => {
-        //TODO list devices
         println!("list all available connected devices and relevant information");
+        Devices::start(env_vars);
     }
     PistonSubCmd::Version => {
         println!("{}, {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
@@ -356,42 +358,18 @@ fn test_platform_from_target() {
     assert!(matches!(Platform::from_target("some-unknown-target"), Platform::Unknown));
 }
 
-//TODO add linux host machine support
-
 //TODO refactor main to use custom error types and remove anyhow as a dep
-
-//TODO add a `cargo piston list-devices` command used to query relevant info on all connected compatible mobile devices
 
 //TODO refactor most of main into a lib.rs
 
-//TODO attempt to provision a device for an app via app store connect api
-//TODO create a builder that dynamically creates app bundles at ~/maverick_target according to cargo.toml configs
-//TODO see how much we can automate on the IOS side with app store connect API access
+//TODO implement automated signing for iOS, MacOS, Windows, and Android outputs
 
-//assume user has installed all required toolchains & external dependencies
-//assume user has properly setup keychains and signing certificates
+//TODO if apple app store connect api key provided in .env, perform setup via api if needed, otherwise assume user prefers to do it manually
+//Obtain a signing cert if it doesn't already exist
+//provision a target device if its not already provisioned
 
-//.env should use absolute paths when possible
-//assume user has properly configured the cargo.toml in the working project repo for the target build output
+//TODO cargo.toml
+//more extensive android permissions
+//more extensive macos/ios permissions
 
-//.env
-//android toolchain paths
-//path to platform specific signing key
-//app store connect API key
-
-//cargo.toml
-//android permissions
-//ios permissions
-
-//pre_build ->
-//obtain a signing certificate if it doesn't exist
-//provision target device if it's not already provisioned
-//create app bundle at ~/maverick_targets/platform if it doesn't exist already
-//configure the icon according to the platform
-
-
-//build -> 
-
-//post build ->
-//move the binary to the appropriate app bundle
-//sign the binary or bundle depending on the platform
+//TODO add linux host machine support for all features
