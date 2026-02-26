@@ -20,7 +20,7 @@ pub struct Devices {
 }
 
 impl Devices {
-    pub fn start(env_vars: HashMap<String, String>, silent: bool) -> Result<Self, PistonError> {
+    pub fn list_devices(env_vars: HashMap<String, String>, silent: bool) -> Result<Self, PistonError> {
         //new devices struct
         let mut devices = Devices {
             ios: Vec::new(),
@@ -48,6 +48,7 @@ impl Devices {
     }
 
     pub fn populate_android(&mut self, adb_path: String) -> Result<(), PistonError>{
+        //Run the command `adb devices`
         let output = match Command::new(adb_path).arg("devices").output() {
             Ok(o) => o,
             Err(e) => return Err(PistonError::ADBDevicesError(e.to_string())),
@@ -79,7 +80,7 @@ impl Devices {
     }
 
     fn populate_ios(&mut self) -> Result<(), PistonError>{
-        // Run xcrun devicectl list devices
+        // Run the command `xcrun devicectl list devices`
         let output = match Command::new("xcrun").args(["devicectl", "list", "devices"]).stdout(Stdio::piped()).output() {
                 Ok(o) => o,
                 Err(e) => return Err(PistonError::XcrunDevicectlError(e.to_string())),
@@ -94,6 +95,7 @@ impl Devices {
         // Split the output into lines.
         let lines: Vec<String> = stdout.lines().map(str::to_string).collect();
 
+        //if no results
         if lines.len() < 2 {
             return Ok(());
         }
@@ -154,6 +156,7 @@ impl Devices {
                 continue;
             }
 
+            //construct the return fields
             let hostname = &fields[1];
             let id = hostname.trim_end_matches(".coredevice.local").to_string();
             let udid = fields[2].clone();
@@ -171,12 +174,14 @@ impl Devices {
     }
 
     pub fn print_devices(&self) {
+        //empty device list
         if self.ios.is_empty() && self.android.is_empty() {
             println!();
             println!("Cargo Piston Device List:");
             println!();
             println!("No devices connected");
         } else {
+            //Android device list
             println!();
             println!("Cargo Piston Device List:");
             println!();
@@ -192,6 +197,7 @@ impl Devices {
 
                 }
             }
+            //iOS device list
             if !self.ios.is_empty() {
                 println!("iOS:");
                 for (index, device) in self.ios.iter().enumerate() {

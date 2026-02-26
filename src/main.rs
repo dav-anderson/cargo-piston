@@ -312,13 +312,11 @@ let cwd = match env::current_dir(){
             println!("(Dry run mode enabled)");
         }
     }
-    //TODO let user specify target or guess target based on device?
-    //TODO if so map target platform category with device, ensure compatibility. I.e make sure user isn't trying to deploy an android build to an ios device
     PistonSubCmd::Run(args) =>{
         let cmd = Subcommand::new(args.common.subcommand_args)?;
         //handle the release flag
         let release: bool = cmd.args().release;
-        //no device flag specificed, run locally
+        //no device flag, run locally
         if args.device.is_none() {
             println!("run orders received with no device, run locally");
             //MacOS host machine
@@ -331,15 +329,19 @@ let cwd = match env::current_dir(){
             else {
                 bail!("Unsupported host system, cargo-piston only supports macos or linux host machines. Your host machine: {:?}", std::env::consts::OS)
             }
-        //TODO intercept and handle device deployment
+        //explicit device flag
         }else{
             println!("run orders received for a target device: {}", args.device.unwrap());
+            let devices = Devices::list_devices(env_vars, true)?;
+            //TODO intercept and handle device deployment based on target OS
+            //TODO query devices and check the supplied device against the list
+            //look for a device ID or a target OS (i.e. `cargo piston run android` or `cargo piston run ios`) and choose the best available device if one matches
         }
         
     }
     PistonSubCmd::ListDevices => {
         println!("list all available connected devices and relevant information");
-        Devices::start(env_vars, false)?;
+        Devices::list_devices(env_vars, false)?;
     }
     PistonSubCmd::Version => {
         println!("{}, {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));

@@ -92,8 +92,6 @@ impl IOSBuilder {
 
     fn pre_build(&mut self) -> Result <(), PistonError>{
         //TODO check xcode for updates?
-        //TODO check for libimobiledevice?
-
         println!("Pre build for ios");
         //check for xcode installation
         let xcode_app = "/Applications/Xcode.app";
@@ -296,18 +294,45 @@ impl IOSRunner {
 
     fn new() -> Self{
         //>>prebuild
+        //Run IOSBuilder.pre_build()
         //check for apple signing certificate
         //check target device for provisioning
         //provision device if required
         //setup the app bundle
 
         //>>build
+        //Run IOSBuilder.build()
 
         //>>postbuild
+        //interpret device id, query device list and check for a match. If no device specified, choose best available device
+        //Run IOSBuilder.post_build()
         //move binary to the app bundle and sign
         //deploy installation and run on target device
+
+
         IOSRunner{device: "device".to_string()}
 
+    }
+
+    fn deploy_usb() -> Result<(), PistonError> {
+        // let output = Command::new("xcrun")
+        //     .args(["devicectl", "device", "install", "app", "--device", &device_id, &format!("{}/{}/ios/{}.app", session.projects_path.as_ref().unwrap(), session.current_project.as_ref().unwrap(), capitalize_first(session.current_project.as_ref().unwrap()))])
+        //     .output()
+        //     .unwrap();
+        // if !output.status.success() {
+        //     println!("here is the output: {:?}", &output);
+        //     return Err(io::Error::new(io::ErrorKind::Other, "could not install app bundle to IOS device via USB tether: {}"));
+        // }
+        // let bundle_id = get_bundle_id(session, "ios")?;
+        // println!("Deploying bundle id: {} to device: {}", &bundle_id, &device_id);
+        // let output = Command::new("xcrun")
+        //     .args(["devicectl", "device", "process", "launch", "--device", &device_id, &bundle_id])
+        //     .output()
+        //     .unwrap();
+        // if !output.status.success() {
+        //     return Err(io::Error::new(io::ErrorKind::Other, "could not launch app bundle to IOS device via USB tether"));
+        // }
+        Ok(())
     }
 }
 
