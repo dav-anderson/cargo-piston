@@ -339,7 +339,7 @@ let cwd = match env::current_dir(){
     }
     PistonSubCmd::ListDevices => {
         println!("list all available connected devices and relevant information");
-        Devices::start(env_vars);
+        Devices::start(env_vars, false)?;
     }
     PistonSubCmd::Version => {
         println!("{}, {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));

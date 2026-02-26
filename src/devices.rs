@@ -19,35 +19,45 @@ pub struct Devices {
     android: Vec<String>,
 }
 
-//TODO replace all .expects with PistonErrors
-//TODO error handle all unwraps
-
 impl Devices {
-    pub fn start(env_vars: HashMap<String, String>) -> Self {
+    pub fn start(env_vars: HashMap<String, String>, silent: bool) -> Result<Self, PistonError> {
+        //new devices struct
         let mut devices = Devices {
             ios: Vec::new(),
             android: Vec::new(),
         };
 
         let sdk_path: Option<String> = env_vars.get("sdk_path").cloned();
-        let adb_path = format!("{}/platform-tools/adb", sdk_path.unwrap());
+        let adb_path = format!("{}/platform-tools/adb", sdk_path.unwrap_or_default());
+        //query Android devices if adb_path is configured in .env
         if Path::new(&adb_path).exists() {
-            devices.populate_android(adb_path);
+            devices.populate_android(adb_path)?;
         }else{
             println!("Android installation not found");
         }
+        //query iOS devices if on MacOS
         if std::env::consts::OS == "macos" {
-            devices.populate_ios();
+            devices.populate_ios()?;
         }
-        devices.print_devices();
-        devices
+        //print the device results to the terminal
+        if !silent {
+            devices.print_devices();
+        }
+        //return the struct
+        Ok(devices)
     }
 
-    pub fn populate_android(&mut self, adb_path: String) {
-        let output = Command::new(adb_path).arg("devices").output().expect("faield to execute adb devices command. Ensure ADB is installed");
+    pub fn populate_android(&mut self, adb_path: String) -> Result<(), PistonError>{
+        let output = match Command::new(adb_path).arg("devices").output() {
+            Ok(o) => o,
+            Err(e) => return Err(PistonError::ADBDevicesError(e.to_string())),
+        };
 
         //convert the output to utf8
-        let stdout = str::from_utf8(&output.stdout).expect("failed to parse ADB output as utf8");
+        let stdout = match str::from_utf8(&output.stdout) {
+            Ok(o) => o,
+            Err(e) => return Err(PistonError::ParseUTF8Error(e.to_string())),
+        };
 
         //split the output into lines
         let lines: Vec<&str> = stdout.lines().collect();
@@ -64,29 +74,28 @@ impl Devices {
             }
         }
 
+        Ok(())
+
     }
 
-    fn populate_ios(&mut self) {
+    fn populate_ios(&mut self) -> Result<(), PistonError>{
         // Run xcrun devicectl list devices
-        let output = Command::new("xcrun")
-            .args(["devicectl", "list", "devices"])
-            .stdout(Stdio::piped())
-            .output()
-            .expect("Failed to run devicectl command. Ensure Xcode 15+ is installed.");
-
-        if !output.status.success() {
-            eprintln!("devicectl command failed");
-            return;
-        }
+        let output = match Command::new("xcrun").args(["devicectl", "list", "devices"]).stdout(Stdio::piped()).output() {
+                Ok(o) => o,
+                Err(e) => return Err(PistonError::XcrunDevicectlError(e.to_string())),
+            };
 
         // Convert the output to a UTF-8 string.
-        let stdout = str::from_utf8(&output.stdout).expect("Failed to parse devicectl output as UTF-8.");
+        let stdout = match str::from_utf8(&output.stdout){
+            Ok(o) => o,
+            Err(e) => return Err(PistonError::ParseUTF8Error(e.to_string())),
+        };
 
         // Split the output into lines.
         let lines: Vec<String> = stdout.lines().map(str::to_string).collect();
 
         if lines.len() < 2 {
-            return;
+            return Ok(());
         }
 
         let dash_line = &lines[1];
@@ -157,57 +166,9 @@ impl Devices {
                 provisioned: false,
             });
         }
+        
+        Ok(())
     }
-
-    //deprecated use of populate ios that also used xctrace
-    // pub fn populate_ios(&mut self) {
-        // //obtain device ids from devicectls
-        // //execute `xcrun devicectl list devices`
-        // let output_devicectl = Command::new("xcrun")
-        //     .args(["devicectl", "list", "devices"])
-        //     .stdout(Stdio::piped())
-        //     .output()
-        //     .expect("failed to execute `xcrun devicectl list devices` command. Ensure libimobile devices is installed");
-
-
-        // //convert the output to a utf8
-        // let stdout_devicectl = str::from_utf8(&output_devicectl.stdout);
-        // let re = Regex::new(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}").unwrap();
-        // let ids: Vec<&str> = re.find_iter(&stdout_devicectl.unwrap()).map(|m| m.as_str()).collect();
-
-        // //get UDIDs from xctrace
-        // let output_xctrace = Command::new("xcrun")
-        //     .args(["xctrace", "list", "devices"])
-        //     .stdout(Stdio::piped())
-        //     .output()
-        //     .expect("Failed to run xctrace command");
-
-        // let stdout_xctrace = String::from_utf8(output_xctrace.stdout);
-        // let binding = stdout_xctrace.unwrap();
-        // let lines: Vec<&str> = binding.lines().collect();
-
-        // let device_target = "iphone";
-    
-        // let pattern = r"(?i)^iPhone\s+\([^)]+\)\s+\(([0-9a-f]{8}-[0-9a-f]{16})\)";
-        // let re_xctrace = Regex::new(pattern).unwrap();
-
-        // let mut udids: Vec<String> = Vec::new();
-        // for line in lines {
-        //     let trimmed = line.trim();
-        //     if !trimmed.is_empty() {
-        //         if let Some(captures) = re_xctrace.captures(trimmed) {
-        //             if let Some(udid_match) = captures.get(1) {
-        //                 let udid_str = udid_match.as_str();
-        //                 if device_target.to_lowercase() == "iphone" && udid_str.len() == 25 {
-        //                     udids.push(udid_str.to_string());
-        //                 }
-        //             }
-        //         }
-        //     }
-        // }
-
-    //    
-    // }
 
     pub fn print_devices(&self) {
         if self.ios.is_empty() && self.android.is_empty() {

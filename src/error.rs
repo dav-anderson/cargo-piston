@@ -44,6 +44,12 @@ pub enum PistonError {
 
     IOSSdkMissingError(String),
 
+    ADBDevicesError(String),
+
+    ParseUTF8Error(String),
+
+    XcrunDevicectlError(String),
+
     UnsupportedOSError{ os: String, target: String },
 
     CopyFileError{ input_path: PathBuf, output_path: PathBuf, source: IoError },
@@ -89,6 +95,9 @@ impl fmt::Display for PistonError {
             PistonError::XcodeSelectPathingError(err) => write!(f, "Xcode-select pathing does not match expected value: {}", err),
             PistonError::XcodeBuildError(err) => write!(f, "Xcodebuild missing iOS sdk: {}", err),
             PistonError::IOSSdkMissingError(err) => write!(f, "IOS SDK missing from xcodebuild sdks: {}", err),
+            PistonError::ADBDevicesError(err) => write!(f, "Error Running 'ADB Devices', check installation and .env path: {}", err),
+            PistonError::ParseUTF8Error(err) => write!(f, "Error Parsing UTF8: {}", err),
+            PistonError::XcrunDevicectlError(err) => write!(f, "Failed to run devicectl command. Ensure Xcode 15+ is installed: {}", err),
             PistonError::UnsupportedOSError{ os, target, .. } => write!(f, "Host system: {:?} does not support the target: {:?}", os, target),
             PistonError::CopyFileError { input_path, output_path, .. } => write!(f, "Failed to copy {:?} to {:?}", input_path, output_path),
             PistonError::MacOSIconError { input_path, output_path, .. } => write!(f, "Failed to format icon {:?} to {:?}", input_path, output_path),
