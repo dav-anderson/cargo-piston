@@ -346,6 +346,7 @@ let cwd = match env::current_dir(){
                 IOSRunner::start(release, cwd, env_vars, &device)?;
             //general Android target
             }else if target_device == "android" && !devices.android.is_empty(){
+                //TODO make this a smarter choice, instead of defaulting to first item in the vec
                 let device = &devices.android[0];
                 println!("general Android runner target: {:?}", &device);
                 AndroidRunner::start(release, cwd, env_vars, &device)?;
@@ -360,9 +361,6 @@ let cwd = match env::current_dir(){
             } else {
                 bail!("Device not found");
             }
-            //TODO intercept and handle device deployment based on target OS
-            //TODO query devices and check the supplied device against the list
-            //look for a device ID or a target OS (i.e. `cargo piston run android` or `cargo piston run ios`) and choose the best available device if one matches
         }
         
     }
