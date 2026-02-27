@@ -8,6 +8,7 @@ use serde::Deserialize;
 use serde_json::Value;
 use crate::Helper;
 use crate::PistonError;
+use crate::devices::IOSDevice;
 
 // use anyhow::{Context, Result};
 // use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
@@ -277,13 +278,13 @@ impl IOSBuilder {
 
 }
 
-struct IOSRunner{
+pub struct IOSRunner{
 device: String, 
 }
 
 impl IOSRunner {
 
-    pub fn start() -> Result<(), PistonError> {
+    pub fn start(release: bool, cwd: PathBuf, env_vars: HashMap<String, String>, device: &IOSDevice) -> Result<(), PistonError> {
         println!("running for IOS");
         if std::env::consts::OS != "macos"{
             println!("error cannot run mac on linux");

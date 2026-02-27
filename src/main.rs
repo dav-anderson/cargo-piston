@@ -3,14 +3,14 @@ use clap::{Parser};
 use cargo_subcommand::Subcommand;
 use std::env;
 use std::process::Command;
-use crate::android::AndroidBuilder;
-use crate::ios::IOSBuilder;
+use crate::android::{ AndroidBuilder, AndroidRunner };
+use crate::ios::{ IOSBuilder, IOSRunner };
 use crate::linux::{ LinuxBuilder, LinuxRunner };
 use crate::macos::{ MacOSBuilder, MacOSRunner };
 use crate::windows::WindowsBuilder;
 use crate::error::PistonError;
 use crate::helper::Helper;
-use crate::devices::Devices;
+use crate::devices::{Devices, AndroidDevice, IOSDevice};
 mod devices;
 mod android;
 mod ios;
@@ -331,8 +331,35 @@ let cwd = match env::current_dir(){
             }
         //explicit device flag
         }else{
-            println!("run orders received for a target device: {}", args.device.unwrap());
-            let devices = Devices::list_devices(env_vars, true)?;
+            let tgt_unwrap = args.device.unwrap();
+            let target_device = tgt_unwrap.trim().clone();
+            //explicit device flag can either be "ios" or "android" or the target device id
+            println!("run orders received for a target device: {}", &tgt_unwrap);
+            let devices = Devices::list_devices(env_vars.clone(), true)?;
+            let android_device: Option<&AndroidDevice> = devices.android.iter().find(|device| device.id == target_device);
+            let ios_device: Option<&IOSDevice> = devices.ios.iter().find(|device| device.id == target_device);
+            //general IOS target
+            if target_device == "ios" && !devices.ios.is_empty(){
+                //TODO make this a smarter choice, instead of defaulting to first item in the vec
+                let device = &devices.ios[0];
+                println!("general IOS runner target: {:?}", &device);
+                IOSRunner::start(release, cwd, env_vars, &device)?;
+            //general Android target
+            }else if target_device == "android" && !devices.android.is_empty(){
+                let device = &devices.android[0];
+                println!("general Android runner target: {:?}", &device);
+                AndroidRunner::start(release, cwd, env_vars, &device)?;
+            //explicit android target
+            } else if !android_device.is_none() {
+                println!("explicit Android runner target: {:?}", &android_device);
+                AndroidRunner::start(release, cwd, env_vars, &android_device.unwrap())?;
+            //explicit iOS target
+            } else if !ios_device.is_none() {
+                println!("explicit IOS runner target: {:?}", &ios_device);
+                IOSRunner::start(release, cwd, env_vars, &ios_device.unwrap())?;
+            } else {
+                bail!("Device not found");
+            }
             //TODO intercept and handle device deployment based on target OS
             //TODO query devices and check the supplied device against the list
             //look for a device ID or a target OS (i.e. `cargo piston run android` or `cargo piston run ios`) and choose the best available device if one matches

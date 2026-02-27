@@ -8,15 +8,21 @@ use crate::error::PistonError;
 #[derive(Debug)]
 pub struct IOSDevice {
 model: String,
-id: String,
+pub id: String,
 udid: String,
 provisioned: bool,
 }
 
 #[derive(Debug)]
+pub struct AndroidDevice {
+    model: String,
+    pub id: String,
+}
+
+#[derive(Debug)]
 pub struct Devices {
-    ios: Vec<IOSDevice>,
-    android: Vec<String>,
+    pub ios: Vec<IOSDevice>,
+    pub android: Vec<AndroidDevice>,
 }
 
 impl Devices {
@@ -70,7 +76,11 @@ impl Devices {
                 let parts: Vec<&str> = trimmed.split_whitespace().collect();
                 if parts.len() == 2 && parts[1] == "device" {
                     //add the device serial to the vector
-                    self.android.push(parts[0].to_string())
+                    self.android.push(AndroidDevice {
+                        //TODO make this model field more dynamic if possible
+                        model: "Android Device".to_string(),
+                        id: parts[0].to_string(),
+                    });
                 }
             }
         }
@@ -190,7 +200,7 @@ impl Devices {
                 for (index, device) in self.android.iter().enumerate() {
                     println!();
                     println!("Device {}:", index + 1);
-                    println!("{}", device);
+                    println!("id: {}", device.id);
                 }
                 if !self.ios.is_empty() {
                     println!();

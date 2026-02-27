@@ -8,6 +8,7 @@ use serde::Deserialize;
 use serde_json::Value;
 use crate::Helper;
 use crate::PistonError;
+use crate::devices::AndroidDevice;
 
 //TODO build out intent filters with more robust cargo.toml parameters  
 //TODO reverse engineer cargo-apk
@@ -660,13 +661,19 @@ impl AndroidBuilder {
 
 
 
-struct AndroidRunner{
+pub struct AndroidRunner{
 device: String, 
 }
 
 impl AndroidRunner{
+
+    pub fn start(release: bool, cwd: PathBuf, env_vars: HashMap<String, String>, device: &AndroidDevice) -> Result<(), PistonError> {
+        println!("Running for Android");
+
+        Ok(())
+    }
     fn new() -> Self{
-        println!("running for android");
+        println!("creating AndroidRunner");
 
         AndroidRunner{device: "device".to_string()}
 
