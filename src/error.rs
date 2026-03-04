@@ -58,6 +58,10 @@ pub enum PistonError {
 
     ReadDirError{ path: PathBuf, source: IoError },
 
+    MapDirError{ path: PathBuf, source: IoError },
+
+    QueryProvisionError{ path: PathBuf, source: IoError },
+
     RemoveSubdirError{ path: PathBuf, source: IoError },
 
     RemoveFileError{ path: PathBuf, source: IoError },
@@ -102,6 +106,8 @@ impl fmt::Display for PistonError {
             PistonError::CopyFileError { input_path, output_path, .. } => write!(f, "Failed to copy {:?} to {:?}", input_path, output_path),
             PistonError::MacOSIconError { input_path, output_path, .. } => write!(f, "Failed to format icon {:?} to {:?}", input_path, output_path),
             PistonError::ReadDirError { path, .. } => write!(f, "Failed to read directory {:?}", path),
+            PistonError::MapDirError { path, .. } => write!(f, "Failed to map directory contents {:?}", path),
+            PistonError::QueryProvisionError { path, .. } => write!(f, "Failed to query the security provision profile {:?}", path),
             PistonError::RemoveSubdirError { path, .. } => write!(f, "Failed to remove subdirectory {:?}", path),
             PistonError::RemoveFileError { path, .. } => write!(f, "Failed to remove file {:?}", path),
             PistonError::CreateFileError { path, .. } => write!(f, "Failed to Create file {:?}", path),
@@ -119,6 +125,8 @@ impl StdError for PistonError {
             PistonError::CopyFileError { source, .. } => Some(source),
             PistonError::MacOSIconError { source, .. } => Some(source),
             PistonError::ReadDirError { source, .. } => Some(source),
+            PistonError::MapDirError { source, .. } => Some(source),
+            PistonError::QueryProvisionError { source, .. } => Some(source),
             PistonError::RemoveSubdirError { source, .. } => Some(source),
             PistonError::RemoveFileError { source, .. } => Some(source),
             PistonError::CreateFileError { source, .. } => Some(source),

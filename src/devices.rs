@@ -9,8 +9,7 @@ use crate::error::PistonError;
 pub struct IOSDevice {
 model: String,
 pub id: String,
-udid: String,
-provisioned: bool,
+pub udid: String,
 }
 
 #[derive(Debug)]
@@ -176,7 +175,6 @@ impl Devices {
                 model,
                 id,
                 udid,
-                provisioned: false,
             });
         }
         
@@ -216,7 +214,6 @@ impl Devices {
                     println!("Model: {}", device.model);
                     println!("id: {}", device.id);
                     println!("udid: {}", device.udid);
-                    println!("provisioned: {}", device.provisioned);
                 }
             }
         }

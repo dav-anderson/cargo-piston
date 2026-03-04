@@ -35,6 +35,7 @@ pub struct IOSBuilder {
     min_os_version: f32,
     asc_api_key: Option<AscApiKey>,
     device_target: Option<IOSDevice>,
+    idp_path: Option<String>,
 }
 
 impl IOSBuilder {
@@ -64,8 +65,7 @@ impl IOSBuilder {
         println!("creating IOSBuilder: release: {:?}, target: {:?}, cwd: {:?}", release, target.to_string(), cwd);
         //parse env vars
         let cargo_path = env_vars.get("cargo_path").cloned().unwrap_or("cargo".to_string());
-        let key_string = if release {"ios_release_keypath"} else {"ios_debug_keypath"};
-        let key_path = env_vars.get(key_string).cloned();
+        let idp_path = env_vars.get("idp_path").cloned();
         println!("Cargo path determined: {}", &cargo_path);
         //parse cargo.toml
         let metadata: Metadata = MetadataCommand::new()
@@ -79,7 +79,6 @@ impl IOSBuilder {
         let bundle_id = Helper::get_bundle_id(&metadata, &app_name);
         let min_os_version = Helper::get_min_os(&metadata);
 
-
         let asc_api_key: Option<AscApiKey> = match AscApiKey::from_hm(&env_vars) {
             Ok(key) => Some(key),
             Err(e) => {
@@ -90,7 +89,7 @@ impl IOSBuilder {
 
         println!("asc_api_key: {:?}", asc_api_key);
 
-        Ok(IOSBuilder{release: release, target: target.to_string(), cwd: cwd, output_path: None, icon_path: icon_path, cargo_path: cargo_path, app_name: app_name, app_version: app_version, bundle_id: bundle_id, min_os_version: min_os_version, asc_api_key: asc_api_key, device_target: device_target})
+        Ok(IOSBuilder{release: release, target: target.to_string(), cwd: cwd, output_path: None, icon_path: icon_path, cargo_path: cargo_path, app_name: app_name, app_version: app_version, bundle_id: bundle_id, min_os_version: min_os_version, asc_api_key: asc_api_key, device_target: device_target, idp_path: idp_path})
     }
 
     fn pre_build(&mut self) -> Result <(), PistonError>{
@@ -240,9 +239,17 @@ impl IOSBuilder {
 
         if !self.device_target.is_none() {
             println!("device target exists, checking for existing provisioning");
-            //TODO check if device is provisioned
-            //if provision == false && !self.asc_api_key.is_none() then provision the device_target
-            //if provision fails throw an error
+            //check if device is provisioned
+            let output_path = self.output_path.clone().unwrap();
+            let target_id = self.device_target.clone().unwrap().id;
+            let target_udid = self.device_target.clone().unwrap().udid;
+            let idp_path = self.idp_path.clone().unwrap();
+            let provisioned = Provision::is_device_provisioned(&output_path, &target_id, &target_udid, &idp_path)?;
+            //TODO if device is not provisioned and api access is available, attempt to provision
+            if provisioned == false && !self.asc_api_key.is_none() {
+                println!("valid asc api key found, attempting to provision target device {:?}", self.device_target);
+            }
+
         }
         //TODO check for apple signing certificate
         println!("done configuring ios bundle");
@@ -530,187 +537,122 @@ impl AscClient {
 pub struct Provision {}
 
 impl Provision {
-    // pub fn is_device_provisioned(app_bundle_path: &str, device_id: &str, udid: &str) -> io::Result<bool> {
-    //     println!("checking if target device is properly provisioned");
-    //     //obtain the mobile provision file name
-    //     let mobileprovision_file: String;
-    //     let entries = fs::read_dir(app_bundle_path)
-    //             .map_err(|e| io::Error::new(io::ErrorKind::Other, format!("Failed to read directory: {}", e)))?;
+    //TODO make sure this can handle multiple provision profiles
+    pub fn is_device_provisioned(app_bundle_path: &PathBuf, device_id: &str, udid: &str, idp_path: &str) -> Result<bool, PistonError> {
+        println!("checking if target device is properly provisioned");
+        //obtain the mobile provision file name
+        let mobileprovision_file: String;
+        let entries = fs::read_dir(app_bundle_path)
+                .map_err(|e| PistonError::ReadDirError {
+            path: app_bundle_path.to_path_buf(),
+            source: e,
+        })?;
 
-    //         let mut matching_files = Vec::new();
-    //         for entry in entries {
-    //             let entry = entry.map_err(|e| io::Error::new(io::ErrorKind::Other, format!("Failed to process directory entry: {}", e)))?;
-    //             let file_name = entry.file_name().to_string_lossy().into_owned();
-    //             if file_name.ends_with(".mobileprovision") {
-    //                 matching_files.push(file_name);
-    //             }
-    //         }
+            let mut matching_files = Vec::new();
+            for entry in entries {
+                let entry = entry.map_err(|e| PistonError::MapDirError {
+                    path: app_bundle_path.to_path_buf(),
+                    source: e,
+                })?;
+                let file_name = entry.file_name().to_string_lossy().into_owned();
+                if file_name.ends_with(".mobileprovision") {
+                    matching_files.push(file_name);
+                }
+            }
 
-    //         match matching_files.len() {
-    //             0 => {
-    //                 println!("No provisioning profile found");
-    //                 return Ok(false);
-    //             }
-    //             1 => {
-    //                 println!("Exactly one provisioning profile found");
-    //                 mobileprovision_file = matching_files[0].clone();
-    //             }
-    //             _ => {
-    //                 println!("something weird happened finding the provisioning profile");
-    //                 return Ok(false);
-    //             }
-    //         }
-    //     // 
+            match matching_files.len() {
+                0 => {
+                    println!("No provisioning profile found");
+                    return Ok(false);
+                }
+                1 => {
+                    println!("Exactly one provisioning profile found");
+                    mobileprovision_file = matching_files[0].clone();
+                }
+                _ => {
+                    println!("something weird happened finding the provisioning profile");
+                    return Ok(false);
+                }
+            }
+        // 
         
-    //     let profile_path_str = format!("{}/{}", &app_bundle_path, &mobileprovision_file);
-    //     let profile_path = Path::new(&profile_path_str);
-    //     //query the mobile provision profile
-    //     let output = Command::new("security")
-    //         .arg("cms")
-    //         .arg("-D")
-    //         .arg("-i")
-    //         .arg(profile_path)
-    //         .output()
-    //         .map_err(|e| io::Error::new(io::ErrorKind::Other, format!("Failed to execute security command: {}", e)))?;
-    //     if !output.status.success() {
-    //         return Err(io::Error::new(
-    //             io::ErrorKind::Other,
-    //             format!("security command failed: {}", String::from_utf8_lossy(&output.stderr)),
-    //         ));
-    //     }
-    //     //check for an existing device provision
-    //     let xml = String::from_utf8(output.stdout)
-    //         .map_err(|e| io::Error::new(io::ErrorKind::Other, format!("Invalid UTF-8 in plist: {}", e)))?;
-    //     let key_str = "<key>ProvisionedDevices</key>";
-    //     let Some(key_pos) = xml.find(key_str) else {
-    //         println!("provision profile does not contain valid syntax: <key>ProvisionedDevice</key>");
-    //         return Ok(false);
-    //     };
-    //     let start_after_key = key_pos + key_str.len();
-    //     let rest_after_key = &xml[start_after_key..];
-    //     let string_open = "<array>";
-    //     let Some(array_pos) = rest_after_key.find(string_open) else {
-    //         println!("provision profile does not contain valid syntax: <array>");
-    //         return Ok(false);
-    //     };
-    //     let start_of_array = array_pos + string_open.len();
-    //     let rest_after_open = &rest_after_key[start_of_array..];
-    //     let string_close = "</array>";
-    //     let Some(close_pos) = rest_after_open.find(string_close) else {
-    //         println!("provision profile does not contain valid syntax: </array>");
-    //         return Ok(false);
-    //     };
-    //     let array_content = &rest_after_open[..close_pos];
-    //     let device_entry = format!("<string>{}</string>", udid);
-    //     //check if the profile contains the device id
-    //     println!("checking if array content: {:?} contains device entry: {:?}", &array_content, &device_entry);
-    //     if array_content.contains(&device_entry) {
-    //         println!("provisioning profile contains the device id...checking device for installation");
-    //         //check that the profile is installed on the device
-    //         if let Some(key_pos) = xml.find("<key>Name</key>") {
-    //             if let Some(string_start) = xml[key_pos..].find("<string>") {
-    //                 let start = key_pos + string_start + "<string>".len();
-    //                 if let Some(string_end) = xml[start..].find("</string>") {
-    //                     let profile_name = xml[start..start + string_end].trim().to_string();
-    //                     if !profile_name.is_empty() {
-    //                         //list the installed provisions
-    //                         let output = Command::new(format!("{}/ideviceprovision", session.get_path("homebrew_path")?))
-    //                             .args(["list", "--udid", udid])
-    //                             .output()?;
-    //                         if !output.status.success() {
-    //                             return Err(io::Error::new(io::ErrorKind::Other, "failed to list provisioning profiles: {}",));
-    //                         }
-    //                         let profiles = String::from_utf8_lossy(&output.stdout);
-    //                         if profiles.contains(&profile_name) {
-    //                             println!("target device is already provisioned");
-    //                             return Ok(true)
-    //                         }else{
-    //                             println!("provisioning profile is not currently installed on the target device");
-    //                             return Ok(false)
-    //                         }
-    //                     }
-    //                 }
-    //             }
-    //         }
-    //         return Err(io::Error::new(io::ErrorKind::Other, "Name not found in provisioning profile: {}",));
-    //     } else {
-    //         println!("target device is not provisioned");
-    //         return Ok(false)
-    //     }let profile_path_str = format!("{}/{}", &app_bundle_path, &mobileprovision_file);
-    //     let profile_path = Path::new(&profile_path_str);
-    //     //query the mobile provision profile
-    //     let output = Command::new("security")
-    //         .arg("cms")
-    //         .arg("-D")
-    //         .arg("-i")
-    //         .arg(profile_path)
-    //         .output()
-    //         .map_err(|e| io::Error::new(io::ErrorKind::Other, format!("Failed to execute security command: {}", e)))?;
-    //     if !output.status.success() {
-    //         return Err(io::Error::new(
-    //             io::ErrorKind::Other,
-    //             format!("security command failed: {}", String::from_utf8_lossy(&output.stderr)),
-    //         ));
-    //     }
-    //     //check for an existing device provision
-    //     let xml = String::from_utf8(output.stdout)
-    //         .map_err(|e| io::Error::new(io::ErrorKind::Other, format!("Invalid UTF-8 in plist: {}", e)))?;
-    //     let key_str = "<key>ProvisionedDevices</key>";
-    //     let Some(key_pos) = xml.find(key_str) else {
-    //         println!("provision profile does not contain valid syntax: <key>ProvisionedDevice</key>");
-    //         return Ok(false);
-    //     };
-    //     let start_after_key = key_pos + key_str.len();
-    //     let rest_after_key = &xml[start_after_key..];
-    //     let string_open = "<array>";
-    //     let Some(array_pos) = rest_after_key.find(string_open) else {
-    //         println!("provision profile does not contain valid syntax: <array>");
-    //         return Ok(false);
-    //     };
-    //     let start_of_array = array_pos + string_open.len();
-    //     let rest_after_open = &rest_after_key[start_of_array..];
-    //     let string_close = "</array>";
-    //     let Some(close_pos) = rest_after_open.find(string_close) else {
-    //         println!("provision profile does not contain valid syntax: </array>");
-    //         return Ok(false);
-    //     };
-    //     let array_content = &rest_after_open[..close_pos];
-    //     let device_entry = format!("<string>{}</string>", udid);
-    //     //check if the profile contains the device id
-    //     println!("checking if array content: {:?} contains device entry: {:?}", &array_content, &device_entry);
-    //     if array_content.contains(&device_entry) {
-    //         println!("provisioning profile contains the device id...checking device for installation");
-    //         //check that the profile is installed on the device
-    //         if let Some(key_pos) = xml.find("<key>Name</key>") {
-    //             if let Some(string_start) = xml[key_pos..].find("<string>") {
-    //                 let start = key_pos + string_start + "<string>".len();
-    //                 if let Some(string_end) = xml[start..].find("</string>") {
-    //                     let profile_name = xml[start..start + string_end].trim().to_string();
-    //                     if !profile_name.is_empty() {
-    //                         //list the installed provisions
-    //                         let output = Command::new(format!("{}/ideviceprovision", session.get_path("homebrew_path")?))
-    //                             .args(["list", "--udid", udid])
-    //                             .output()?;
-    //                         if !output.status.success() {
-    //                             return Err(io::Error::new(io::ErrorKind::Other, "failed to list provisioning profiles: {}",));
-    //                         }
-    //                         let profiles = String::from_utf8_lossy(&output.stdout);
-    //                         if profiles.contains(&profile_name) {
-    //                             println!("target device is already provisioned");
-    //                             return Ok(true)
-    //                         }else{
-    //                             println!("provisioning profile is not currently installed on the target device");
-    //                             return Ok(false)
-    //                         }
-    //                     }
-    //                 }
-    //             }
-    //         }
-    //         return Err(io::Error::new(io::ErrorKind::Other, "Name not found in provisioning profile: {}",));
-    //     } else {
-    //         println!("target device is not provisioned");
-    //         Ok(false)
-    //     }
-    // }
+        let profile_path_str = format!("{}/{}", &app_bundle_path.display(), &mobileprovision_file);
+        let profile_path = Path::new(&profile_path_str);
+        //query the mobile provision profile
+        //excute command `security cms -D -i /output/path/to/app/bundle/file.mobileprovision`
+        let output = Command::new("security")
+            .arg("cms")
+            .arg("-D")
+            .arg("-i")
+            .arg(profile_path)
+            .output()
+            .map_err(|e| PistonError::QueryProvisionError {
+                path: profile_path.to_path_buf(),
+                source: e,
+            })?;
+        if !output.status.success() {
+            return Err(PistonError::Generic(format!("security command failed")));
+        }
+        //check for an existing device provision
+        let xml = String::from_utf8(output.stdout)
+            .map_err(|e| PistonError::ParseUTF8Error(format!("error parsing xml from mobile provision")))?;
+        let key_str = "<key>ProvisionedDevices</key>";
+        let Some(key_pos) = xml.find(key_str) else {
+            println!("provision profile does not contain valid syntax: <key>ProvisionedDevice</key>");
+            return Ok(false);
+        };
+        let start_after_key = key_pos + key_str.len();
+        let rest_after_key = &xml[start_after_key..];
+        let string_open = "<array>";
+        let Some(array_pos) = rest_after_key.find(string_open) else {
+            println!("provision profile does not contain valid syntax: <array>");
+            return Ok(false);
+        };
+        let start_of_array = array_pos + string_open.len();
+        let rest_after_open = &rest_after_key[start_of_array..];
+        let string_close = "</array>";
+        let Some(close_pos) = rest_after_open.find(string_close) else {
+            println!("provision profile does not contain valid syntax: </array>");
+            return Ok(false);
+        };
+        let array_content = &rest_after_open[..close_pos];
+        let device_entry = format!("<string>{}</string>", udid);
+        //check if the profile contains the device id
+        println!("checking if array content: {:?} contains device entry: {:?}", &array_content, &device_entry);
+        if array_content.contains(&device_entry) {
+            println!("provisioning profile contains the device id...checking device for installation");
+            //check that the profile is installed on the device
+            if let Some(key_pos) = xml.find("<key>Name</key>") {
+                if let Some(string_start) = xml[key_pos..].find("<string>") {
+                    let start = key_pos + string_start + "<string>".len();
+                    if let Some(string_end) = xml[start..].find("</string>") {
+                        let profile_name = xml[start..start + string_end].trim().to_string();
+                        if !profile_name.is_empty() {
+                            //list the installed provisions
+                            let output = Command::new(idp_path)
+                                .args(["list", "--udid", udid])
+                                .output();
+                            let output_res = output.unwrap();
+                            if !output_res.status.success() {
+                                return Err(PistonError::Generic(format!("Failed to list provisioning profiles with IDP")));
+                            }
+                            let profiles = String::from_utf8_lossy(&output_res.stdout);
+                            if profiles.contains(&profile_name) {
+                                println!("target device is already provisioned");
+                                return Ok(true)
+                            }else{
+                                println!("provisioning profile is not currently installed on the target device");
+                                return Ok(false)
+                            }
+                        }
+                    }
+                }
+            }
+            return Err(PistonError::Generic("Name not found in provisioning profile".to_string()));
+        } else {
+            println!("target device is not provisioned");
+            return Ok(false)
+        }
+    }
 }
 

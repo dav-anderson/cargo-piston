@@ -194,7 +194,7 @@ After you've installed the X code app and command line tools, point xcode-select
 
 `sudo xcodebuild -license accept`
 
-### Create Apple Dev API key
+### Create Apple Dev API key (OPTIONAL)
 
 Create an App Store Connect API key through your apple developer portal at the following URL. This MUST be an admin key. A developer key will not have sufficient priveleges to access the device provisioning endpoints.
 
@@ -220,9 +220,15 @@ Accept the Xcode license
 
 `sudo xcodebuild -license accept`
 
-<!-- Install libimobile device via homebrew (if you wish to deploy directly to iOS devices via USB cable)
+Install libimobile device via homebrew (if you wish to deploy directly to iOS devices via USB cable)
 
-`brew install libimobiledevice` -->
+`brew install libimobiledevice`
+
+Set the path to libimobile device's `ideviceprovision` bin in your `.env` (if you wish to deploy directly to iOS devices via USB cable). 
+
+Note: this can be found in your homebrew bin dir typically `/opt/homebrew/bin` on sillicone architecture or `/usr/local/bin` on intel architecture.
+
+`idp_path=/path/to/ideviceprovision`
 
 ### Configure IOS Cargo.toml parameters (optional)
 
