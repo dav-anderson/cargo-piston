@@ -33,26 +33,21 @@ pub struct IOSBuilder {
     app_version: String,
     bundle_id: String,
     min_os_version: f32,
-    key_path: Option<String>
+    asc_api_key: Option<AscApiKey>,
+    device_target: Option<IOSDevice>,
 }
 
 impl IOSBuilder {
 
-    pub fn start(release: bool, target: String, cwd: PathBuf, env_vars: HashMap<String, String>) -> Result<(), PistonError> {
+    pub fn start(release: bool, target: String, cwd: PathBuf, env_vars: HashMap<String, String>, device_target: Option<IOSDevice>) -> Result<(), PistonError> {
         println!("building for iOS");
         //check operating system (requires MacOS)
         if std::env::consts::OS != "macos"{
             return Err(PistonError::UnsupportedOSError{os: std::env::consts::OS.to_string(), target: target})
         }
         //TODO check for signing certificate & sign?
-        let asc_api_key: Option<AscApiKey> = match AscApiKey::from_hm(&env_vars) {
-            Ok(key) => Some(key),
-            Err(e) => {
-                println!("Error populating AscApiKey, check .env configuration: {}", e);
-                None
-            }
-        };
-        let mut op = IOSBuilder::new(release, target, cwd, env_vars)?;
+
+        let mut op = IOSBuilder::new(release, target, cwd, env_vars, device_target)?;
         //>>prebuild
         op.pre_build()?;
 
@@ -65,7 +60,7 @@ impl IOSBuilder {
         Ok(())
     }
 
-    fn new(release: bool, target: String, cwd: PathBuf, env_vars: HashMap<String, String>) -> Result<Self, PistonError> {
+    fn new(release: bool, target: String, cwd: PathBuf, env_vars: HashMap<String, String>, device_target: Option<IOSDevice>) -> Result<Self, PistonError> {
         println!("creating IOSBuilder: release: {:?}, target: {:?}, cwd: {:?}", release, target.to_string(), cwd);
         //parse env vars
         let cargo_path = env_vars.get("cargo_path").cloned().unwrap_or("cargo".to_string());
@@ -84,7 +79,18 @@ impl IOSBuilder {
         let bundle_id = Helper::get_bundle_id(&metadata, &app_name);
         let min_os_version = Helper::get_min_os(&metadata);
 
-        Ok(IOSBuilder{release: release, target: target.to_string(), cwd: cwd, output_path: None, icon_path: icon_path, cargo_path: cargo_path, app_name: app_name, app_version: app_version, bundle_id: bundle_id, min_os_version: min_os_version, key_path: key_path})
+
+        let asc_api_key: Option<AscApiKey> = match AscApiKey::from_hm(&env_vars) {
+            Ok(key) => Some(key),
+            Err(e) => {
+                println!("Failed to obtain AscApiKey, check .env configuration: {}", e);
+                None
+            }
+        };
+
+        println!("asc_api_key: {:?}", asc_api_key);
+
+        Ok(IOSBuilder{release: release, target: target.to_string(), cwd: cwd, output_path: None, icon_path: icon_path, cargo_path: cargo_path, app_name: app_name, app_version: app_version, bundle_id: bundle_id, min_os_version: min_os_version, asc_api_key: asc_api_key, device_target: device_target})
     }
 
     fn pre_build(&mut self) -> Result <(), PistonError>{
@@ -231,6 +237,14 @@ impl IOSBuilder {
             let icon_path180: PathBuf = res_path.join("ios_icon180.png");
             Helper::resize_png(&self.icon_path.as_ref().unwrap(), &icon_path180.display().to_string(), 180, 180)?;
         }
+
+        if !self.device_target.is_none() {
+            println!("device target exists, checking for existing provisioning");
+            //TODO check if device is provisioned
+            //if provision == false && !self.asc_api_key.is_none() then provision the device_target
+            //if provision fails throw an error
+        }
+        //TODO check for apple signing certificate
         println!("done configuring ios bundle");
         Ok(())
         
@@ -275,10 +289,10 @@ impl IOSBuilder {
 }
 
 pub struct IOSRunner{
-device: String, 
+device: IOSDevice, 
 }
 
-impl IOSRunner {
+impl IOSRunner{
 
     pub fn start(release: bool, cwd: PathBuf, env_vars: HashMap<String, String>, device: &IOSDevice) -> Result<(), PistonError> {
         println!("running for IOS");
@@ -287,40 +301,28 @@ impl IOSRunner {
             // return Err(PistonError::UnsupportedOSError{os: std::env::consts::OS.to_string(), target: target})
         }
 
-        //TODO FOR TESTING ONLY, REMOVE EITHER THIS ONE OR THE ONE IN BUILDER
+        let target_string = "aarch64-apple-ios".to_string();
 
-        let asc_api_key: Option<AscApiKey> = match AscApiKey::from_hm(&env_vars) {
-            Ok(key) => Some(key),
-            Err(e) => {
-                println!("Error populating AscApiKey, check .env configuration: {}", e);
-                None
-            }
-        };
+        let builder = IOSBuilder::start(release, target_string, cwd, env_vars, Some(device.clone()))?;
 
-        println!("asc_api_key: {:?}", asc_api_key);
+        let runner = IOSRunner::new(device);
+
+        //>>postbuild
+        //sign app bundle
+        //deploy installation and run on target device
 
         Ok(())
     }
 
-    fn new() -> Self{
-        //>>prebuild
-        //Run IOSBuilder.pre_build()
-        //check for apple signing certificate
-        //check target device for provisioning
-        //provision device if required
-        //setup the app bundle
-
-        //>>build
-        //Run IOSBuilder.build()
-
-        //>>postbuild
-        //interpret device id, query device list and check for a match. If no device specified, choose best available device
-        //Run IOSBuilder.post_build()
-        //move binary to the app bundle and sign
-        //deploy installation and run on target device
+    fn new(device: &IOSDevice) -> Self{
 
 
-        IOSRunner{device: "device".to_string()}
+        //TODO if the asc_api_key is some & device is not currently provisioned then we proceed with jwt
+        // otherwise we can try to run after checking for an existing provision or a manual provision
+
+
+
+        IOSRunner{device: device.clone()}
 
     }
 
@@ -358,17 +360,14 @@ impl AscApiKey {
         let key_id = env.get("asc_key_id")
             .ok_or("Missing ASC_KEY_ID in .env")
             .clone();
-        println!("asc key id: {:?}", key_id);
 
         let issuer_id = env.get("asc_issuer_id")
             .ok_or("Missing ASC_ISSUER_ID in .env")
             .clone();
-        println!("asc key issuer id: {:?}", issuer_id);
         
         let p8_path = env.get("asc_key_path")
             .ok_or("Missing ASC_KEY_PATH in .env")
             .clone();
-        println!("asc p8 path: {:?}", p8_path);
 
         let priv_key = fs::read_to_string(&p8_path.unwrap())
             .map_err(|e| format!("failed to read .p8 file at {:?}: {:?}", p8_path, e))?;
@@ -377,139 +376,341 @@ impl AscApiKey {
     }
 }
 
-// // JWT Claims struct
-// #[derive(Debug, Serialize, Deserialize)]
-// struct Claims {
-//     iss: String,  // Your issuer ID (team ID)
-//     iat: u64,     // Issued at (current time)
-//     exp: u64,     // Expiration (e.g., now + 20 min)
-//     aud: String,  // "appstoreconnect-v1"
-//     scope: Vec<String>,  // Optional scopes, e.g., ["GET /v1/apps"]
-// }
+#[derive(Debug)]
+pub struct AscClient {
+    api_key: AscApiKey,
+}
 
-// fn generate_jwt(private_key_pem: &str, key_id: &str, issuer_id: &str) -> Result<String> {
-//     let private_key = EncodingKey::from_ec_pem(private_key_pem.as_bytes())?;  // Or from_rsa_pem if RSA
-//     let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
-//     let claims = Claims {
-//         iss: issuer_id.to_string(),
-//         iat: now,
-//         exp: now + 1200,  // 20 minutes
-//         aud: "appstoreconnect-v1".to_string(),
-//         scope: vec!["POST /v1/certificates".to_string(), "GET /v1/certificates".to_string()],
-//     };
-//     let mut header = Header::new(Algorithm::ES256);  // ES256 for EC keys
-//     header.kid = Some(key_id.to_string());
-//     encode(&header, &claims, &private_key).context("Failed to encode JWT")
-// }
+impl AscClient {
 
-// // Generate CSR
-// fn generate_csr() -> Result<String> {
-//     let rsa = Rsa::generate(2048)?;
-//     let pkey = PKey::from_rsa(rsa)?;
+    // fn generate_jwt(&self) -> Result<String, String> {
+    //     let exp = SystemTime::now()
+    //         .duration_since(UNIX_EPOCH)
+    //         .unwrap()
+    //         .as_secs() as usize + 1200;
 
-//     let mut name_builder = X509NameBuilder::new()?;
-//     name_builder.append_entry_by_nid(Nid::COMMONNAME, "Your Common Name")?;
-//     let name = name_builder.build();
+    //     #[derive(Serialize)]
+    //     struct Claims {
+    //         iss: String,
+    //         exp: usize,
+    //         aud: String,
+    //     }
 
-//     let mut req_builder = X509ReqBuilder::new()?;
-//     req_builder.set_pubkey(&pkey)?;
-//     req_builder.set_subject_name(&name)?;
-//     req_builder.set_version(0)?;
+    //     let claims = Claims {
+    //         iss: self.api_key.issuer_id.clone(),
+    //         exp,
+    //         aud: "appstoreconnect-v1".to_string(),
+    //     };
 
-//     let mut key_usage = KeyUsage::new();
-//     key_usage.digital_signature().key_encipherment();
-//     req_builder.add_extension(key_usage.build()?)?;
+    //     let header = jsonwebtoken::Header::new(jsonwebtoken::Algorithm::ES256);
+    //     let key = jsonwebtoken::EncodingKey::from_ec_pem(self.api_key.private_key.as_bytes())
+    //         .map_err(|e| format!("Invalid .p8 key: {}", e))?;
 
-//     let mut basic_constraints = BasicConstraints::new();
-//     basic_constraints.ca();
-//     req_builder.add_extension(basic_constraints.build()?)?;
+    //     jsonwebtoken::encode(&header, &claims, &key).map_err(|e| e.to_string())
+    // }
 
-//     let subject_key_identifier = SubjectKeyIdentifier::new();
-//     req_builder.add_extension(subject_key_identifier.from_pkey(&pkey)?)?;
+    // // ──────────────────────────────────────────────────────────────
+    // // Public methods (everything you asked for)
+    // // ──────────────────────────────────────────────────────────────
+    // pub fn register_ios_device(&self, ios_device: &IOSDevice) -> Result<String, String> {
+    //     let token = self.generate_jwt()?;
 
-//     req_builder.sign(&pkey, MessageDigest::sha256())?;
+    //     let body = json!({
+    //         "data": {
+    //             "type": "devices",
+    //             "attributes": {
+    //                 "name": &ios_device.model,
+    //                 "udid": &ios_device.udid,
+    //                 "platform": "IOS"
+    //             }
+    //         }
+    //     });
 
-//     let csr = req_builder.build();
-//     let csr_pem = csr.to_pem()?;
-//     Ok(base64::encode(csr_pem))
-// }
+    //     let resp: Response = ureq::post("https://api.appstoreconnect.apple.com/v1/devices")
+    //         .set("Authorization", &format!("Bearer {}", token))
+    //         .set("Content-Type", "application/json")
+    //         .send_json(&body)
+    //         .map_err(|e| format!("Device registration failed: {}", e))?;
 
-// #[derive(Serialize)]
-// struct CertificateRequest {
-//     data: CertificateData,
-// }
+    //     let json: serde_json::Value = resp.into_json().map_err(|e| e.to_string())?;
+    //     let resource_id = json["data"]["id"].as_str().unwrap_or("").to_string();
 
-// #[derive(Serialize)]
-// struct CertificateData {
-//     #[serde(rename = "type")]
-//     type_: String,
-//     attributes: CertificateAttributes,
-// }
+    //     println!("✅ Device registered in ASC (resource ID: {})", resource_id);
+    //     Ok(resource_id)
+    // }
 
-// #[derive(Serialize)]
-// struct CertificateAttributes {
-//     certificate_type: String,  // e.g., "IOS_DEVELOPMENT"
-//     csr_content: String,
-// }
+    // pub fn find_or_create_bundle_id(&self, bundle_id: &str, name: &str) -> Result<String, String> {
+    //     let token = self.generate_jwt()?;
 
-// #[derive(Deserialize)]
-// struct CertificateResponse {
-//     data: CertificateResponseData,
-// }
+    //     let search: Response = ureq::get("https://api.appstoreconnect.apple.com/v1/bundleIds")
+    //         .set("Authorization", &format!("Bearer {}", token))
+    //         .query("filter[identifier]", bundle_id)
+    //         .call()
+    //         .map_err(|e| e.to_string())?;
 
-// #[derive(Deserialize)]
-// struct CertificateResponseData {
-//     id: String,
-//     attributes: CertificateResponseAttributes,
-// }
+    //     let json: serde_json::Value = search.into_json().map_err(|e| e.to_string())?;
+    //     if let Some(first) = json["data"].as_array().and_then(|a| a.first()) {
+    //         return Ok(first["id"].as_str().unwrap().to_string());
+    //     }
 
-// #[derive(Deserialize)]
-// struct CertificateResponseAttributes {
-//     certificate_content: String,  // Base64-encoded DER
-// }
+    //     let body = json!({
+    //         "data": {
+    //             "type": "bundleIds",
+    //             "attributes": {
+    //                 "identifier": bundle_id,
+    //                 "name": name,
+    //                 "platform": "IOS"
+    //             }
+    //         }
+    //     });
 
-// fn main() -> Result<()> {
-//     let private_key_pem = fs::read_to_string("path/to/AuthKey_XXXXXXXXXX.p8")?;  // Your private key file
-//     let key_id = "XXXXXXXXXX";  // Your API key ID
-//     let issuer_id = "your-team-id";  // Your team/issuer ID
+    //     let resp: Response = ureq::post("https://api.appstoreconnect.apple.com/v1/bundleIds")
+    //         .set("Authorization", &format!("Bearer {}", token))
+    //         .set("Content-Type", "application/json")
+    //         .send_json(&body)
+    //         .map_err(|e| format!("Bundle ID creation failed: {}", e))?;
 
-//     let jwt = generate_jwt(&private_key_pem, key_id, issuer_id)?;
+    //     let json: serde_json::Value = resp.into_json().map_err(|e| e.to_string())?;
+    //     Ok(json["data"]["id"].as_str().unwrap().to_string())
+    // }
 
-//     let csr_base64 = generate_csr()?;
+    // pub fn create_development_profile(
+    //     &self,
+    //     bundle_resource_id: &str,
+    //     certificate_id: &str,      // still needed once (we can automate later)
+    //     device_resource_id: &str,
+    //     profile_name: &str,
+    // ) -> Result<String, String> {
+    //     let token = self.generate_jwt()?;
 
-//     let client = Client::new();
-//     let request_body = CertificateRequest {
-//         data: CertificateData {
-//             type_: "certificates".to_string(),
-//             attributes: CertificateAttributes {
-//                 certificate_type: "IOS_DEVELOPMENT".to_string(),  // Change as needed
-//                 csr_content: csr_base64,
-//             },
-//         },
-//     };
+    //     let body = json!({
+    //         "data": {
+    //             "type": "profiles",
+    //             "attributes": { "name": profile_name, "profileType": "IOS_APP_DEVELOPMENT" },
+    //             "relationships": {
+    //                 "bundleId": { "data": { "type": "bundleIds", "id": bundle_resource_id } },
+    //                 "certificates": { "data": [{ "type": "certificates", "id": certificate_id }] },
+    //                 "devices": { "data": [{ "type": "devices", "id": device_resource_id }] }
+    //             }
+    //         }
+    //     });
 
-//     // Create certificate
-//     let create_response: CertificateResponse = client
-//         .post("https://api.appstoreconnect.apple.com/v1/certificates")
-//         .header("Authorization", format!("Bearer {}", jwt))
-//         .json(&request_body)
-//         .send()?
-//         .json()?;
+    //     let create_resp: Response = ureq::post("https://api.appstoreconnect.apple.com/v1/profiles")
+    //         .set("Authorization", &format!("Bearer {}", token))
+    //         .set("Content-Type", "application/json")
+    //         .send_json(&body)
+    //         .map_err(|e| format!("Profile creation failed: {}", e))?;
 
-//     let cert_id = create_response.data.id;
+    //     let json: serde_json::Value = create_resp.into_json().map_err(|e| e.to_string())?;
+    //     let profile_id = json["data"]["id"].as_str().unwrap().to_string();
 
-//     // Download certificate content (requires new JWT if expired)
-//     let download_jwt = generate_jwt(&private_key_pem, key_id, issuer_id)?;  // Regenerate if needed
-//     let download_response: CertificateResponse = client
-//         .get(format!("https://api.appstoreconnect.apple.com/v1/certificates/{}/downloadCertificateContent", cert_id))
-//         .header("Authorization", format!("Bearer {}", download_jwt))
-//         .send()?
-//         .json()?;
+    //     let get_resp: Response = ureq::get(&format!(
+    //         "https://api.appstoreconnect.apple.com/v1/profiles/{}",
+    //         profile_id
+    //     ))
+    //     .set("Authorization", &format!("Bearer {}", token))
+    //     .call()
+    //     .map_err(|e| e.to_string())?;
 
-//     let cert_content_base64 = download_response.data.attributes.certificate_content;
-//     let cert_der = base64::decode(cert_content_base64)?;
-//     fs::write("certificate.cer", cert_der)?;
+    //     let profile_json: serde_json::Value = get_resp.into_json().map_err(|e| e.to_string())?;
+    //     let b64 = profile_json["data"]["attributes"]["profileContent"]
+    //         .as_str()
+    //         .ok_or("No profileContent returned")?;
 
-//     println!("Certificate downloaded to certificate.cer");
-//     Ok(())
-// }
+    //     let decoded = base64::decode(b64).map_err(|e| format!("Base64 decode failed: {}", e))?;
+
+    //     let profile_path = format!("{}.mobileprovision", profile_name.replace(' ', "-"));
+    //     fs::write(&profile_path, decoded).map_err(|e| e.to_string())?;
+
+    //     println!("✅ Profile saved → {}", profile_path);
+    //     Ok(profile_path)
+    // }
+}
+
+pub struct Provision {}
+
+impl Provision {
+    // pub fn is_device_provisioned(app_bundle_path: &str, device_id: &str, udid: &str) -> io::Result<bool> {
+    //     println!("checking if target device is properly provisioned");
+    //     //obtain the mobile provision file name
+    //     let mobileprovision_file: String;
+    //     let entries = fs::read_dir(app_bundle_path)
+    //             .map_err(|e| io::Error::new(io::ErrorKind::Other, format!("Failed to read directory: {}", e)))?;
+
+    //         let mut matching_files = Vec::new();
+    //         for entry in entries {
+    //             let entry = entry.map_err(|e| io::Error::new(io::ErrorKind::Other, format!("Failed to process directory entry: {}", e)))?;
+    //             let file_name = entry.file_name().to_string_lossy().into_owned();
+    //             if file_name.ends_with(".mobileprovision") {
+    //                 matching_files.push(file_name);
+    //             }
+    //         }
+
+    //         match matching_files.len() {
+    //             0 => {
+    //                 println!("No provisioning profile found");
+    //                 return Ok(false);
+    //             }
+    //             1 => {
+    //                 println!("Exactly one provisioning profile found");
+    //                 mobileprovision_file = matching_files[0].clone();
+    //             }
+    //             _ => {
+    //                 println!("something weird happened finding the provisioning profile");
+    //                 return Ok(false);
+    //             }
+    //         }
+    //     // 
+        
+    //     let profile_path_str = format!("{}/{}", &app_bundle_path, &mobileprovision_file);
+    //     let profile_path = Path::new(&profile_path_str);
+    //     //query the mobile provision profile
+    //     let output = Command::new("security")
+    //         .arg("cms")
+    //         .arg("-D")
+    //         .arg("-i")
+    //         .arg(profile_path)
+    //         .output()
+    //         .map_err(|e| io::Error::new(io::ErrorKind::Other, format!("Failed to execute security command: {}", e)))?;
+    //     if !output.status.success() {
+    //         return Err(io::Error::new(
+    //             io::ErrorKind::Other,
+    //             format!("security command failed: {}", String::from_utf8_lossy(&output.stderr)),
+    //         ));
+    //     }
+    //     //check for an existing device provision
+    //     let xml = String::from_utf8(output.stdout)
+    //         .map_err(|e| io::Error::new(io::ErrorKind::Other, format!("Invalid UTF-8 in plist: {}", e)))?;
+    //     let key_str = "<key>ProvisionedDevices</key>";
+    //     let Some(key_pos) = xml.find(key_str) else {
+    //         println!("provision profile does not contain valid syntax: <key>ProvisionedDevice</key>");
+    //         return Ok(false);
+    //     };
+    //     let start_after_key = key_pos + key_str.len();
+    //     let rest_after_key = &xml[start_after_key..];
+    //     let string_open = "<array>";
+    //     let Some(array_pos) = rest_after_key.find(string_open) else {
+    //         println!("provision profile does not contain valid syntax: <array>");
+    //         return Ok(false);
+    //     };
+    //     let start_of_array = array_pos + string_open.len();
+    //     let rest_after_open = &rest_after_key[start_of_array..];
+    //     let string_close = "</array>";
+    //     let Some(close_pos) = rest_after_open.find(string_close) else {
+    //         println!("provision profile does not contain valid syntax: </array>");
+    //         return Ok(false);
+    //     };
+    //     let array_content = &rest_after_open[..close_pos];
+    //     let device_entry = format!("<string>{}</string>", udid);
+    //     //check if the profile contains the device id
+    //     println!("checking if array content: {:?} contains device entry: {:?}", &array_content, &device_entry);
+    //     if array_content.contains(&device_entry) {
+    //         println!("provisioning profile contains the device id...checking device for installation");
+    //         //check that the profile is installed on the device
+    //         if let Some(key_pos) = xml.find("<key>Name</key>") {
+    //             if let Some(string_start) = xml[key_pos..].find("<string>") {
+    //                 let start = key_pos + string_start + "<string>".len();
+    //                 if let Some(string_end) = xml[start..].find("</string>") {
+    //                     let profile_name = xml[start..start + string_end].trim().to_string();
+    //                     if !profile_name.is_empty() {
+    //                         //list the installed provisions
+    //                         let output = Command::new(format!("{}/ideviceprovision", session.get_path("homebrew_path")?))
+    //                             .args(["list", "--udid", udid])
+    //                             .output()?;
+    //                         if !output.status.success() {
+    //                             return Err(io::Error::new(io::ErrorKind::Other, "failed to list provisioning profiles: {}",));
+    //                         }
+    //                         let profiles = String::from_utf8_lossy(&output.stdout);
+    //                         if profiles.contains(&profile_name) {
+    //                             println!("target device is already provisioned");
+    //                             return Ok(true)
+    //                         }else{
+    //                             println!("provisioning profile is not currently installed on the target device");
+    //                             return Ok(false)
+    //                         }
+    //                     }
+    //                 }
+    //             }
+    //         }
+    //         return Err(io::Error::new(io::ErrorKind::Other, "Name not found in provisioning profile: {}",));
+    //     } else {
+    //         println!("target device is not provisioned");
+    //         return Ok(false)
+    //     }let profile_path_str = format!("{}/{}", &app_bundle_path, &mobileprovision_file);
+    //     let profile_path = Path::new(&profile_path_str);
+    //     //query the mobile provision profile
+    //     let output = Command::new("security")
+    //         .arg("cms")
+    //         .arg("-D")
+    //         .arg("-i")
+    //         .arg(profile_path)
+    //         .output()
+    //         .map_err(|e| io::Error::new(io::ErrorKind::Other, format!("Failed to execute security command: {}", e)))?;
+    //     if !output.status.success() {
+    //         return Err(io::Error::new(
+    //             io::ErrorKind::Other,
+    //             format!("security command failed: {}", String::from_utf8_lossy(&output.stderr)),
+    //         ));
+    //     }
+    //     //check for an existing device provision
+    //     let xml = String::from_utf8(output.stdout)
+    //         .map_err(|e| io::Error::new(io::ErrorKind::Other, format!("Invalid UTF-8 in plist: {}", e)))?;
+    //     let key_str = "<key>ProvisionedDevices</key>";
+    //     let Some(key_pos) = xml.find(key_str) else {
+    //         println!("provision profile does not contain valid syntax: <key>ProvisionedDevice</key>");
+    //         return Ok(false);
+    //     };
+    //     let start_after_key = key_pos + key_str.len();
+    //     let rest_after_key = &xml[start_after_key..];
+    //     let string_open = "<array>";
+    //     let Some(array_pos) = rest_after_key.find(string_open) else {
+    //         println!("provision profile does not contain valid syntax: <array>");
+    //         return Ok(false);
+    //     };
+    //     let start_of_array = array_pos + string_open.len();
+    //     let rest_after_open = &rest_after_key[start_of_array..];
+    //     let string_close = "</array>";
+    //     let Some(close_pos) = rest_after_open.find(string_close) else {
+    //         println!("provision profile does not contain valid syntax: </array>");
+    //         return Ok(false);
+    //     };
+    //     let array_content = &rest_after_open[..close_pos];
+    //     let device_entry = format!("<string>{}</string>", udid);
+    //     //check if the profile contains the device id
+    //     println!("checking if array content: {:?} contains device entry: {:?}", &array_content, &device_entry);
+    //     if array_content.contains(&device_entry) {
+    //         println!("provisioning profile contains the device id...checking device for installation");
+    //         //check that the profile is installed on the device
+    //         if let Some(key_pos) = xml.find("<key>Name</key>") {
+    //             if let Some(string_start) = xml[key_pos..].find("<string>") {
+    //                 let start = key_pos + string_start + "<string>".len();
+    //                 if let Some(string_end) = xml[start..].find("</string>") {
+    //                     let profile_name = xml[start..start + string_end].trim().to_string();
+    //                     if !profile_name.is_empty() {
+    //                         //list the installed provisions
+    //                         let output = Command::new(format!("{}/ideviceprovision", session.get_path("homebrew_path")?))
+    //                             .args(["list", "--udid", udid])
+    //                             .output()?;
+    //                         if !output.status.success() {
+    //                             return Err(io::Error::new(io::ErrorKind::Other, "failed to list provisioning profiles: {}",));
+    //                         }
+    //                         let profiles = String::from_utf8_lossy(&output.stdout);
+    //                         if profiles.contains(&profile_name) {
+    //                             println!("target device is already provisioned");
+    //                             return Ok(true)
+    //                         }else{
+    //                             println!("provisioning profile is not currently installed on the target device");
+    //                             return Ok(false)
+    //                         }
+    //                     }
+    //                 }
+    //             }
+    //         }
+    //         return Err(io::Error::new(io::ErrorKind::Other, "Name not found in provisioning profile: {}",));
+    //     } else {
+    //         println!("target device is not provisioned");
+    //         Ok(false)
+    //     }
+    // }
+}
+

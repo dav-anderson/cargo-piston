@@ -292,7 +292,7 @@ let cwd = match env::current_dir(){
             },
             Platform::Ios => {
             println!("build orders received for IOS targeting {:?}, release is set to {:?}", cmd.target(), release);
-            IOSBuilder::start(release, target_string, cwd, env_vars)?;
+            IOSBuilder::start(release, target_string, cwd, env_vars, None)?;
             },
             Platform::Linux => {
             println!("build orders received for Linux targeting {:?}, release is set to {:?}", cmd.target(), release);

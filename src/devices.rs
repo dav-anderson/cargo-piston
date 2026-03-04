@@ -5,7 +5,7 @@ use std::process::Stdio;
 use regex::Regex;
 use crate::error::PistonError;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct IOSDevice {
 model: String,
 pub id: String,
