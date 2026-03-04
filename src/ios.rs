@@ -303,12 +303,11 @@ impl IOSRunner{
 
     pub fn start(release: bool, cwd: PathBuf, env_vars: HashMap<String, String>, device: &IOSDevice) -> Result<(), PistonError> {
         println!("running for IOS");
+        let target_string = "aarch64-apple-ios".to_string();
         if std::env::consts::OS != "macos"{
             println!("error cannot run mac on linux");
-            // return Err(PistonError::UnsupportedOSError{os: std::env::consts::OS.to_string(), target: target})
+            return Err(PistonError::UnsupportedOSError{os: std::env::consts::OS.to_string(), target: target_string})
         }
-
-        let target_string = "aarch64-apple-ios".to_string();
 
         let builder = IOSBuilder::start(release, target_string, cwd, env_vars, Some(device.clone()))?;
 
