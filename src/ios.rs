@@ -5,25 +5,14 @@ use std::io::{ Write };
 use cargo_metadata::{ Metadata, MetadataCommand };
 use std::fs::{ copy,File, create_dir_all, remove_file };
 use serde::Deserialize;
-use serde_json::Value;
+use serde_json::{ Value, json };
 use crate::Helper;
 use crate::PistonError;
 use crate::devices::IOSDevice;
 
-// use anyhow::{Context, Result};
-// use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
-// use openssl::asn1::Asn1Time;
-// use openssl::bn::BigNum;
-// use openssl::hash::MessageDigest;
-// use openssl::nid::Nid;
-// use openssl::pkey::{PKey, Private};
-// use openssl::rsa::Rsa;
-// use openssl::x509::extension::{BasicConstraints, KeyUsage, SubjectKeyIdentifier};
-// use openssl::x509::{X509NameBuilder, X509ReqBuilder, X509Req};
-// use reqwest::blocking::Client;
-// use serde::{Deserialize, Serialize};
-// use std::fs;
-// use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::fs;
+use std::time::{SystemTime, UNIX_EPOCH};
+use ureq::Response;
 
 
 #[derive(Deserialize, Default)]
@@ -55,8 +44,15 @@ impl IOSBuilder {
         if std::env::consts::OS != "macos"{
             return Err(PistonError::UnsupportedOSError{os: std::env::consts::OS.to_string(), target: target})
         }
-        let mut op = IOSBuilder::new(release, target, cwd, env_vars)?;
         //TODO check for signing certificate & sign?
+        let asc_api_key: Option<AscApiKey> = match AscApiKey::from_hm(&env_vars) {
+            Ok(key) => Some(key),
+            Err(e) => {
+                println!("Error populating AscApiKey, check .env configuration: {}", e);
+                None
+            }
+        };
+        let mut op = IOSBuilder::new(release, target, cwd, env_vars)?;
         //>>prebuild
         op.pre_build()?;
 
@@ -290,6 +286,19 @@ impl IOSRunner {
             println!("error cannot run mac on linux");
             // return Err(PistonError::UnsupportedOSError{os: std::env::consts::OS.to_string(), target: target})
         }
+
+        //TODO FOR TESTING ONLY, REMOVE EITHER THIS ONE OR THE ONE IN BUILDER
+
+        let asc_api_key: Option<AscApiKey> = match AscApiKey::from_hm(&env_vars) {
+            Ok(key) => Some(key),
+            Err(e) => {
+                println!("Error populating AscApiKey, check .env configuration: {}", e);
+                None
+            }
+        };
+
+        println!("asc_api_key: {:?}", asc_api_key);
+
         Ok(())
     }
 
@@ -334,6 +343,37 @@ impl IOSRunner {
         //     return Err(io::Error::new(io::ErrorKind::Other, "could not launch app bundle to IOS device via USB tether"));
         // }
         Ok(())
+    }
+}
+
+#[derive(Debug)]
+pub struct AscApiKey {
+    pub key_id: String,
+    pub issuer_id: String,
+    pub priv_key: String,
+}
+
+impl AscApiKey {
+    pub fn from_hm(env: &HashMap<String, String>) -> Result<Self, String> {
+        let key_id = env.get("asc_key_id")
+            .ok_or("Missing ASC_KEY_ID in .env")
+            .clone();
+        println!("asc key id: {:?}", key_id);
+
+        let issuer_id = env.get("asc_issuer_id")
+            .ok_or("Missing ASC_ISSUER_ID in .env")
+            .clone();
+        println!("asc key issuer id: {:?}", issuer_id);
+        
+        let p8_path = env.get("asc_key_path")
+            .ok_or("Missing ASC_KEY_PATH in .env")
+            .clone();
+        println!("asc p8 path: {:?}", p8_path);
+
+        let priv_key = fs::read_to_string(&p8_path.unwrap())
+            .map_err(|e| format!("failed to read .p8 file at {:?}: {:?}", p8_path, e))?;
+
+        Ok(Self { key_id: key_id.unwrap().to_string(), issuer_id: issuer_id.unwrap().to_string(), priv_key: priv_key})
     }
 }
 

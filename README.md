@@ -194,15 +194,21 @@ After you've installed the X code app and command line tools, point xcode-select
 
 `sudo xcodebuild -license accept`
 
-<!-- ### Create Apple Dev API key
+### Create Apple Dev API key
 
-Create an Apple Developer API key through your apple developer portal and add your API key to the .env
+Create an App Store Connect API key through your apple developer portal at the following URL. This MUST be an admin key. A developer key will not have sufficient priveleges to access the device provisioning endpoints.
 
-When obtained from apple developer portal, the key file will look like this
+`appstoreconnect.apple.com/access/integrations/api`
 
-`AuthKey_1AB23CDEFG.p8`
+After creating and downloading the API key, add your `asc_key_path` to the `.env`
 
-`apple_api=path/to/authkey` -->
+When downloaded from apple developer portal, the key file will look like this
+
+`~/Downloads/AuthKey_1AB23CDEFG.p8`
+
+`asc_key_path=path/to/authkey`
+
+Also add the `asc_key_id` and the `asc_issuer_id` to the `.env`, these items are obtainable from `appstoreconnect.apple.com/access/integrations/api`. The `asc_issuer_ID` can be found at the top of the key list, and the  The `asc_key_id` can be found in the row corresponding to the key you've chosen. This `asc_key_id` should match the filename of the key you've selected in the `asc_key_path`.
 
 ## IOS Output Configuration (MACOS ONLY & after completing the MacOS setup above)
 

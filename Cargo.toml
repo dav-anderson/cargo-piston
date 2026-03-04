@@ -15,7 +15,8 @@ cargo_metadata = "0.23.1"
 serde_json = "1.0.145"
 image = "0.25.9"
 regex = "1.11.1"
-#reqwest = { version = "0.12.25", features = ["json", "blocking"] }
-#jsonwebtoken = "10.2.0"
+ureq = { version = "2", features = ["json"] }
+jsonwebtoken = "10.2.0"
 serde = { version = "1.0.228", features = ["derive"] }
-#openssl = "0.10.75"
+base64 = "0.22"
+
