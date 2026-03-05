@@ -4,7 +4,7 @@ use std::process::{ Command, Stdio };
 use std::io::{ Write };
 use cargo_metadata::{ Metadata, MetadataCommand };
 use std::fs::{ copy,File, create_dir_all, remove_file };
-use serde::Deserialize;
+use serde::{ Serialize, Deserialize };
 use serde_json::{ Value, json };
 use crate::Helper;
 use crate::PistonError;
@@ -237,21 +237,33 @@ impl IOSBuilder {
             Helper::resize_png(&self.icon_path.as_ref().unwrap(), &icon_path180.display().to_string(), 180, 180)?;
         }
 
+        //TODO check for apple signing certificate
+        //if the user has specified a signing certificate in the .env, use that
+        //check if the user provided signing certificate exists and is valid for the requested operation
+        //otherwise create one if api access is avaialble and create a signing certificate
+
+        //if the user includes the release flag in the build, we must assume an IOS distirbution cert is needed
+        //AKA IOS_APP_ADHOC profile type cert 
+        // If not flagging for release we should assume IOS Development certificate is needed
+        //AKA IOS_APP_DEVELOPMENT profile type cert
+
+        //see AscClient Struct and methods
+
+        //if a device target is provided, check if the target device is provisioned
         if !self.device_target.is_none() {
             println!("device target exists, checking for existing provisioning");
-            //check if device is provisioned
             let output_path = self.output_path.clone().unwrap();
             let target_id = self.device_target.clone().unwrap().id;
             let target_udid = self.device_target.clone().unwrap().udid;
             let idp_path = self.idp_path.clone().unwrap();
             let provisioned = Provision::is_device_provisioned(&output_path, &target_id, &target_udid, &idp_path)?;
-            //TODO if device is not provisioned and api access is available, attempt to provision
+            //if device is not provisioned and api access is available, attempt to provision
             if provisioned == false && !self.asc_api_key.is_none() {
-                println!("valid asc api key found, attempting to provision target device {:?}", self.device_target);
+                println!("attempting to provision target device {:?}", self.device_target);
+                //TODO provision device here
             }
 
         }
-        //TODO check for apple signing certificate
         println!("done configuring ios bundle");
         Ok(())
         
@@ -389,148 +401,240 @@ pub struct AscClient {
 
 impl AscClient {
 
-    // fn generate_jwt(&self) -> Result<String, String> {
-    //     let exp = SystemTime::now()
-    //         .duration_since(UNIX_EPOCH)
-    //         .unwrap()
-    //         .as_secs() as usize + 1200;
+    //TODO this
+    // Creates a new iOS Development certificate (or re-uses if one already exists for this machine)
+    // Returns: (certificate_id, signing_identity_name)
+    pub fn create_or_find_development_certificate(
+        &self,
+        common_name: &str,   // e.g. "Heavily Armed Clown Development"
+    ) -> Result<(String, String), String> {
+        let token = self.generate_jwt()?;
 
-    //     #[derive(Serialize)]
-    //     struct Claims {
-    //         iss: String,
-    //         exp: usize,
-    //         aud: String,
-    //     }
+        // 1. Check if we already have a valid development certificate in ASC
+        let list_resp: Response = ureq::get("https://api.appstoreconnect.apple.com/v1/certificates")
+            .set("Authorization", &format!("Bearer {}", token))
+            .query("filter[certificateType]", "IOS_DEVELOPMENT")
+            .call()
+            .map_err(|e| format!("Failed to list certificates: {}", e))?;
 
-    //     let claims = Claims {
-    //         iss: self.api_key.issuer_id.clone(),
-    //         exp,
-    //         aud: "appstoreconnect-v1".to_string(),
-    //     };
+        let json: serde_json::Value = list_resp.into_json().map_err(|e| e.to_string())?;
+        if let Some(existing) = json["data"].as_array().and_then(|arr| arr.first()) {
+            let cert_id = existing["id"].as_str().unwrap().to_string();
+            let identity = format!("Apple Development: {} ({})", common_name, "YOUR_TEAM_ID"); // we'll improve this later
+            println!("✅ Re-using existing development certificate (ID: {})", cert_id);
+            return Ok((cert_id, identity));
+        }
 
-    //     let header = jsonwebtoken::Header::new(jsonwebtoken::Algorithm::ES256);
-    //     let key = jsonwebtoken::EncodingKey::from_ec_pem(self.api_key.private_key.as_bytes())
-    //         .map_err(|e| format!("Invalid .p8 key: {}", e))?;
+        // 2. Generate private key + CSR using openssl (no extra deps)
+        let key_path = "temp_dev_key.p8";
+        let csr_path = "temp_dev_csr.csr";
 
-    //     jsonwebtoken::encode(&header, &claims, &key).map_err(|e| e.to_string())
-    // }
+        std::process::Command::new("openssl")
+            .args(["genpkey", "-algorithm", "RSA", "-out", key_path, "-pkeyopt", "rsa_keygen_bits:2048"])
+            .output()
+            .map_err(|e| format!("openssl keygen failed: {}", e))?;
 
-    // // ──────────────────────────────────────────────────────────────
-    // // Public methods (everything you asked for)
-    // // ──────────────────────────────────────────────────────────────
-    // pub fn register_ios_device(&self, ios_device: &IOSDevice) -> Result<String, String> {
-    //     let token = self.generate_jwt()?;
+        std::process::Command::new("openssl")
+            .args([
+                "req", "-new", "-key", key_path,
+                "-out", csr_path,
+                "-subj", &format!("/CN={}", common_name),
+            ])
+            .output()
+            .map_err(|e| format!("openssl csr failed: {}", e))?;
 
-    //     let body = json!({
-    //         "data": {
-    //             "type": "devices",
-    //             "attributes": {
-    //                 "name": &ios_device.model,
-    //                 "udid": &ios_device.udid,
-    //                 "platform": "IOS"
-    //             }
-    //         }
-    //     });
+        let csr_content = fs::read_to_string(csr_path)
+            .map_err(|e| format!("Failed to read CSR: {}", e))?;
 
-    //     let resp: Response = ureq::post("https://api.appstoreconnect.apple.com/v1/devices")
-    //         .set("Authorization", &format!("Bearer {}", token))
-    //         .set("Content-Type", "application/json")
-    //         .send_json(&body)
-    //         .map_err(|e| format!("Device registration failed: {}", e))?;
+        // 3. Upload CSR to ASC
+        let body = json!({
+            "data": {
+                "type": "certificates",
+                "attributes": {
+                    "certificateType": "IOS_DEVELOPMENT",
+                    "csrContent": csr_content
+                }
+            }
+        });
 
-    //     let json: serde_json::Value = resp.into_json().map_err(|e| e.to_string())?;
-    //     let resource_id = json["data"]["id"].as_str().unwrap_or("").to_string();
+        let create_resp: Response = ureq::post("https://api.appstoreconnect.apple.com/v1/certificates")
+            .set("Authorization", &format!("Bearer {}", token))
+            .set("Content-Type", "application/json")
+            .send_json(&body)
+            .map_err(|e| format!("Certificate creation failed: {}", e))?;
 
-    //     println!("✅ Device registered in ASC (resource ID: {})", resource_id);
-    //     Ok(resource_id)
-    // }
+        let json: serde_json::Value = create_resp.into_json().map_err(|e| e.to_string())?;
+        let cert_id = json["data"]["id"].as_str().unwrap().to_string();
 
-    // pub fn find_or_create_bundle_id(&self, bundle_id: &str, name: &str) -> Result<String, String> {
-    //     let token = self.generate_jwt()?;
+        // 4. Download the signed certificate
+        let cert_b64 = json["data"]["attributes"]["certificateContent"]
+            .as_str()
+            .ok_or("No certificateContent returned")?;
 
-    //     let search: Response = ureq::get("https://api.appstoreconnect.apple.com/v1/bundleIds")
-    //         .set("Authorization", &format!("Bearer {}", token))
-    //         .query("filter[identifier]", bundle_id)
-    //         .call()
-    //         .map_err(|e| e.to_string())?;
+        let cert_der = base64::decode(cert_b64).map_err(|e| format!("Base64 decode failed: {}", e))?;
+        let cer_path = "temp_dev_cert.cer";
+        fs::write(&cer_path, cert_der).map_err(|e| e.to_string())?;
 
-    //     let json: serde_json::Value = search.into_json().map_err(|e| e.to_string())?;
-    //     if let Some(first) = json["data"].as_array().and_then(|a| a.first()) {
-    //         return Ok(first["id"].as_str().unwrap().to_string());
-    //     }
+        // 5. Import into macOS keychain (private key + cert)
+        std::process::Command::new("security")
+            .args(["import", cer_path, "-k", "login.keychain", "-T", "/usr/bin/codesign"])
+            .output()
+            .map_err(|e| format!("security import failed: {}", e))?;
 
-    //     let body = json!({
-    //         "data": {
-    //             "type": "bundleIds",
-    //             "attributes": {
-    //                 "identifier": bundle_id,
-    //                 "name": name,
-    //                 "platform": "IOS"
-    //             }
-    //         }
-    //     });
+        // Clean up temp files
+        let _ = fs::remove_file(key_path);
+        let _ = fs::remove_file(csr_path);
+        let _ = fs::remove_file(cer_path);
 
-    //     let resp: Response = ureq::post("https://api.appstoreconnect.apple.com/v1/bundleIds")
-    //         .set("Authorization", &format!("Bearer {}", token))
-    //         .set("Content-Type", "application/json")
-    //         .send_json(&body)
-    //         .map_err(|e| format!("Bundle ID creation failed: {}", e))?;
+        let signing_identity = format!("Apple Development: {} (Team ID will be auto-detected)", common_name);
+        println!("✅ New development certificate created (ID: {})", cert_id);
 
-    //     let json: serde_json::Value = resp.into_json().map_err(|e| e.to_string())?;
-    //     Ok(json["data"]["id"].as_str().unwrap().to_string())
-    // }
+        Ok((cert_id, signing_identity))
+    }
 
-    // pub fn create_development_profile(
-    //     &self,
-    //     bundle_resource_id: &str,
-    //     certificate_id: &str,      // still needed once (we can automate later)
-    //     device_resource_id: &str,
-    //     profile_name: &str,
-    // ) -> Result<String, String> {
-    //     let token = self.generate_jwt()?;
+    //TODO this
+    fn generate_jwt(&self) -> Result<String, String> {
+        let exp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as usize + 1200;
 
-    //     let body = json!({
-    //         "data": {
-    //             "type": "profiles",
-    //             "attributes": { "name": profile_name, "profileType": "IOS_APP_DEVELOPMENT" },
-    //             "relationships": {
-    //                 "bundleId": { "data": { "type": "bundleIds", "id": bundle_resource_id } },
-    //                 "certificates": { "data": [{ "type": "certificates", "id": certificate_id }] },
-    //                 "devices": { "data": [{ "type": "devices", "id": device_resource_id }] }
-    //             }
-    //         }
-    //     });
+        #[derive(Serialize, Deserialize)]
+        struct Claims {
+            iss: String,
+            exp: usize,
+            aud: String,
+        }
 
-    //     let create_resp: Response = ureq::post("https://api.appstoreconnect.apple.com/v1/profiles")
-    //         .set("Authorization", &format!("Bearer {}", token))
-    //         .set("Content-Type", "application/json")
-    //         .send_json(&body)
-    //         .map_err(|e| format!("Profile creation failed: {}", e))?;
+        let claims = Claims {
+            iss: self.api_key.issuer_id.clone(),
+            exp,
+            aud: "appstoreconnect-v1".to_string(),
+        };
 
-    //     let json: serde_json::Value = create_resp.into_json().map_err(|e| e.to_string())?;
-    //     let profile_id = json["data"]["id"].as_str().unwrap().to_string();
+        let header = jsonwebtoken::Header::new(jsonwebtoken::Algorithm::ES256);
+        let key = jsonwebtoken::EncodingKey::from_ec_pem(self.api_key.priv_key.as_bytes())
+            .map_err(|e| format!("Invalid .p8 key: {}", e))?;
 
-    //     let get_resp: Response = ureq::get(&format!(
-    //         "https://api.appstoreconnect.apple.com/v1/profiles/{}",
-    //         profile_id
-    //     ))
-    //     .set("Authorization", &format!("Bearer {}", token))
-    //     .call()
-    //     .map_err(|e| e.to_string())?;
+        jsonwebtoken::encode(&header, &claims, &key).map_err(|e| e.to_string())
+    }
 
-    //     let profile_json: serde_json::Value = get_resp.into_json().map_err(|e| e.to_string())?;
-    //     let b64 = profile_json["data"]["attributes"]["profileContent"]
-    //         .as_str()
-    //         .ok_or("No profileContent returned")?;
+    //TODO this
+    pub fn register_ios_device(&self, ios_device: &IOSDevice) -> Result<String, String> {
+        let token = self.generate_jwt()?;
 
-    //     let decoded = base64::decode(b64).map_err(|e| format!("Base64 decode failed: {}", e))?;
+        let body = json!({
+            "data": {
+                "type": "devices",
+                "attributes": {
+                    "name": &ios_device.model,
+                    "udid": &ios_device.udid,
+                    "platform": "IOS"
+                }
+            }
+        });
 
-    //     let profile_path = format!("{}.mobileprovision", profile_name.replace(' ', "-"));
-    //     fs::write(&profile_path, decoded).map_err(|e| e.to_string())?;
+        let resp: Response = ureq::post("https://api.appstoreconnect.apple.com/v1/devices")
+            .set("Authorization", &format!("Bearer {}", token))
+            .set("Content-Type", "application/json")
+            .send_json(&body)
+            .map_err(|e| format!("Device registration failed: {}", e))?;
 
-    //     println!("✅ Profile saved → {}", profile_path);
-    //     Ok(profile_path)
-    // }
+        let json: serde_json::Value = resp.into_json().map_err(|e| e.to_string())?;
+        let resource_id = json["data"]["id"].as_str().unwrap_or("").to_string();
+
+        println!("✅ Device registered in ASC (resource ID: {})", resource_id);
+        Ok(resource_id)
+    }
+
+    //TODO this
+    pub fn find_or_create_bundle_id(&self, bundle_id: &str, name: &str) -> Result<String, String> {
+        let token = self.generate_jwt()?;
+
+        let search: Response = ureq::get("https://api.appstoreconnect.apple.com/v1/bundleIds")
+            .set("Authorization", &format!("Bearer {}", token))
+            .query("filter[identifier]", bundle_id)
+            .call()
+            .map_err(|e| e.to_string())?;
+
+        let json: serde_json::Value = search.into_json().map_err(|e| e.to_string())?;
+        if let Some(first) = json["data"].as_array().and_then(|a| a.first()) {
+            return Ok(first["id"].as_str().unwrap().to_string());
+        }
+
+        let body = json!({
+            "data": {
+                "type": "bundleIds",
+                "attributes": {
+                    "identifier": bundle_id,
+                    "name": name,
+                    "platform": "IOS"
+                }
+            }
+        });
+
+        let resp: Response = ureq::post("https://api.appstoreconnect.apple.com/v1/bundleIds")
+            .set("Authorization", &format!("Bearer {}", token))
+            .set("Content-Type", "application/json")
+            .send_json(&body)
+            .map_err(|e| format!("Bundle ID creation failed: {}", e))?;
+
+        let json: serde_json::Value = resp.into_json().map_err(|e| e.to_string())?;
+        Ok(json["data"]["id"].as_str().unwrap().to_string())
+    }
+
+    //TODO This
+    pub fn create_development_profile(
+        &self,
+        bundle_resource_id: &str,
+        certificate_id: &str,      // still needed once (we can automate later)
+        device_resource_id: &str,
+        profile_name: &str,
+    ) -> Result<String, String> {
+        let token = self.generate_jwt()?;
+
+        let body = json!({
+            "data": {
+                "type": "profiles",
+                "attributes": { "name": profile_name, "profileType": "IOS_APP_DEVELOPMENT" },
+                "relationships": {
+                    "bundleId": { "data": { "type": "bundleIds", "id": bundle_resource_id } },
+                    "certificates": { "data": [{ "type": "certificates", "id": certificate_id }] },
+                    "devices": { "data": [{ "type": "devices", "id": device_resource_id }] }
+                }
+            }
+        });
+
+        let create_resp: Response = ureq::post("https://api.appstoreconnect.apple.com/v1/profiles")
+            .set("Authorization", &format!("Bearer {}", token))
+            .set("Content-Type", "application/json")
+            .send_json(&body)
+            .map_err(|e| format!("Profile creation failed: {}", e))?;
+
+        let json: serde_json::Value = create_resp.into_json().map_err(|e| e.to_string())?;
+        let profile_id = json["data"]["id"].as_str().unwrap().to_string();
+
+        let get_resp: Response = ureq::get(&format!(
+            "https://api.appstoreconnect.apple.com/v1/profiles/{}",
+            profile_id
+        ))
+        .set("Authorization", &format!("Bearer {}", token))
+        .call()
+        .map_err(|e| e.to_string())?;
+
+        let profile_json: serde_json::Value = get_resp.into_json().map_err(|e| e.to_string())?;
+        let b64 = profile_json["data"]["attributes"]["profileContent"]
+            .as_str()
+            .ok_or("No profileContent returned")?;
+
+        let decoded = base64::decode(b64).map_err(|e| format!("Base64 decode failed: {}", e))?;
+
+        let profile_path = format!("{}.mobileprovision", profile_name.replace(' ', "-"));
+        fs::write(&profile_path, decoded).map_err(|e| e.to_string())?;
+
+        println!("✅ Profile saved → {}", profile_path);
+        Ok(profile_path)
+    }
 }
 
 pub struct Provision {}

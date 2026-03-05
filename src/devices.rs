@@ -7,7 +7,7 @@ use crate::error::PistonError;
 
 #[derive(Debug, Clone)]
 pub struct IOSDevice {
-model: String,
+pub model: String,
 pub id: String,
 pub udid: String,
 }
