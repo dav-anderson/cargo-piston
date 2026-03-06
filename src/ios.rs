@@ -6,6 +6,8 @@ use cargo_metadata::{ Metadata, MetadataCommand };
 use std::fs::{ copy,File, create_dir_all, remove_file };
 use serde::{ Serialize, Deserialize };
 use serde_json::{ Value, json };
+use std::thread::sleep;
+use std::time::Duration;
 use crate::Helper;
 use crate::PistonError;
 use crate::devices::IOSDevice;
@@ -34,8 +36,11 @@ pub struct IOSBuilder {
     bundle_id: String,
     min_os_version: f32,
     asc_api_key: Option<AscApiKey>,
+    dev_name: Option<String>,
     device_target: Option<IOSDevice>,
     idp_path: Option<String>,
+    apple_cer: Option<String>,
+    keystore_path: Option<String>,
 }
 
 impl IOSBuilder {
@@ -66,6 +71,9 @@ impl IOSBuilder {
         //parse env vars
         let cargo_path = env_vars.get("cargo_path").cloned().unwrap_or("cargo".to_string());
         let idp_path = env_vars.get("idp_path").cloned();
+        let apple_cer = env_vars.get("apple_cer").cloned();
+        let dev_name = env_vars.get("dev_name").cloned();
+        let keystore_path = env_vars.get("keystore_path").cloned();
         println!("Cargo path determined: {}", &cargo_path);
         //parse cargo.toml
         let metadata: Metadata = MetadataCommand::new()
@@ -89,7 +97,24 @@ impl IOSBuilder {
 
         println!("asc_api_key: {:?}", asc_api_key);
 
-        Ok(IOSBuilder{release: release, target: target.to_string(), cwd: cwd, output_path: None, icon_path: icon_path, cargo_path: cargo_path, app_name: app_name, app_version: app_version, bundle_id: bundle_id, min_os_version: min_os_version, asc_api_key: asc_api_key, device_target: device_target, idp_path: idp_path})
+        Ok(IOSBuilder{
+            release: release, 
+            target: target.to_string(), 
+            cwd: cwd, 
+            output_path: None, 
+            icon_path: icon_path, 
+            cargo_path: cargo_path, 
+            app_name: app_name, 
+            app_version: app_version, 
+            bundle_id: bundle_id, 
+            min_os_version: min_os_version, 
+            asc_api_key: asc_api_key,
+            dev_name: dev_name,
+            device_target: device_target, 
+            idp_path: idp_path,
+            apple_cer: apple_cer,
+            keystore_path: keystore_path,
+        })
     }
 
     fn pre_build(&mut self) -> Result <(), PistonError>{
@@ -238,29 +263,37 @@ impl IOSBuilder {
         }
 
         //TODO check for apple signing certificate
-        //if the user has specified a signing certificate in the .env, use that
-        //check if the user provided signing certificate exists and is valid for the requested operation
-        //otherwise create one if api access is avaialble and create a signing certificate
+        if self.keystore_path.is_none() {
+            println!("No keystore path provided, skipping automated signing");
+        } else {
+            let asc_client = AscClient{ api_key: self.asc_api_key.clone(), keystore_path: self.keystore_path.clone().unwrap()};
+            //TODO error check this result
+            asc_client.create_or_find_security_certificate(self.apple_cer.clone(), self.dev_name.clone(), true);
 
-        //if the user includes the release flag in the build, we must assume an IOS distirbution cert is needed
-        //AKA IOS_APP_ADHOC profile type cert 
-        // If not flagging for release we should assume IOS Development certificate is needed
-        //AKA IOS_APP_DEVELOPMENT profile type cert
 
-        //see AscClient Struct and methods
+            //check if the user provided signing certificate exists and is valid for the requested operation
+            //otherwise create one if api access is avaialble and create a signing certificate
 
-        //if a device target is provided, check if the target device is provisioned
-        if !self.device_target.is_none() {
-            println!("device target exists, checking for existing provisioning");
-            let output_path = self.output_path.clone().unwrap();
-            let target_id = self.device_target.clone().unwrap().id;
-            let target_udid = self.device_target.clone().unwrap().udid;
-            let idp_path = self.idp_path.clone().unwrap();
-            let provisioned = Provision::is_device_provisioned(&output_path, &target_id, &target_udid, &idp_path)?;
-            //if device is not provisioned and api access is available, attempt to provision
-            if provisioned == false && !self.asc_api_key.is_none() {
-                println!("attempting to provision target device {:?}", self.device_target);
-                //TODO provision device here
+            //if the user includes the release flag in the build, we must assume an IOS distirbution cert is needed
+            //AKA IOS_APP_ADHOC profile type cert 
+            // If not flagging for release we should assume IOS Development certificate is needed
+            //AKA IOS_APP_DEVELOPMENT profile type cert
+
+            //see AscClient Struct and methods
+
+            //if a device target is provided, check if the target device is provisioned
+            if !self.device_target.is_none() {
+                println!("device target exists, checking for existing provisioning");
+                let output_path = self.output_path.clone().unwrap();
+                let target_id = self.device_target.clone().unwrap().id;
+                let target_udid = self.device_target.clone().unwrap().udid;
+                let idp_path = self.idp_path.clone().unwrap();
+                let provisioned = Provision::is_device_provisioned(&output_path, &target_id, &target_udid, &idp_path)?;
+                //if device is not provisioned and api access is available, attempt to provision
+                if provisioned == false && !self.asc_api_key.is_none() {
+                    println!("attempting to provision target device {:?}", self.device_target);
+                    //TODO provision device here
+                }
             }
 
         }
@@ -366,7 +399,7 @@ impl IOSRunner{
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct AscApiKey {
     pub key_id: String,
     pub issuer_id: String,
@@ -396,31 +429,59 @@ impl AscApiKey {
 
 #[derive(Debug)]
 pub struct AscClient {
-    api_key: AscApiKey,
+    api_key: Option<AscApiKey>,
+    keystore_path: String,
 }
 
 impl AscClient {
 
-    //TODO this
-    // Creates a new iOS Development certificate (or re-uses if one already exists for this machine)
+    // Creates a new iOS security certificate (or re-uses if one already exists for this machine)
     // Returns: (certificate_id, signing_identity_name)
-    pub fn create_or_find_development_certificate(
+    pub fn create_or_find_security_certificate(
         &self,
-        common_name: &str,   // e.g. "Heavily Armed Clown Development"
+        dev_name: Option<String>,   // e.g. "Heavily Armed Clown Development"
+        apple_cer: Option<String>,
+        distribution: bool,
     ) -> Result<(String, String), String> {
+
+        //TODO first check if keychain is unlocked
+
+        loop{
+            let output = Command::new("security")
+                .args(["show-keychain-info", &format!("/login.keychain-db")])
+                .output()
+                .unwrap();
+            
+            if output.status.success() && !String::from_utf8_lossy(&output.stdout).contains("locked") {
+                break;
+            }else{
+                // wait 3 seconds
+                sleep(Duration::from_secs(3));
+            }
+        }
+
+        //TODO if the user has specified a signing certificate in the .env, verify this is valid and use it
+        if apple_cer.is_none() {
+            println!("apple cer provided: {:?}", apple_cer);
+        }
+
+        //TODO otherwise create one
+
+
         let token = self.generate_jwt()?;
+        let certificate_type = if distribution { "IOS_DISTRIBUTION" } else { "IOS_DEVELOPMENT" };
 
         // 1. Check if we already have a valid development certificate in ASC
         let list_resp: Response = ureq::get("https://api.appstoreconnect.apple.com/v1/certificates")
             .set("Authorization", &format!("Bearer {}", token))
-            .query("filter[certificateType]", "IOS_DEVELOPMENT")
+            .query("filter[certificateType]", certificate_type)
             .call()
             .map_err(|e| format!("Failed to list certificates: {}", e))?;
 
         let json: serde_json::Value = list_resp.into_json().map_err(|e| e.to_string())?;
         if let Some(existing) = json["data"].as_array().and_then(|arr| arr.first()) {
             let cert_id = existing["id"].as_str().unwrap().to_string();
-            let identity = format!("Apple Development: {} ({})", common_name, "YOUR_TEAM_ID"); // we'll improve this later
+            let identity = format!("Apple Development: {:?} ({})", dev_name, "YOUR_TEAM_ID"); // we'll improve this later
             println!("✅ Re-using existing development certificate (ID: {})", cert_id);
             return Ok((cert_id, identity));
         }
@@ -438,7 +499,7 @@ impl AscClient {
             .args([
                 "req", "-new", "-key", key_path,
                 "-out", csr_path,
-                "-subj", &format!("/CN={}", common_name),
+                "-subj", &format!("/CN={}", dev_name.clone().unwrap()),
             ])
             .output()
             .map_err(|e| format!("openssl csr failed: {}", e))?;
@@ -486,7 +547,7 @@ impl AscClient {
         let _ = fs::remove_file(csr_path);
         let _ = fs::remove_file(cer_path);
 
-        let signing_identity = format!("Apple Development: {} (Team ID will be auto-detected)", common_name);
+        let signing_identity = format!("Apple Development: {} (Team ID will be auto-detected)", dev_name.unwrap());
         println!("✅ New development certificate created (ID: {})", cert_id);
 
         Ok((cert_id, signing_identity))
@@ -507,13 +568,13 @@ impl AscClient {
         }
 
         let claims = Claims {
-            iss: self.api_key.issuer_id.clone(),
+            iss: self.api_key.as_ref().unwrap().issuer_id.clone(),
             exp,
             aud: "appstoreconnect-v1".to_string(),
         };
 
         let header = jsonwebtoken::Header::new(jsonwebtoken::Algorithm::ES256);
-        let key = jsonwebtoken::EncodingKey::from_ec_pem(self.api_key.priv_key.as_bytes())
+        let key = jsonwebtoken::EncodingKey::from_ec_pem(self.api_key.clone().unwrap().priv_key.as_bytes())
             .map_err(|e| format!("Invalid .p8 key: {}", e))?;
 
         jsonwebtoken::encode(&header, &claims, &key).map_err(|e| e.to_string())
