@@ -50,6 +50,24 @@ pub enum PistonError {
 
     XcrunDevicectlError(String),
 
+    KeyChainUnlockError(String),
+
+    KeyChainImportError(String),
+
+    IntoJSONError(String),
+
+    OpenSSLKeyGenError(String),
+    
+    OpenSSLCSRError(String),
+
+    ReadCSRError(String),
+
+    Base64DecodeError(String),
+
+    ASCClientParseEncodingKeyError(String),
+
+    ASCClientJWTEncodeError(String),
+
     UnsupportedOSError{ os: String, target: String },
 
     CopyFileError{ input_path: PathBuf, output_path: PathBuf, source: IoError },
@@ -73,6 +91,8 @@ pub enum PistonError {
     CreateDirAllError{ path: PathBuf, source: IoError },
 
     OpenImageError{ path: PathBuf, source: ImageError },
+
+    ASCClientUreqError{ endpoint: String, e: String },
 
     Generic(String)
 }
@@ -102,6 +122,15 @@ impl fmt::Display for PistonError {
             PistonError::ADBDevicesError(err) => write!(f, "Error Running 'ADB Devices', check installation and .env path: {}", err),
             PistonError::ParseUTF8Error(err) => write!(f, "Error Parsing UTF8: {}", err),
             PistonError::XcrunDevicectlError(err) => write!(f, "Failed to run devicectl command. Ensure Xcode 15+ is installed: {}", err),
+            PistonError::KeyChainUnlockError(err) => write!(f, "Failed to unlock the security keychain: {}", err),
+            PistonError::KeyChainImportError(err) => write!(f, "Failed to import profile to security keychain: {}", err),
+            PistonError::IntoJSONError(err) => write!(f, "Error converting into JSON: {}", err),
+            PistonError::OpenSSLKeyGenError(err) => write!(f, "Error Generating New Key with openssl: {}", err),
+            PistonError::OpenSSLCSRError(err) => write!(f, "Error Generating CSR with openssl: {}", err),
+            PistonError::ReadCSRError(err) => write!(f, "Error Reading CSR: {}", err),
+            PistonError::Base64DecodeError(err) => write!(f, "Error Decoding Base 64: {}", err),
+            PistonError::ASCClientParseEncodingKeyError(err) => write!(f, "Error parsing encoding key: {}", err),
+            PistonError::ASCClientJWTEncodeError(err) => write!(f, "Error encoding JWT: {}", err),
             PistonError::UnsupportedOSError{ os, target, .. } => write!(f, "Host system: {:?} does not support the target: {:?}", os, target),
             PistonError::CopyFileError { input_path, output_path, .. } => write!(f, "Failed to copy {:?} to {:?}", input_path, output_path),
             PistonError::MacOSIconError { input_path, output_path, .. } => write!(f, "Failed to format icon {:?} to {:?}", input_path, output_path),
@@ -114,6 +143,7 @@ impl fmt::Display for PistonError {
             PistonError::RenameFileError { path, .. } => write!(f, "Failed to Rename file {:?}", path),
             PistonError::CreateDirAllError { path, .. } => write!(f, "Failed to create dir all {:?}", path),
             PistonError::OpenImageError { path, .. } => write!(f, "Failed to open image {:?}", path),
+            PistonError::ASCClientUreqError { endpoint, .. } => write!(f, "ASC API error at endpint: {:?}", endpoint),
             PistonError::Generic(err) => write!(f, "Generic Error: {}", err)
         }
     }

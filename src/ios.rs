@@ -266,6 +266,7 @@ impl IOSBuilder {
         if self.keystore_path.is_none() {
             println!("No keystore path provided, skipping automated signing");
         } else {
+            println!("keystore path provided");
             let asc_client = AscClient{ api_key: self.asc_api_key.clone(), keystore_path: self.keystore_path.clone().unwrap()};
             //TODO error check this result
             asc_client.create_or_find_security_certificate(self.apple_cer.clone(), self.dev_name.clone(), true);
@@ -442,27 +443,35 @@ impl AscClient {
         dev_name: Option<String>,   // e.g. "Heavily Armed Clown Development"
         apple_cer: Option<String>,
         distribution: bool,
-    ) -> Result<(String, String), String> {
+    ) -> Result<(String, String), PistonError> {
+        println!("checking for existing security certificates");
+        // Trigger macOS unlock prompt (blocks until user unlocks or cancels)
+        let keychain_path = format!("{}/login.keychain-db", self.keystore_path.clone());
 
-        //TODO first check if keychain is unlocked
+        let unlock_result = Command::new("security")
+            .args(["unlock-keychain", &keychain_path])
+            .output();
 
-        loop{
-            let output = Command::new("security")
-                .args(["show-keychain-info", &format!("/login.keychain-db")])
-                .output()
-                .unwrap();
-            
-            if output.status.success() && !String::from_utf8_lossy(&output.stdout).contains("locked") {
-                break;
-            }else{
-                // wait 3 seconds
-                sleep(Duration::from_secs(3));
-            }
+        if let Err(e) = unlock_result {
+            return Err(PistonError::KeyChainUnlockError(format!("Failed to unlock keychain: {}", e)));
         }
+        //(fails fast if user cancelled)
+        let status = Command::new("security")
+            .args(["show-keychain-info", &keychain_path])
+            .output()
+            .map_err(|e| PistonError::KeyChainUnlockError(format!("Failed to check keychain status: {}", e)))?;
+
+        if String::from_utf8_lossy(&status.stdout).contains("locked") {
+            return Err(PistonError::KeyChainUnlockError("Keychain is still locked. User cancelled the unlock prompt.".to_string()));
+        }
+        println!("✅ Keychain unlocked");
 
         //TODO if the user has specified a signing certificate in the .env, verify this is valid and use it
         if apple_cer.is_none() {
             println!("apple cer provided: {:?}", apple_cer);
+        }
+        else{
+            println!("no apple cer provided in the .env");
         }
 
         //TODO otherwise create one
@@ -476,9 +485,12 @@ impl AscClient {
             .set("Authorization", &format!("Bearer {}", token))
             .query("filter[certificateType]", certificate_type)
             .call()
-            .map_err(|e| format!("Failed to list certificates: {}", e))?;
+            .map_err(|e| PistonError::ASCClientUreqError{
+                endpoint: "https://api.appstoreconnect.apple.com/v1/certificates".to_string(),
+                e:  format!("Existing security certificate get failed: {}", e),
+            })?;
 
-        let json: serde_json::Value = list_resp.into_json().map_err(|e| e.to_string())?;
+        let json: serde_json::Value = list_resp.into_json().map_err(|e| PistonError::IntoJSONError(e.to_string()))?;
         if let Some(existing) = json["data"].as_array().and_then(|arr| arr.first()) {
             let cert_id = existing["id"].as_str().unwrap().to_string();
             let identity = format!("Apple Development: {:?} ({})", dev_name, "YOUR_TEAM_ID"); // we'll improve this later
@@ -493,7 +505,7 @@ impl AscClient {
         std::process::Command::new("openssl")
             .args(["genpkey", "-algorithm", "RSA", "-out", key_path, "-pkeyopt", "rsa_keygen_bits:2048"])
             .output()
-            .map_err(|e| format!("openssl keygen failed: {}", e))?;
+            .map_err(|e| PistonError::OpenSSLKeyGenError(format!("openssl keygen failed: {}", e)))?;
 
         std::process::Command::new("openssl")
             .args([
@@ -502,10 +514,10 @@ impl AscClient {
                 "-subj", &format!("/CN={}", dev_name.clone().unwrap()),
             ])
             .output()
-            .map_err(|e| format!("openssl csr failed: {}", e))?;
+            .map_err(|e| PistonError::OpenSSLCSRError(format!("openssl csr failed: {}", e)))?;
 
         let csr_content = fs::read_to_string(csr_path)
-            .map_err(|e| format!("Failed to read CSR: {}", e))?;
+            .map_err(|e| PistonError::ReadCSRError(format!("Failed to read CSR: {}", e)))?;
 
         // 3. Upload CSR to ASC
         let body = json!({
@@ -522,25 +534,28 @@ impl AscClient {
             .set("Authorization", &format!("Bearer {}", token))
             .set("Content-Type", "application/json")
             .send_json(&body)
-            .map_err(|e| format!("Certificate creation failed: {}", e))?;
+            .map_err(|e| PistonError::ASCClientUreqError{
+                endpoint: "https://api.appstoreconnect.apple.com/v1/certificates".to_string(),
+                e:  format!("CSR Upload failed: {}", e),
+            })?;
 
-        let json: serde_json::Value = create_resp.into_json().map_err(|e| e.to_string())?;
+        let json: serde_json::Value = create_resp.into_json().map_err(|e| PistonError::IntoJSONError(e.to_string()))?;
         let cert_id = json["data"]["id"].as_str().unwrap().to_string();
 
         // 4. Download the signed certificate
         let cert_b64 = json["data"]["attributes"]["certificateContent"]
             .as_str()
-            .ok_or("No certificateContent returned")?;
+            .ok_or_else(|| PistonError::Generic("No certificateContent returned".to_string()))?;
 
-        let cert_der = base64::decode(cert_b64).map_err(|e| format!("Base64 decode failed: {}", e))?;
+        let cert_der = base64::decode(cert_b64).map_err(|e| PistonError::Base64DecodeError(format!("Base64 decode failed: {}", e)))?;
         let cer_path = "temp_dev_cert.cer";
-        fs::write(&cer_path, cert_der).map_err(|e| e.to_string())?;
+        fs::write(&cer_path, cert_der).map_err(|e| PistonError::WriteFileError(format!("Base64 decode failed: {}", e)))?;
 
         // 5. Import into macOS keychain (private key + cert)
         std::process::Command::new("security")
             .args(["import", cer_path, "-k", "login.keychain", "-T", "/usr/bin/codesign"])
             .output()
-            .map_err(|e| format!("security import failed: {}", e))?;
+            .map_err(|e| PistonError::KeyChainImportError(format!("security import failed: {}", e)))?;
 
         // Clean up temp files
         let _ = fs::remove_file(key_path);
@@ -554,7 +569,7 @@ impl AscClient {
     }
 
     //TODO this
-    fn generate_jwt(&self) -> Result<String, String> {
+    fn generate_jwt(&self) -> Result<String, PistonError> {
         let exp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
@@ -575,13 +590,13 @@ impl AscClient {
 
         let header = jsonwebtoken::Header::new(jsonwebtoken::Algorithm::ES256);
         let key = jsonwebtoken::EncodingKey::from_ec_pem(self.api_key.clone().unwrap().priv_key.as_bytes())
-            .map_err(|e| format!("Invalid .p8 key: {}", e))?;
+            .map_err(|e| PistonError::ASCClientParseEncodingKeyError(format!("Invalid .p8 key: {}", e)))?;
 
-        jsonwebtoken::encode(&header, &claims, &key).map_err(|e| e.to_string())
+        jsonwebtoken::encode(&header, &claims, &key).map_err(|e| PistonError::ASCClientJWTEncodeError(e.to_string()) )
     }
 
     //TODO this
-    pub fn register_ios_device(&self, ios_device: &IOSDevice) -> Result<String, String> {
+    pub fn register_ios_device(&self, ios_device: &IOSDevice) -> Result<String, PistonError> {
         let token = self.generate_jwt()?;
 
         let body = json!({
@@ -599,9 +614,12 @@ impl AscClient {
             .set("Authorization", &format!("Bearer {}", token))
             .set("Content-Type", "application/json")
             .send_json(&body)
-            .map_err(|e| format!("Device registration failed: {}", e))?;
+            .map_err(|e| PistonError::ASCClientUreqError{
+                endpoint: "https://api.appstoreconnect.apple.com/v1/devices".to_string(),
+                e: format!("Device Registration failed: {}", e),
+            })?;
 
-        let json: serde_json::Value = resp.into_json().map_err(|e| e.to_string())?;
+        let json: serde_json::Value = resp.into_json().map_err(|e| PistonError::IntoJSONError(e.to_string()))?;
         let resource_id = json["data"]["id"].as_str().unwrap_or("").to_string();
 
         println!("✅ Device registered in ASC (resource ID: {})", resource_id);
@@ -609,16 +627,19 @@ impl AscClient {
     }
 
     //TODO this
-    pub fn find_or_create_bundle_id(&self, bundle_id: &str, name: &str) -> Result<String, String> {
+    pub fn find_or_create_bundle_id(&self, bundle_id: &str, name: &str) -> Result<String, PistonError> {
         let token = self.generate_jwt()?;
 
         let search: Response = ureq::get("https://api.appstoreconnect.apple.com/v1/bundleIds")
             .set("Authorization", &format!("Bearer {}", token))
             .query("filter[identifier]", bundle_id)
             .call()
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| PistonError::ASCClientUreqError{
+                endpoint: "https://api.appstoreconnect.apple.com/v1/bundleIds".to_string(),
+                e: format!("Find bundle ID failed: {}", e),
+            })?;
 
-        let json: serde_json::Value = search.into_json().map_err(|e| e.to_string())?;
+        let json: serde_json::Value = search.into_json().map_err(|e| PistonError::IntoJSONError(e.to_string()))?;
         if let Some(first) = json["data"].as_array().and_then(|a| a.first()) {
             return Ok(first["id"].as_str().unwrap().to_string());
         }
@@ -638,9 +659,12 @@ impl AscClient {
             .set("Authorization", &format!("Bearer {}", token))
             .set("Content-Type", "application/json")
             .send_json(&body)
-            .map_err(|e| format!("Bundle ID creation failed: {}", e))?;
+            .map_err(|e| PistonError::ASCClientUreqError{
+                endpoint: "https://api.appstoreconnect.apple.com/v1/bundleIds".to_string(),
+                e:format!("BundleID creation failed: {}", e),
+            })?;
 
-        let json: serde_json::Value = resp.into_json().map_err(|e| e.to_string())?;
+        let json: serde_json::Value = resp.into_json().map_err(|e| PistonError::IntoJSONError(e.to_string()))?;
         Ok(json["data"]["id"].as_str().unwrap().to_string())
     }
 
@@ -651,7 +675,7 @@ impl AscClient {
         certificate_id: &str,      // still needed once (we can automate later)
         device_resource_id: &str,
         profile_name: &str,
-    ) -> Result<String, String> {
+    ) -> Result<String, PistonError> {
         let token = self.generate_jwt()?;
 
         let body = json!({
@@ -670,9 +694,12 @@ impl AscClient {
             .set("Authorization", &format!("Bearer {}", token))
             .set("Content-Type", "application/json")
             .send_json(&body)
-            .map_err(|e| format!("Profile creation failed: {}", e))?;
+            .map_err(|e| PistonError::ASCClientUreqError{
+                endpoint: "https://api.appstoreconnect.apple.com/v1/profiles".to_string(),
+                e: format!("Profile creation failed: {}", e),
+            })?;
 
-        let json: serde_json::Value = create_resp.into_json().map_err(|e| e.to_string())?;
+        let json: serde_json::Value = create_resp.into_json().map_err(|e| PistonError::IntoJSONError(e.to_string()))?;
         let profile_id = json["data"]["id"].as_str().unwrap().to_string();
 
         let get_resp: Response = ureq::get(&format!(
@@ -681,17 +708,20 @@ impl AscClient {
         ))
         .set("Authorization", &format!("Bearer {}", token))
         .call()
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| PistonError::ASCClientUreqError {
+            endpoint: format!("https://api.appstoreconnect.apple.com/v1/profiles/{}",profile_id),
+            e: e.to_string(),
+        })?;
 
-        let profile_json: serde_json::Value = get_resp.into_json().map_err(|e| e.to_string())?;
+        let profile_json: serde_json::Value = get_resp.into_json().map_err(|e| PistonError::IntoJSONError(e.to_string()))?;
         let b64 = profile_json["data"]["attributes"]["profileContent"]
             .as_str()
-            .ok_or("No profileContent returned")?;
+            .ok_or_else(|| PistonError::Generic("No profileContent returned".to_string()))?;
 
-        let decoded = base64::decode(b64).map_err(|e| format!("Base64 decode failed: {}", e))?;
+        let decoded = base64::decode(b64).map_err(|e| PistonError::Base64DecodeError(format!("Base64 decode failed: {}", e)))?;
 
         let profile_path = format!("{}.mobileprovision", profile_name.replace(' ', "-"));
-        fs::write(&profile_path, decoded).map_err(|e| e.to_string())?;
+        fs::write(&profile_path, decoded).map_err(|e| PistonError::WriteFileError(e.to_string()))?;
 
         println!("✅ Profile saved → {}", profile_path);
         Ok(profile_path)
