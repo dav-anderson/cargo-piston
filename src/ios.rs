@@ -36,10 +36,8 @@ pub struct IOSBuilder {
     bundle_id: String,
     min_os_version: f32,
     asc_api_key: Option<AscApiKey>,
-    dev_name: Option<String>,
     device_target: Option<IOSDevice>,
     idp_path: Option<String>,
-    // apple_cer: Option<String>,
     keystore_path: Option<String>,
 }
 
@@ -71,9 +69,6 @@ impl IOSBuilder {
         //parse env vars
         let cargo_path = env_vars.get("cargo_path").cloned().unwrap_or("cargo".to_string());
         let idp_path = env_vars.get("idp_path").cloned();
-        // let apple_cer = env_vars.get("apple_cer").cloned();
-        let dev_name = env_vars.get("dev_name").cloned();
-        println!("dev name: {:?}", dev_name);
         let keystore_path = env_vars.get("keystore_path").cloned();
         println!("Cargo path determined: {}", &cargo_path);
         //parse cargo.toml
@@ -110,10 +105,8 @@ impl IOSBuilder {
             bundle_id: bundle_id, 
             min_os_version: min_os_version, 
             asc_api_key: asc_api_key,
-            dev_name: dev_name,
             device_target: device_target, 
             idp_path: idp_path,
-            // apple_cer: apple_cer,
             keystore_path: keystore_path,
         })
     }
@@ -264,15 +257,14 @@ impl IOSBuilder {
         }
 
         //check for apple signing certificate
-        if self.keystore_path.is_none() || self.dev_name.is_none() || self.asc_api_key.is_none() {
-            println!("Keystore path, developer name, or ASC API key missing from .env, skipping automated signing");
+        if self.keystore_path.is_none() || self.asc_api_key.is_none() {
+            println!("Keystore path or ASC API key missing from .env, skipping automated signing");
         } else {
-            println!("keystore path provided");
+            println!("keystore path & ASC API key properly configured");
             let asc_client = AscClient{ api_key: self.asc_api_key.clone(), keystore_path: self.keystore_path.clone().unwrap()};
-            //Note: this presently always create an IOS_DISTRIBUTION cert, but can be changed by setting the distribution bool to false
+            //Note: this presently always create an IOS_DISTRIBUTION cert
             let security_profile = asc_client.create_or_find_security_cert()?;
             println!("your security profile is: {:?}", security_profile);
-
             //if a device target is provided, check if the target device is provisioned
             if !self.device_target.is_none() {
                 println!("device target exists, checking for existing provisioning");
