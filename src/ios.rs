@@ -263,15 +263,14 @@ impl IOSBuilder {
             Helper::resize_png(&self.icon_path.as_ref().unwrap(), &icon_path180.display().to_string(), 180, 180)?;
         }
 
-        //TODO check for apple signing certificate
-        if self.keystore_path.is_none() || self.dev_name.is_none(){
-            println!("Keystore path or developer name missing from .env, skipping automated signing");
+        //check for apple signing certificate
+        if self.keystore_path.is_none() || self.dev_name.is_none() || self.asc_api_key.is_none() {
+            println!("Keystore path, developer name, or ASC API key missing from .env, skipping automated signing");
         } else {
             println!("keystore path provided");
             let asc_client = AscClient{ api_key: self.asc_api_key.clone(), keystore_path: self.keystore_path.clone().unwrap()};
-            //TODO
-            //Note this is presently hardcoded to always create an IOS_DISTRIBUTION cert, but can be changed by setting the distribution bool to false
-            let security_profile = asc_client.create_or_find_security_certificate(self.dev_name.clone().unwrap(), false)?;
+            //Note: this presently always create an IOS_DISTRIBUTION cert, but can be changed by setting the distribution bool to false
+            let security_profile = asc_client.create_or_find_security_certificate(self.dev_name.clone().unwrap(), true)?;
             println!("your security profile is: {:?}", security_profile);
 
             //if a device target is provided, check if the target device is provisioned
@@ -420,7 +419,6 @@ impl AscClient {
         dev_name: String,
         distribution: bool,
     ) -> Result<(String, String), PistonError> {
-        println!("checking for existing security certificates");
         // Trigger macOS unlock prompt (blocks until user unlocks or cancels)
         let keychain_path = format!("{}/login.keychain-db", self.keystore_path.clone());
 
@@ -442,12 +440,12 @@ impl AscClient {
         }
         println!("✅ Keychain unlocked");
 
-        //otherwise create a security certificate
+        //create an ASC security certificate
         let token = self.generate_jwt()?;
         let cert_type = if distribution { "IOS_DISTRIBUTION" } else { "IOS_DEVELOPMENT" };
 
         // 1. Check if we already have a valid security certificate in ASC
-        println!("checking for valid security certificate in ASC");
+        println!("checking for existing security certificates in ASC");
         let list_resp: Response = ureq::get("https://api.appstoreconnect.apple.com/v1/certificates")
             .set("Authorization", &format!("Bearer {}", token))
             .query("filter[certificateType]", cert_type)
@@ -468,16 +466,19 @@ impl AscClient {
 
         // 2. Generate private key + CSR using openssl
         println!("generating private key using Openssl");
-        let key_path = "temp_dev_key.p8";
-        let csr_path = "temp_dev_csr.csr";
+        let key_path = "temp_key.pem";
+        let csr_path = "temp_csr.csr";
 
-        std::process::Command::new("openssl")
-            .args(["genpkey", "-algorithm", "RSA", "-out", key_path, "-pkeyopt", "rsa_keygen_bits:2048"])
+        //Generate 2048-bit RSA private key in PEM format
+        let key_gen = Command::new("openssl")
+            .args(["genrsa", "-out", key_path, "2048"])
             .output()
             .map_err(|e| PistonError::OpenSSLKeyGenError(format!("openssl keygen failed: {}", e)))?;
-
+        if !key_gen.status.success() {
+            return Err(PistonError::OpenSSLKeyGenError(format!("openssl keygen failed: {}", String::from_utf8_lossy(&key_gen.stderr))));
+        }
         println!("generating CSR using openssl");
-        std::process::Command::new("openssl")
+        let csr_gen = Command::new("openssl")
             .args([
                 "req", "-new", "-key", key_path,
                 "-out", csr_path,
@@ -485,7 +486,9 @@ impl AscClient {
             ])
             .output()
             .map_err(|e| PistonError::OpenSSLCSRError(format!("openssl csr failed: {}", e)))?;
-
+        if !csr_gen.status.success() {
+            return Err(PistonError::OpenSSLCSRError(format!("openssl csr failed: {}", String::from_utf8_lossy(&csr_gen.stderr))));
+        }      
         let csr_content = fs::read_to_string(csr_path)
             .map_err(|e| PistonError::ReadCSRError(format!("Failed to read CSR: {}", e)))?;
 
@@ -518,18 +521,34 @@ impl AscClient {
         let cert_b64 = json["data"]["attributes"]["certificateContent"]
             .as_str()
             .ok_or_else(|| PistonError::Generic("No certificateContent returned".to_string()))?;
+        println!("cert_b64 result: {:?}", cert_b64);
 
         let cert_der = base64::decode(cert_b64).map_err(|e| PistonError::Base64DecodeError(format!("Base64 decode failed: {}", e)))?;
-        let cer_path = "temp_dev_cert.cer";
+        let cer_path = "temp_cert.cer";
         fs::write(&cer_path, cert_der).map_err(|e| PistonError::WriteFileError(format!("Base64 decode failed: {}", e)))?;
 
         // 5. Import into macOS keychain (private key + cert)
-        println!("importing security certificate into MacOS keychain");
-        std::process::Command::new("security")
-            .args(["import", cer_path, "-k", "login.keychain", "-T", "/usr/bin/codesign"])
+        println!("importing private key into MacOS keychain");
+        let import_key = Command::new("security")
+            .args([
+                "import", key_path, 
+                "-k", &keychain_path, 
+                self.keystore_path.as_ref(), 
+                "-P", "", //empty passphrase
+            ])
             .output()
-            .map_err(|e| PistonError::KeyChainImportError(format!("security import failed: {}", e)))?;
-
+            .map_err(|e| PistonError::KeyChainImportError(format!("security private key import failed: {}", e)))?;
+        if !import_key.status.success() {
+            return Err(PistonError::KeyChainImportError(format!("security private key import failed: {}", String::from_utf8_lossy(&import_key.stderr))));
+        }
+        println!("importing security certificate into MacOS keychain");
+        let import_cert = Command::new("security")
+            .args(["import", cer_path, "-k", &keychain_path, self.keystore_path.as_ref()])
+            .output()
+            .map_err(|e| PistonError::KeyChainImportError(format!("security certificate import failed: {}", e)))?;
+        if !import_cert.status.success() {
+            return Err(PistonError::KeyChainImportError(format!("security cert import failed: {}", String::from_utf8_lossy(&import_cert.stderr))));
+        }
         // Clean up temp files
         let _ = fs::remove_file(key_path);
         let _ = fs::remove_file(csr_path);
