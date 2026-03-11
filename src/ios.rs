@@ -270,7 +270,7 @@ impl IOSBuilder {
             println!("keystore path provided");
             let asc_client = AscClient{ api_key: self.asc_api_key.clone(), keystore_path: self.keystore_path.clone().unwrap()};
             //Note: this presently always create an IOS_DISTRIBUTION cert, but can be changed by setting the distribution bool to false
-            let security_profile = asc_client.create_or_find_security_certificate(self.dev_name.clone().unwrap(), true)?;
+            let security_profile = asc_client.create_or_find_security_cert()?;
             println!("your security profile is: {:?}", security_profile);
 
             //if a device target is provided, check if the target device is provisioned
@@ -412,155 +412,172 @@ pub struct AscClient {
 
 impl AscClient {
 
-    // Creates a new iOS security certificate (or re-uses if one already exists for this machine)
-    // Returns: (certificate_id, signing_identity_name)
-    pub fn create_or_find_security_certificate(
-        &self,
-        dev_name: String,
-        distribution: bool,
-    ) -> Result<(String, String), PistonError> {
-        // Trigger macOS unlock prompt (blocks until user unlocks or cancels)
-        let keychain_path = format!("{}/login.keychain-db", self.keystore_path.clone());
+// Creates or re-uses an iOS Distribution certificate
+// Returns: (certificate_id, signing_identity_name) — name is normalized for codesign, ASC API returns something unique
+pub fn create_or_find_security_cert(
+    &self,
+) -> Result<(String, String), PistonError> {
+    // 0. Unlock keychain
+    let keychain_path = format!("{}/login.keychain-db", self.keystore_path.clone());
+    let _ = Command::new("security")
+        .args(["unlock-keychain", &keychain_path])
+        .output();
 
-        let unlock_result = Command::new("security")
-            .args(["unlock-keychain", &keychain_path])
-            .output();
+    let status = Command::new("security")
+        .args(["show-keychain-info", &keychain_path])
+        .output()
+        .map_err(|e| PistonError::KeyChainUnlockError(format!("Failed to check keychain: {}", e)))?;
 
-        if let Err(e) = unlock_result {
-            return Err(PistonError::KeyChainUnlockError(format!("Failed to unlock keychain: {}", e)));
-        }
-        //(fails fast if user cancelled)
-        let status = Command::new("security")
-            .args(["show-keychain-info", &keychain_path])
-            .output()
-            .map_err(|e| PistonError::KeyChainUnlockError(format!("Failed to check keychain status: {}", e)))?;
-
-        if String::from_utf8_lossy(&status.stdout).contains("locked") {
-            return Err(PistonError::KeyChainUnlockError("Keychain is still locked. User cancelled the unlock prompt.".to_string()));
-        }
-        println!("✅ Keychain unlocked");
-
-        //create an ASC security certificate
-        let token = self.generate_jwt()?;
-        let cert_type = if distribution { "IOS_DISTRIBUTION" } else { "IOS_DEVELOPMENT" };
-
-        // 1. Check if we already have a valid security certificate in ASC
-        println!("checking for existing security certificates in ASC");
-        let list_resp: Response = ureq::get("https://api.appstoreconnect.apple.com/v1/certificates")
-            .set("Authorization", &format!("Bearer {}", token))
-            .query("filter[certificateType]", cert_type)
-            .call()
-            .map_err(|e| PistonError::ASCClientUreqError{
-                endpoint: "https://api.appstoreconnect.apple.com/v1/certificates".to_string(),
-                e:  format!("Existing security certificate get failed: {}", e),
-            })?;
-        println!("security certificates list: {:?}", list_resp);
-        let json: serde_json::Value = list_resp.into_json().map_err(|e| PistonError::IntoJSONError(e.to_string()))?;
-        println!("security certificates list in JSON: {:?}", &json);
-        if let Some(existing) = json["data"].as_array().and_then(|arr| arr.first()) {
-            let cert_id = existing["id"].as_str().unwrap().to_string();
-            let cert_name = existing["attributes"]["name"].as_str().unwrap().to_string();
-            println!("✅ Re-using existing {} certificate (ID: {}, Name: {})", cert_type, cert_id, cert_name);
-            return Ok((cert_id, cert_name));
-        }
-
-        // 2. Generate private key + CSR using openssl
-        println!("generating private key using Openssl");
-        let key_path = "temp_key.pem";
-        let csr_path = "temp_csr.csr";
-
-        //Generate 2048-bit RSA private key in PEM format
-        let key_gen = Command::new("openssl")
-            .args(["genrsa", "-out", key_path, "2048"])
-            .output()
-            .map_err(|e| PistonError::OpenSSLKeyGenError(format!("openssl keygen failed: {}", e)))?;
-        if !key_gen.status.success() {
-            return Err(PistonError::OpenSSLKeyGenError(format!("openssl keygen failed: {}", String::from_utf8_lossy(&key_gen.stderr))));
-        }
-        println!("generating CSR using openssl");
-        let csr_gen = Command::new("openssl")
-            .args([
-                "req", "-new", "-key", key_path,
-                "-out", csr_path,
-                "-subj", &format!("/CN={}", dev_name),
-            ])
-            .output()
-            .map_err(|e| PistonError::OpenSSLCSRError(format!("openssl csr failed: {}", e)))?;
-        if !csr_gen.status.success() {
-            return Err(PistonError::OpenSSLCSRError(format!("openssl csr failed: {}", String::from_utf8_lossy(&csr_gen.stderr))));
-        }      
-        let csr_content = fs::read_to_string(csr_path)
-            .map_err(|e| PistonError::ReadCSRError(format!("Failed to read CSR: {}", e)))?;
-
-        // 3. Upload CSR to ASC
-        println!("uploading CSR to appstoreconnect API");
-        let body = json!({
-            "data": {
-                "type": "certificates",
-                "attributes": {
-                    "certificateType": cert_type,
-                    "csrContent": csr_content
-                }
-            }
-        });
-
-        let create_resp: Response = ureq::post("https://api.appstoreconnect.apple.com/v1/certificates")
-            .set("Authorization", &format!("Bearer {}", token))
-            .set("Content-Type", "application/json")
-            .send_json(&body)
-            .map_err(|e| PistonError::ASCClientUreqError{
-                endpoint: "https://api.appstoreconnect.apple.com/v1/certificates".to_string(),
-                e:  format!("CSR Upload failed: {}", e),
-            })?;
-
-        let json: serde_json::Value = create_resp.into_json().map_err(|e| PistonError::IntoJSONError(e.to_string()))?;
-        let cert_id = json["data"]["id"].as_str().unwrap().to_string();
-
-        // 4. Download the signed certificate
-        println!("downloading signed certificate");
-        let cert_b64 = json["data"]["attributes"]["certificateContent"]
-            .as_str()
-            .ok_or_else(|| PistonError::Generic("No certificateContent returned".to_string()))?;
-        println!("cert_b64 result: {:?}", cert_b64);
-
-        let cert_der = base64::decode(cert_b64).map_err(|e| PistonError::Base64DecodeError(format!("Base64 decode failed: {}", e)))?;
-        let cer_path = "temp_cert.cer";
-        fs::write(&cer_path, cert_der).map_err(|e| PistonError::WriteFileError(format!("Base64 decode failed: {}", e)))?;
-
-        // 5. Import into macOS keychain (private key + cert)
-        println!("importing private key into MacOS keychain");
-        let import_key = Command::new("security")
-            .args([
-                "import", key_path, 
-                "-k", &keychain_path, 
-                self.keystore_path.as_ref(), 
-                "-P", "", //empty passphrase
-            ])
-            .output()
-            .map_err(|e| PistonError::KeyChainImportError(format!("security private key import failed: {}", e)))?;
-        if !import_key.status.success() {
-            return Err(PistonError::KeyChainImportError(format!("security private key import failed: {}", String::from_utf8_lossy(&import_key.stderr))));
-        }
-        println!("importing security certificate into MacOS keychain");
-        let import_cert = Command::new("security")
-            .args(["import", cer_path, "-k", &keychain_path, self.keystore_path.as_ref()])
-            .output()
-            .map_err(|e| PistonError::KeyChainImportError(format!("security certificate import failed: {}", e)))?;
-        if !import_cert.status.success() {
-            return Err(PistonError::KeyChainImportError(format!("security cert import failed: {}", String::from_utf8_lossy(&import_cert.stderr))));
-        }
-        // Clean up temp files
-        let _ = fs::remove_file(key_path);
-        let _ = fs::remove_file(csr_path);
-        let _ = fs::remove_file(cer_path);
-
-        let id_type = if distribution {"Distribution"} else {"Development"};
-
-        let signing_identity = format!("Apple {}: {} (Team ID will be auto-detected)",id_type, dev_name);
-        println!("✅ New {} certificate created (ID: {})",id_type, cert_id);
-
-        Ok((cert_id, signing_identity))
+    if String::from_utf8_lossy(&status.stdout).contains("locked") {
+        return Err(PistonError::KeyChainUnlockError("User cancelled keychain unlock".to_string()));
     }
+    println!("✅ Keychain unlocked");
+
+    let token = self.generate_jwt()?;
+    let cert_type = "IOS_DISTRIBUTION";
+    let id_type = "Distribution";
+
+    println!("Checking for existing {} certificate in ASC...", id_type);
+
+    let list_resp: Response = ureq::get("https://api.appstoreconnect.apple.com/v1/certificates")
+        .set("Authorization", &format!("Bearer {}", token))
+        .query("filter[certificateType]", cert_type)
+        .call()
+        .map_err(|e| PistonError::ASCClientUreqError {
+            endpoint: "list certificates".to_string(),
+            e: format!("Failed to list certificates: {}", e),
+        })?;
+
+    let json: serde_json::Value = list_resp.into_json()
+        .map_err(|e| PistonError::IntoJSONError(e.to_string()))?;
+
+    if let Some(existing) = json["data"].as_array().and_then(|arr| arr.first()) {
+        let cert_id = existing["id"].as_str().unwrap().to_string();
+        let cert_name = existing["attributes"]["name"]
+            .as_str()
+            .unwrap_or("Unknown")
+            .to_string();
+
+        println!("Found existing {} certificate in ASC: {}", id_type, cert_name);
+
+        // Check if it actually exists locally in keychain
+        let check = Command::new("security")
+            .args(["find-identity", "-v", "-p", "codesigning"])
+            .output()
+            .map_err(|e| PistonError::KeyChainImportError(format!("Failed to check keychain: {}", e)))?;
+
+        let output = String::from_utf8_lossy(&check.stdout);
+
+        if output.contains(&cert_name) || 
+           output.contains(&cert_name.replace("iOS Distribution", "iPhone Distribution")) {
+            println!("✅ Certificate also found in local keychain → reusing");
+
+            // Normalize to what codesign expects
+            let signing_identity = cert_name.replace("iOS Distribution", "iPhone Distribution");
+            return Ok((cert_id, signing_identity));
+        } else {
+            println!("⚠️  Certificate exists in ASC but missing locally → creating a new one");
+            // No automatic revocation, we just create a fresh certificate (Apple allows multiples)
+        }
+    }
+
+    // === CREATE NEW CERTIFICATE ===
+    println!("Generating new {} certificate...", id_type);
+
+    let key_path = "temp_key.pem";
+    let csr_path = "temp_csr.csr";
+
+    // Generate PEM key + CSR
+    let _ = Command::new("openssl")
+        .args(["genrsa", "-out", key_path, "2048"])
+        .output()
+        .map_err(|e| PistonError::OpenSSLKeyGenError(format!("keygen failed: {}", e)))?;
+
+    let _ = Command::new("openssl")
+        .args(["req", "-new", "-key", key_path, "-out", csr_path, "-subj", "/CN=Distribution Certificate"])
+        .output()
+        .map_err(|e| PistonError::OpenSSLCSRError(format!("csr failed: {}", e)))?;
+
+    let csr_content = fs::read_to_string(csr_path)
+        .map_err(|e| PistonError::ReadCSRError(format!("Failed to read CSR: {}", e)))?;
+
+    // Upload CSR
+    let body = json!({
+        "data": {
+            "type": "certificates",
+            "attributes": {
+                "certificateType": cert_type,
+                "csrContent": csr_content
+            }
+        }
+    });
+
+    let create_resp = ureq::post("https://api.appstoreconnect.apple.com/v1/certificates")
+        .set("Authorization", &format!("Bearer {}", token))
+        .set("Content-Type", "application/json")
+        .send_json(&body)
+        .map_err(|e| PistonError::ASCClientUreqError {
+            endpoint: "upload CSR".to_string(),
+            e: format!("Upload failed: {}", e),
+        })?;
+
+    let json: serde_json::Value = create_resp.into_json()
+        .map_err(|e| PistonError::IntoJSONError(e.to_string()))?;
+
+    let cert_id = json["data"]["id"].as_str().unwrap().to_string();
+    let cert_name = json["data"]["attributes"]["name"]
+        .as_str()
+        .unwrap_or("Unknown")
+        .to_string();
+
+    // Download + decode
+    let cert_b64 = json["data"]["attributes"]["certificateContent"]
+        .as_str()
+        .ok_or_else(|| PistonError::Generic("No certificateContent returned".to_string()))?;
+
+    let cert_der = base64::decode(cert_b64)
+        .map_err(|e| PistonError::Base64DecodeError(format!("Decode failed: {}", e)))?;
+
+    let cer_path = "temp_cert.cer";
+    fs::write(cer_path, cert_der)
+        .map_err(|e| PistonError::WriteFileError(format!("Write failed: {}", e)))?;
+
+    // Import key + cert
+    let import_key = Command::new("security")
+        .args(["import", key_path, "-k", &keychain_path, self.keystore_path.as_ref(), "-P", ""])
+        .output()
+        .map_err(|e| PistonError::KeyChainImportError(format!("Key import failed: {}", e)))?;
+
+    if !import_key.status.success() {
+        return Err(PistonError::KeyChainImportError(
+            String::from_utf8_lossy(&import_key.stderr).trim().to_string()
+        ));
+    }
+
+    let import_cert = Command::new("security")
+        .args(["import", cer_path, "-k", &keychain_path, self.keystore_path.as_ref()])
+        .output()
+        .map_err(|e| PistonError::KeyChainImportError(format!("Cert import failed: {}", e)))?;
+
+    if !import_cert.status.success() {
+        return Err(PistonError::KeyChainImportError(
+            String::from_utf8_lossy(&import_cert.stderr).trim().to_string()
+        ));
+    }
+
+    // Cleanup
+    let _ = fs::remove_file(key_path);
+    let _ = fs::remove_file(csr_path);
+    let _ = fs::remove_file(cer_path);
+
+    // Normalize to what codesign actually expects
+    let signing_identity = cert_name.replace("iOS Distribution", "iPhone Distribution");
+
+    println!("✅ New {} certificate created and imported (ID: {}, Name for codesign: {})", 
+             id_type, cert_id, signing_identity);
+
+    Ok((cert_id, signing_identity))
+}
 
     //generates a JWT for interfacing with Apple AppStoreConnect API
     fn generate_jwt(&self) -> Result<String, PistonError> {
