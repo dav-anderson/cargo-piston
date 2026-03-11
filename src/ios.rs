@@ -269,19 +269,10 @@ impl IOSBuilder {
         } else {
             println!("keystore path provided");
             let asc_client = AscClient{ api_key: self.asc_api_key.clone(), keystore_path: self.keystore_path.clone().unwrap()};
-            //TODO error check this result
-            asc_client.create_or_find_security_certificate(self.dev_name.clone().unwrap(), self.apple_cer.clone(), true)?;
-
-
-            //check if the user provided signing certificate exists and is valid for the requested operation
-            //otherwise create one if api access is avaialble and create a signing certificate
-
-            //if the user includes the release flag in the build, we must assume an IOS distirbution cert is needed
-            //AKA IOS_APP_ADHOC profile type cert 
-            // If not flagging for release we should assume IOS Development certificate is needed
-            //AKA IOS_APP_DEVELOPMENT profile type cert
-
-            //see AscClient Struct and methods
+            //TODO
+            //Note this is presently hardcoded to always create an IOS_DISTRIBUTION cert, but can be changed by setting the distribution bool to false
+            let security_profile = asc_client.create_or_find_security_certificate(self.dev_name.clone().unwrap(), self.apple_cer.clone(), true)?;
+            println!("your security profile is: {:?}", security_profile);
 
             //if a device target is provided, check if the target device is provisioned
             if !self.device_target.is_none() {
@@ -462,13 +453,13 @@ impl AscClient {
 
         //TODO otherwise create a signing certificate
         let token = self.generate_jwt()?;
-        let certificate_type = if distribution { "IOS_DISTRIBUTION" } else { "IOS_DEVELOPMENT" };
+        let cert_type = if distribution { "IOS_DISTRIBUTION" } else { "IOS_DEVELOPMENT" };
 
         // 1. Check if we already have a valid development certificate in ASC
         println!("checking for valid development certificate in ASC");
         let list_resp: Response = ureq::get("https://api.appstoreconnect.apple.com/v1/certificates")
             .set("Authorization", &format!("Bearer {}", token))
-            .query("filter[certificateType]", certificate_type)
+            .query("filter[certificateType]", cert_type)
             .call()
             .map_err(|e| PistonError::ASCClientUreqError{
                 endpoint: "https://api.appstoreconnect.apple.com/v1/certificates".to_string(),
@@ -480,9 +471,9 @@ impl AscClient {
         if let Some(existing) = json["data"].as_array().and_then(|arr| arr.first()) {
             let cert_id = existing["id"].as_str().unwrap().to_string();
             //TODO improve this
-            let identity = format!("Apple Development: {:?} ({})", dev_name, "YOUR_TEAM_ID");
-            println!("✅ Re-using existing development certificate (ID: {})", cert_id);
-            return Ok((cert_id, identity));
+            // let identity = format!("Apple Development: {:?} ({})", dev_name, "YOUR_TEAM_ID");
+            println!("✅ Re-using existing {} certificate (ID: {})", cert_type, cert_id);
+            return Ok((cert_id, dev_name));
         }
 
         // 2. Generate private key + CSR using openssl
@@ -496,7 +487,6 @@ impl AscClient {
             .map_err(|e| PistonError::OpenSSLKeyGenError(format!("openssl keygen failed: {}", e)))?;
 
         println!("generating CSR using openssl");
-        println!("dev name: {:?}", dev_name);
         std::process::Command::new("openssl")
             .args([
                 "req", "-new", "-key", key_path,
@@ -515,7 +505,7 @@ impl AscClient {
             "data": {
                 "type": "certificates",
                 "attributes": {
-                    "certificateType": "IOS_DEVELOPMENT",
+                    "certificateType": cert_type,
                     "csrContent": csr_content
                 }
             }
@@ -555,13 +545,15 @@ impl AscClient {
         let _ = fs::remove_file(csr_path);
         let _ = fs::remove_file(cer_path);
 
-        let signing_identity = format!("Apple Development: {} (Team ID will be auto-detected)", dev_name);
-        println!("✅ New development certificate created (ID: {})", cert_id);
+        let id_type = if distribution {"Distribution"} else {"Development"};
+
+        let signing_identity = format!("Apple {}: {} (Team ID will be auto-detected)",id_type, dev_name);
+        println!("✅ New {} certificate created (ID: {})",id_type, cert_id);
 
         Ok((cert_id, signing_identity))
     }
 
-    //TODO this
+    //generates a JWT for interfacing with Apple AppStoreConnect API
     fn generate_jwt(&self) -> Result<String, PistonError> {
         let exp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -676,7 +668,7 @@ impl AscClient {
         let body = json!({
             "data": {
                 "type": "profiles",
-                "attributes": { "name": profile_name, "profileType": "IOS_APP_DEVELOPMENT" },
+                "attributes": { "name": profile_name, "profileType": "IOS_APP_DISTRIBUTION" },
                 "relationships": {
                     "bundleId": { "data": { "type": "bundleIds", "id": bundle_resource_id } },
                     "certificates": { "data": [{ "type": "certificates", "id": certificate_id }] },
