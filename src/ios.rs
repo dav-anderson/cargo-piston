@@ -39,7 +39,7 @@ pub struct IOSBuilder {
     dev_name: Option<String>,
     device_target: Option<IOSDevice>,
     idp_path: Option<String>,
-    apple_cer: Option<String>,
+    // apple_cer: Option<String>,
     keystore_path: Option<String>,
 }
 
@@ -71,7 +71,7 @@ impl IOSBuilder {
         //parse env vars
         let cargo_path = env_vars.get("cargo_path").cloned().unwrap_or("cargo".to_string());
         let idp_path = env_vars.get("idp_path").cloned();
-        let apple_cer = env_vars.get("apple_cer").cloned();
+        // let apple_cer = env_vars.get("apple_cer").cloned();
         let dev_name = env_vars.get("dev_name").cloned();
         println!("dev name: {:?}", dev_name);
         let keystore_path = env_vars.get("keystore_path").cloned();
@@ -113,7 +113,7 @@ impl IOSBuilder {
             dev_name: dev_name,
             device_target: device_target, 
             idp_path: idp_path,
-            apple_cer: apple_cer,
+            // apple_cer: apple_cer,
             keystore_path: keystore_path,
         })
     }
@@ -271,7 +271,7 @@ impl IOSBuilder {
             let asc_client = AscClient{ api_key: self.asc_api_key.clone(), keystore_path: self.keystore_path.clone().unwrap()};
             //TODO
             //Note this is presently hardcoded to always create an IOS_DISTRIBUTION cert, but can be changed by setting the distribution bool to false
-            let security_profile = asc_client.create_or_find_security_certificate(self.dev_name.clone().unwrap(), self.apple_cer.clone(), true)?;
+            let security_profile = asc_client.create_or_find_security_certificate(self.dev_name.clone().unwrap(), false)?;
             println!("your security profile is: {:?}", security_profile);
 
             //if a device target is provided, check if the target device is provisioned
@@ -418,7 +418,6 @@ impl AscClient {
     pub fn create_or_find_security_certificate(
         &self,
         dev_name: String,
-        apple_cer: Option<String>,
         distribution: bool,
     ) -> Result<(String, String), PistonError> {
         println!("checking for existing security certificates");
@@ -443,20 +442,12 @@ impl AscClient {
         }
         println!("✅ Keychain unlocked");
 
-        //TODO if the user has specified a signing certificate in the .env, verify this is valid and use it
-        if apple_cer.is_none() {
-            println!("apple cer provided: {:?}", apple_cer);
-        }
-        else{
-            println!("no apple cer provided in the .env");
-        }
-
-        //TODO otherwise create a signing certificate
+        //otherwise create a security certificate
         let token = self.generate_jwt()?;
         let cert_type = if distribution { "IOS_DISTRIBUTION" } else { "IOS_DEVELOPMENT" };
 
-        // 1. Check if we already have a valid development certificate in ASC
-        println!("checking for valid development certificate in ASC");
+        // 1. Check if we already have a valid security certificate in ASC
+        println!("checking for valid security certificate in ASC");
         let list_resp: Response = ureq::get("https://api.appstoreconnect.apple.com/v1/certificates")
             .set("Authorization", &format!("Bearer {}", token))
             .query("filter[certificateType]", cert_type)
@@ -470,10 +461,9 @@ impl AscClient {
         println!("security certificates list in JSON: {:?}", &json);
         if let Some(existing) = json["data"].as_array().and_then(|arr| arr.first()) {
             let cert_id = existing["id"].as_str().unwrap().to_string();
-            //TODO improve this
-            // let identity = format!("Apple Development: {:?} ({})", dev_name, "YOUR_TEAM_ID");
-            println!("✅ Re-using existing {} certificate (ID: {})", cert_type, cert_id);
-            return Ok((cert_id, dev_name));
+            let cert_name = existing["attributes"]["name"].as_str().unwrap().to_string();
+            println!("✅ Re-using existing {} certificate (ID: {}, Name: {})", cert_type, cert_id, cert_name);
+            return Ok((cert_id, cert_name));
         }
 
         // 2. Generate private key + CSR using openssl
