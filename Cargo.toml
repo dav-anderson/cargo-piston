@@ -16,7 +16,7 @@ serde_json = "1.0.145"
 image = "0.25.9"
 regex = "1.11.1"
 ureq = { version = "2", features = ["json"] }
-jsonwebtoken = "10.2.0"
+jsonwebtoken = { version="10.2.0", features =["rust_crypto"] }
 serde = { version = "1.0.228", features = ["derive"] }
 base64 = "0.22"
 

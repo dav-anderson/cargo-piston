@@ -73,6 +73,7 @@ impl IOSBuilder {
         let idp_path = env_vars.get("idp_path").cloned();
         let apple_cer = env_vars.get("apple_cer").cloned();
         let dev_name = env_vars.get("dev_name").cloned();
+        println!("dev name: {:?}", dev_name);
         let keystore_path = env_vars.get("keystore_path").cloned();
         println!("Cargo path determined: {}", &cargo_path);
         //parse cargo.toml
@@ -263,13 +264,13 @@ impl IOSBuilder {
         }
 
         //TODO check for apple signing certificate
-        if self.keystore_path.is_none() {
-            println!("No keystore path provided, skipping automated signing");
+        if self.keystore_path.is_none() || self.dev_name.is_none(){
+            println!("Keystore path or developer name missing from .env, skipping automated signing");
         } else {
             println!("keystore path provided");
             let asc_client = AscClient{ api_key: self.asc_api_key.clone(), keystore_path: self.keystore_path.clone().unwrap()};
             //TODO error check this result
-            asc_client.create_or_find_security_certificate(self.apple_cer.clone(), self.dev_name.clone(), true);
+            asc_client.create_or_find_security_certificate(self.dev_name.clone().unwrap(), self.apple_cer.clone(), true)?;
 
 
             //check if the user provided signing certificate exists and is valid for the requested operation
@@ -336,6 +337,9 @@ impl IOSBuilder {
         })?;
         //output the proper location in the terminal for the user to see 
         println!("iOS app bundle available at: {}", &bundle_path.display());
+
+        //TODO sign the bundle
+
         Ok(())
     }
 
@@ -357,7 +361,8 @@ impl IOSRunner{
 
         let builder = IOSBuilder::start(release, target_string, cwd, env_vars, Some(device.clone()))?;
 
-        let runner = IOSRunner::new(device);
+        //need to pass in output dir, bundle id, 
+        let runner = IOSRunner::deploy_usb(device)?;
 
         //>>postbuild
         //sign app bundle
@@ -366,36 +371,17 @@ impl IOSRunner{
         Ok(())
     }
 
-    fn new(device: &IOSDevice) -> Self{
-
-
-        //TODO if the asc_api_key is some & device is not currently provisioned then we proceed with jwt
-        // otherwise we can try to run after checking for an existing provision or a manual provision
-
-
-
-        IOSRunner{device: device.clone()}
-
-    }
-
-    fn deploy_usb() -> Result<(), PistonError> {
+    fn deploy_usb(device: &IOSDevice) -> Result<(), PistonError> {
+        //TODO
         // let output = Command::new("xcrun")
-        //     .args(["devicectl", "device", "install", "app", "--device", &device_id, &format!("{}/{}/ios/{}.app", session.projects_path.as_ref().unwrap(), session.current_project.as_ref().unwrap(), capitalize_first(session.current_project.as_ref().unwrap()))])
+        //     .args(["devicectl", "device", "install", "app", "--device", &device.id.clone(), &format!("{}/{}/ios/{}.app", session.projects_path.as_ref().unwrap(), session.current_project.as_ref().unwrap(), capitalize_first(session.current_project.as_ref().unwrap()))])
         //     .output()
         //     .unwrap();
-        // if !output.status.success() {
-        //     println!("here is the output: {:?}", &output);
-        //     return Err(io::Error::new(io::ErrorKind::Other, "could not install app bundle to IOS device via USB tether: {}"));
-        // }
-        // let bundle_id = get_bundle_id(session, "ios")?;
-        // println!("Deploying bundle id: {} to device: {}", &bundle_id, &device_id);
+        // println!("Deploying bundle id: {} to device: {}", &bundle_id, &device.id);
         // let output = Command::new("xcrun")
-        //     .args(["devicectl", "device", "process", "launch", "--device", &device_id, &bundle_id])
+        //     .args(["devicectl", "device", "process", "launch", "--device", &device.id.clone(), &bundle_id])
         //     .output()
         //     .unwrap();
-        // if !output.status.success() {
-        //     return Err(io::Error::new(io::ErrorKind::Other, "could not launch app bundle to IOS device via USB tether"));
-        // }
         Ok(())
     }
 }
@@ -440,7 +426,7 @@ impl AscClient {
     // Returns: (certificate_id, signing_identity_name)
     pub fn create_or_find_security_certificate(
         &self,
-        dev_name: Option<String>,   // e.g. "Heavily Armed Clown Development"
+        dev_name: String,
         apple_cer: Option<String>,
         distribution: bool,
     ) -> Result<(String, String), PistonError> {
@@ -474,13 +460,12 @@ impl AscClient {
             println!("no apple cer provided in the .env");
         }
 
-        //TODO otherwise create one
-
-
+        //TODO otherwise create a signing certificate
         let token = self.generate_jwt()?;
         let certificate_type = if distribution { "IOS_DISTRIBUTION" } else { "IOS_DEVELOPMENT" };
 
         // 1. Check if we already have a valid development certificate in ASC
+        println!("checking for valid development certificate in ASC");
         let list_resp: Response = ureq::get("https://api.appstoreconnect.apple.com/v1/certificates")
             .set("Authorization", &format!("Bearer {}", token))
             .query("filter[certificateType]", certificate_type)
@@ -489,16 +474,19 @@ impl AscClient {
                 endpoint: "https://api.appstoreconnect.apple.com/v1/certificates".to_string(),
                 e:  format!("Existing security certificate get failed: {}", e),
             })?;
-
+        println!("security certificates list: {:?}", list_resp);
         let json: serde_json::Value = list_resp.into_json().map_err(|e| PistonError::IntoJSONError(e.to_string()))?;
+        println!("security certificates list in JSON: {:?}", &json);
         if let Some(existing) = json["data"].as_array().and_then(|arr| arr.first()) {
             let cert_id = existing["id"].as_str().unwrap().to_string();
-            let identity = format!("Apple Development: {:?} ({})", dev_name, "YOUR_TEAM_ID"); // we'll improve this later
+            //TODO improve this
+            let identity = format!("Apple Development: {:?} ({})", dev_name, "YOUR_TEAM_ID");
             println!("✅ Re-using existing development certificate (ID: {})", cert_id);
             return Ok((cert_id, identity));
         }
 
-        // 2. Generate private key + CSR using openssl (no extra deps)
+        // 2. Generate private key + CSR using openssl
+        println!("generating private key using Openssl");
         let key_path = "temp_dev_key.p8";
         let csr_path = "temp_dev_csr.csr";
 
@@ -507,11 +495,13 @@ impl AscClient {
             .output()
             .map_err(|e| PistonError::OpenSSLKeyGenError(format!("openssl keygen failed: {}", e)))?;
 
+        println!("generating CSR using openssl");
+        println!("dev name: {:?}", dev_name);
         std::process::Command::new("openssl")
             .args([
                 "req", "-new", "-key", key_path,
                 "-out", csr_path,
-                "-subj", &format!("/CN={}", dev_name.clone().unwrap()),
+                "-subj", &format!("/CN={}", dev_name),
             ])
             .output()
             .map_err(|e| PistonError::OpenSSLCSRError(format!("openssl csr failed: {}", e)))?;
@@ -520,6 +510,7 @@ impl AscClient {
             .map_err(|e| PistonError::ReadCSRError(format!("Failed to read CSR: {}", e)))?;
 
         // 3. Upload CSR to ASC
+        println!("uploading CSR to appstoreconnect API");
         let body = json!({
             "data": {
                 "type": "certificates",
@@ -543,6 +534,7 @@ impl AscClient {
         let cert_id = json["data"]["id"].as_str().unwrap().to_string();
 
         // 4. Download the signed certificate
+        println!("downloading signed certificate");
         let cert_b64 = json["data"]["attributes"]["certificateContent"]
             .as_str()
             .ok_or_else(|| PistonError::Generic("No certificateContent returned".to_string()))?;
@@ -552,6 +544,7 @@ impl AscClient {
         fs::write(&cer_path, cert_der).map_err(|e| PistonError::WriteFileError(format!("Base64 decode failed: {}", e)))?;
 
         // 5. Import into macOS keychain (private key + cert)
+        println!("importing security certificate into MacOS keychain");
         std::process::Command::new("security")
             .args(["import", cer_path, "-k", "login.keychain", "-T", "/usr/bin/codesign"])
             .output()
@@ -562,7 +555,7 @@ impl AscClient {
         let _ = fs::remove_file(csr_path);
         let _ = fs::remove_file(cer_path);
 
-        let signing_identity = format!("Apple Development: {} (Team ID will be auto-detected)", dev_name.unwrap());
+        let signing_identity = format!("Apple Development: {} (Team ID will be auto-detected)", dev_name);
         println!("✅ New development certificate created (ID: {})", cert_id);
 
         Ok((cert_id, signing_identity))
@@ -588,7 +581,9 @@ impl AscClient {
             aud: "appstoreconnect-v1".to_string(),
         };
 
-        let header = jsonwebtoken::Header::new(jsonwebtoken::Algorithm::ES256);
+        let mut header = jsonwebtoken::Header::new(jsonwebtoken::Algorithm::ES256);
+        header.kid = Some(self.api_key.as_ref().unwrap().key_id.clone());
+
         let key = jsonwebtoken::EncodingKey::from_ec_pem(self.api_key.clone().unwrap().priv_key.as_bytes())
             .map_err(|e| PistonError::ASCClientParseEncodingKeyError(format!("Invalid .p8 key: {}", e)))?;
 

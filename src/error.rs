@@ -143,7 +143,7 @@ impl fmt::Display for PistonError {
             PistonError::RenameFileError { path, .. } => write!(f, "Failed to Rename file {:?}", path),
             PistonError::CreateDirAllError { path, .. } => write!(f, "Failed to create dir all {:?}", path),
             PistonError::OpenImageError { path, .. } => write!(f, "Failed to open image {:?}", path),
-            PistonError::ASCClientUreqError { endpoint, .. } => write!(f, "ASC API error at endpint: {:?}", endpoint),
+            PistonError::ASCClientUreqError { endpoint, e } => write!(f, "ASC API error at endpoint: {:?}, Error message: {}", endpoint, e),
             PistonError::Generic(err) => write!(f, "Generic Error: {}", err)
         }
     }
