@@ -48,7 +48,7 @@ impl IOSBuilder {
         if std::env::consts::OS != "macos"{
             return Err(PistonError::UnsupportedOSError{os: std::env::consts::OS.to_string(), target: target})
         }
-        
+
         let mut op = IOSBuilder::new(release, target, cwd, env_vars, device_target)?;
         //>>prebuild
         op.pre_build()?;
@@ -173,8 +173,13 @@ impl IOSBuilder {
         }
         //Empty the directory if it already exists
         let path = res_path.as_path();
-        //empty the dir if it exists
-        Helper::empty_directory(path)?;
+        //empty the dir if it exists******************************************************
+        if let Some(path) = &self.output_path {
+            if path.exists() {
+                let _ = fs::remove_dir_all(path);
+            }
+        }
+        // Helper::empty_directory(path)?;******************************
         //create the target directories
         create_dir_all(path).map_err(|e| PistonError::CreateDirAllError {
         path: self.output_path.as_ref().unwrap().to_path_buf(),
@@ -207,6 +212,8 @@ impl IOSBuilder {
     <string>{}</string>
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
+    <key>CFBundleDisplayName</key>
+    <string>{}</string>
     <key>CFBundleExecutable</key>
     <string>{}</string>
     <key>CFBundlePackageType</key>
@@ -242,6 +249,7 @@ impl IOSBuilder {
 "#, 
     &capitalized,
     &self.bundle_id.clone(),
+    &self.app_name.clone(),
     &self.app_name.clone(),
     &self.app_version.clone(),
     &self.app_version.clone(),
@@ -298,6 +306,18 @@ impl IOSBuilder {
             output_path: bundle_path.clone().to_path_buf(),
             source: e,
         })?;
+        // Make the binary executable
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let exe_name = self.app_name.clone();
+            let exe_path = self.output_path.as_ref().unwrap().join(&exe_name);
+            
+            fs::set_permissions(&exe_path, std::fs::Permissions::from_mode(0o755))
+                .map_err(|e| PistonError::Generic(format!("Failed to make binary executable: {}", e)))?;
+            
+            println!("Set executable permission on {}", exe_path.display());
+        }
         //output the proper location in the terminal for the user to see 
         println!("iOS app bundle available at: {}", &bundle_path.display());
 
@@ -361,6 +381,10 @@ impl IOSRunner{
 
     //TODO this
     fn deploy_usb(device_id: &str, output_path: &str, bundle_id: &str) -> Result<(), PistonError> {
+        // Force-remove any old version of the app (same bundle ID)
+        let _ = Command::new("xcrun")
+            .args(["devicectl", "device", "uninstall", "app", "--device", device_id, "--bundle-id", bundle_id])
+            .output();
         let output = Command::new("xcrun")
             .args(["devicectl", "device", "install", "app", "--device", &device_id, &output_path])
             .output()
@@ -988,7 +1012,12 @@ impl AscClient {
     //TODO this
     pub fn sign_app_bundle(app_bundle: &str, security_profile: &str) -> Result<(), PistonError> {
         println!("Signing bundle: {}", app_bundle);
-
+        // Delete any old signature so we can re-sign after provisioning added the profile
+        let code_signature_dir = format!("{}/_CodeSignature", app_bundle);
+        let code_signature_path = Path::new(&code_signature_dir);
+        if code_signature_path.exists() {
+            let _ = fs::remove_dir_all(&code_signature_path);
+        }
         let output = Command::new("codesign")
             .args([
                 "--force",
