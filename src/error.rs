@@ -68,6 +68,16 @@ pub enum PistonError {
 
     ASCClientJWTEncodeError(String),
 
+    WritePlUtilError(String),
+
+    XcrunInstallError(String),
+
+    XcrunLaunchError(String),
+
+    CodesignError(String),
+
+    DeviceProvisionError(String),
+
     UnsupportedOSError{ os: String, target: String },
 
     CopyFileError{ input_path: PathBuf, output_path: PathBuf, source: IoError },
@@ -131,6 +141,11 @@ impl fmt::Display for PistonError {
             PistonError::Base64DecodeError(err) => write!(f, "Error Decoding Base 64: {}", err),
             PistonError::ASCClientParseEncodingKeyError(err) => write!(f, "Error parsing encoding key: {}", err),
             PistonError::ASCClientJWTEncodeError(err) => write!(f, "Error encoding JWT: {}", err),
+            PistonError::WritePlUtilError(err) => write!(f, "Failed to write Plutil contents: {}", err),
+            PistonError::XcrunInstallError(err) => write!(f, "Error installing app bundle to target device via xcrun: {}", err),
+            PistonError::XcrunLaunchError(err) => write!(f, "Error launching app bundle on target device via xcrun: {}", err),
+            PistonError::CodesignError(err) => write!(f, "Error signing app bundle with codesign: {}", err),
+            PistonError::DeviceProvisionError(err) => write!(f, "Error provisioning target device with idp: {}", err),
             PistonError::UnsupportedOSError{ os, target, .. } => write!(f, "Host system: {:?} does not support the target: {:?}", os, target),
             PistonError::CopyFileError { input_path, output_path, .. } => write!(f, "Failed to copy {:?} to {:?}", input_path, output_path),
             PistonError::MacOSIconError { input_path, output_path, .. } => write!(f, "Failed to format icon {:?} to {:?}", input_path, output_path),
