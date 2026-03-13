@@ -95,6 +95,7 @@ impl Platform {
         let lower_target = target.to_lowercase();
         match lower_target.as_str() {
             // MacOS targets
+            "macos" |
             "aarch64-apple-darwin" |
             "x86_64-apple-darwin" 
 
@@ -105,6 +106,7 @@ impl Platform {
             => Platform::Macos,
 
             // iOS targets
+            "ios" |
             "aarch64-apple-ios" |
             "x86_64-apple-ios" 
 
@@ -118,6 +120,7 @@ impl Platform {
             => Platform::Ios,
 
             // Linux targets
+            "linux" |
             "aarch64-unknown-linux-gnu" |
             "x86_64-unknown-linux-gnu" 
 
@@ -186,6 +189,7 @@ impl Platform {
             => Platform::Linux,
 
             // Windows targets
+            "windows" |
             "x86_64-pc-windows-gnu" 
 
             // Windows untested/unsupported
@@ -213,6 +217,7 @@ impl Platform {
             => Platform::Windows,
 
             // Android targets
+            "android" |
             "aarch64-linux-android" |
             "x86_64-linux-android" 
             // Android untested/unsupported
@@ -268,8 +273,7 @@ let cwd = match env::current_dir(){
         };
         //handle the release flag
         let release: bool = cmd.args().release;
-        //determine the target to pass into the builder if no flag is provided
-        let target_string = if cmd.target().is_none() {
+        let host_architecture = {
             let output = Command::new("rustc")
                 .arg("-vV")
                 .output();
@@ -280,8 +284,40 @@ let cwd = match env::current_dir(){
                 .map(|line| line.trim_start_matches("host: ").trim().to_string())
                 .unwrap_or_else(|| "Unknown".to_string());
             value
+        };
+        //determine the target to pass into the builder if no flag is provided
+        let target_string = if cmd.target().is_none() {
+                host_architecture
+            //generic target, determine target value dynamically
+            } else if cmd.target() == Some("ios") {
+                if host_architecture.contains("aarch64"){
+                    "aarch64-apple-ios".to_string()
+                }else if host_architecture.contains("x86_64"){
+                    "x86_64-apple-ios".to_string()
+                } else {bail!("Unsupported host architecture for dynamic targeting")}
+            } else if cmd.target() == Some("android") {
+                if host_architecture.contains("aarch64"){
+                    "aarch64-linux-android".to_string()
+                }else if host_architecture.contains("x86_64"){
+                    "x86_64-linux-android".to_string()
+                }else {bail!("Unsupported host architecture for dynamic targeting")}
+            } else if cmd.target() == Some("windows") {
+                "x86_64-pc-windows-gnu".to_string()
+            } else if cmd.target() == Some("linux") {
+                if host_architecture.contains("aarch64"){
+                    "aarch64-unknown-linux-gnu".to_string()
+                }else if host_architecture.contains("x86_64"){
+                    "x86_64-unknown-linux-gnu".to_string()
+                }else {bail!("Unsupported host architecture for dynamic targeting")}
+            }else if cmd.target() == Some("macos") {
+                if host_architecture.contains("aarch64"){
+                    "aarch64-apple-darwin".to_string()
+                }else if host_architecture.contains("x86_64"){
+                    "x86_64-apple-darwin".to_string()
+                }else {bail!("Unsupported host architecture for dynamic targeting")}
+            }
             //flag provided, pass in provided value
-            } else {
+            else {
                 cmd.target().unwrap().to_string()
             };
         //call the appropriate builder for the designated target

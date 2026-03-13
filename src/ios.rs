@@ -112,7 +112,6 @@ impl IOSBuilder {
     fn pre_build(&mut self) -> Result <(), PistonError>{
         //TODO check xcode for updates?
         //TODO allow user to specify a security cert for offline signing
-        //TODO potentially add security cert name to .env after API creation so that API is not hit for every build after initial setup
         println!("Pre build for ios");
         //check for xcode installation
         let xcode_app = "/Applications/Xcode.app";
@@ -173,13 +172,12 @@ impl IOSBuilder {
         }
         //Empty the directory if it already exists
         let path = res_path.as_path();
-        //empty the dir if it exists******************************************************
+        //empty the dir if it exists
         if let Some(path) = &self.output_path {
             if path.exists() {
                 let _ = fs::remove_dir_all(path);
             }
         }
-        // Helper::empty_directory(path)?;******************************
         //create the target directories
         create_dir_all(path).map_err(|e| PistonError::CreateDirAllError {
         path: self.output_path.as_ref().unwrap().to_path_buf(),
@@ -344,13 +342,14 @@ impl IOSBuilder {
                     println!("attempting to provision target device {:?}", self.device_target);
                     let bundle_id = self.bundle_id.clone();
                     let app_name = self.app_name.clone();
-                    //TODO provision device here
+                    //provision device here
                     asc_client.provision_ios_device(&target_id, &bundle_id, &app_name, &security_profile.0, &output_path, &idp_path)?;
-                    AscClient::sign_app_bundle(&output_path.display().to_string(), security_profile.1.as_ref())?;
+                    AscClient::sign_app_bundle(&output_path, security_profile.1.as_ref())?;
                     return Ok(())
                 }
             }
-            AscClient::sign_app_bundle(&output_path.display().to_string(), security_profile.1.as_ref())?;
+            //sign the app bundle for distribution
+            AscClient::sign_app_bundle(&output_path, security_profile.1.as_ref())?;
         }
         Ok(())
     }
@@ -370,16 +369,15 @@ impl IOSRunner{
             println!("error cannot run mac on linux");
             return Err(PistonError::UnsupportedOSError{os: std::env::consts::OS.to_string(), target: target_string})
         }
-
+        //build the app bundle and sign
         let builder = IOSBuilder::start(release, target_string, cwd, env_vars, Some(device.clone()))?;
-
-        //need to pass in output dir, bundle id, 
+        //deploy the app bundle to the target device
         let runner = IOSRunner::deploy_usb(device.id.as_ref(), &builder.0.display().to_string(), &builder.1)?;
 
         Ok(())
     }
 
-    //TODO this
+    //TODO this is currently broken 
     fn deploy_usb(device_id: &str, output_path: &str, bundle_id: &str) -> Result<(), PistonError> {
         // Force-remove any old version of the app (same bundle ID)
         let _ = Command::new("xcrun")
@@ -413,6 +411,7 @@ pub struct AscApiKey {
 }
 
 impl AscApiKey {
+    //parse the ASC API key information from the .env
     pub fn from_hm(env: &HashMap<String, String>) -> Result<Self, String> {
         let key_id = env.get("asc_key_id")
             .ok_or("Missing ASC_KEY_ID in .env")
@@ -440,12 +439,55 @@ pub struct AscClient {
 }
 
 impl AscClient {
+    //get cached metadata for ios builds
+    fn get_cache_dir(&self) -> PathBuf {
+        PathBuf::from("target/ios-cache")
+    }
+
+    //load the cached security certificate identity
+    fn load_cert_cache(&self) -> Option<(String, String)> {
+        let path = self.get_cache_dir().join("cert_cache.json");
+        if let Ok(content) = fs::read_to_string(&path) {
+            if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
+                let cert_id = json["cert_id"].as_str()?.to_string();
+                let signing_identity = json["signing_identity"].as_str()?.to_string();
+                return Some((cert_id, signing_identity));
+            }
+        }
+        None
+    }
+
+    //cache security certificate identity
+    fn save_cert_cache(&self, cert_id: &str, signing_identity: &str) {
+        let dir = self.get_cache_dir();
+        let _ = fs::create_dir_all(&dir);
+        let data = json!({
+            "cert_id": cert_id,
+            "signing_identity": signing_identity
+        });
+        let _ = fs::write(dir.join("cert_cache.json"), data.to_string());
+    }
 
     // Creates or re-uses an iOS Distribution certificate
     // Returns: (certificate_id, signing_identity_name) — name is normalized for codesign, ASC API returns something unique
     pub fn create_or_find_security_cert(
         &self,
     ) -> Result<(String, String), PistonError> {
+        // First check cache
+        if let Some((cert_id, signing_identity)) = self.load_cert_cache() {
+            // Quick local keychain check
+            let check = Command::new("security")
+                .args(["find-identity", "-v", "-p", "codesigning"])
+                .output()
+                .map_err(|e| PistonError::SecurityFindIdentityError(e.to_string()))?;
+            //use cached security credentials
+            let output = String::from_utf8_lossy(&check.stdout);
+            if output.contains(&signing_identity) {
+                println!("✅ Using cached security certificate");
+                return Ok((cert_id, signing_identity));
+            }
+        }
+        // If cache missing locally → create/re-use credentials via API
         // 0. Unlock keychain
         let keychain_path = format!("{}/login.keychain-db", self.keystore_path.clone());
         let _ = Command::new("security")
@@ -510,7 +552,7 @@ impl AscClient {
             }
         }
 
-        // === CREATE NEW CERTIFICATE ===
+        // CREATE NEW SECURITY CERTIFICATE
         println!("Generating new {} certificate...", id_type);
 
         let key_path = "temp_key.pem";
@@ -602,9 +644,9 @@ impl AscClient {
         // Normalize to what codesign actually expects
         let signing_identity = cert_name.replace("iOS Distribution", "iPhone Distribution");
 
-        println!("✅ New {} certificate created and imported (ID: {}, Name for codesign: {})", 
-                id_type, cert_id, signing_identity);
-
+        println!("✅ New {} certificate created and imported (ID: {}, Name for codesign: {})", id_type, cert_id, signing_identity);
+        //cache the security credentials locally
+        self.save_cert_cache(&cert_id, &signing_identity);
         Ok((cert_id, signing_identity))
     }
 
@@ -647,9 +689,10 @@ impl AscClient {
         certificate_id: &str,
         app_bundle_path: &PathBuf,
         ideviceprovision_path: &str, 
-    ) -> Result<String, PistonError> {
+    ) -> Result<(), PistonError> {
         let token = self.generate_jwt()?;
         println!("Provisioning device {} for app '{}' (bundle {})", device_id, app_name, bundle_id);
+        let cache_dir = self.get_cache_dir();
 
         // // 1. Register device if missing
         let device_resource_id = {
@@ -674,7 +717,7 @@ impl AscClient {
                     "data": {
                         "type": "devices",
                         "attributes": {
-                            "name": app_name,          // ← use app_name
+                            "name": app_name,
                             "udid": device_id,
                             "platform": "IOS"
                         }
@@ -841,6 +884,12 @@ impl AscClient {
         fs::write(&profile_path, profile_data)
             .map_err(|e| PistonError::WriteFileError(format!("Failed to write profile: {}", e)))?;
 
+        //cache mobile provision locally
+        let cache_dir = self.get_cache_dir().join("profiles");
+        let _ = fs::create_dir_all(&cache_dir);
+        let cached_profile = cache_dir.join(format!("{}.mobileprovision", profile_name));
+        let _ = fs::copy(&profile_path, &cached_profile);
+
         // 5. Embed into .app bundle
         let embedded_path = format!("{}/embedded.mobileprovision", app_bundle_path.display());
         fs::copy(&profile_path, &embedded_path)
@@ -859,158 +908,132 @@ impl AscClient {
         }
 
         // 7. Extract entitlements.plist
-        let cms = Command::new("security")
-            .args(["cms", "-D", "-i", &embedded_path])
-            .output()
-            .map_err(|e| PistonError::Generic(format!("security cms failed: {}", e)))?;
-
-        let entitlements_path = format!("{}/entitlements.plist", app_bundle_path.display());
-
-        let mut plutil = Command::new("plutil")
-            .args(["-extract", "Entitlements", "xml1", "-o", &entitlements_path, "-"])
-            .stdin(Stdio::piped())
-            .spawn()
-            .map_err(|e| PistonError::Generic(format!("plutil spawn failed: {}", e)))?;
-
-        if let Some(mut stdin) = plutil.stdin.take() {
-            stdin.write_all(&cms.stdout).map_err(|e| PistonError::WritePlUtilError(format!("Failed to write pltuil file: {}", e)))?;
-
-        }
-
-        let plutil_result = plutil.wait_with_output()
-            .map_err(|e| PistonError::Generic(format!("plutil failed: {}", e)))?;
-
-        if !plutil_result.status.success() {
-            return Err(PistonError::Generic("Failed to extract entitlements.plist".to_string()));
-        }
+        AscClient::ensure_entitlements(&app_bundle_path)?;
 
         // Cleanup
         let _ = fs::remove_file(profile_path);
 
         println!("✅ Provisioning complete for '{}' → entitlements.plist ready", app_name);
-        Ok(entitlements_path)
+        Ok(())
     }
 
-    //TODO make sure this can handle multiple provision profiles
-    pub fn is_device_provisioned(app_bundle_path: &PathBuf, device_id: &str, udid: &str, idp_path: &str) -> Result<bool, PistonError> {
-        println!("checking if target device is properly provisioned");
-        //obtain the mobile provision file name
-        let mobileprovision_file: String;
-        let entries = fs::read_dir(app_bundle_path)
-                .map_err(|e| PistonError::ReadDirError {
-            path: app_bundle_path.to_path_buf(),
-            source: e,
-        })?;
+    //TODO add support for distribution entitlement capabilities
+    // Always extracts entitlements.plist from the embedded.mobileprovision in the bundle
+    // Works whether we just provisioned or are reusing a cached profile
+    pub fn ensure_entitlements(app_bundle_path: &PathBuf) -> Result<(), PistonError> {
+        let embedded = app_bundle_path.join("embedded.mobileprovision");
+        //no device target specified, build Entitlements for distribution
+        if !embedded.exists() {
+            let entitlements_path = app_bundle_path.join("entitlements.plist");
+            //TODO this does not currently add any capabilities outlined in ASC bundle creation
+            let content = r#"<?xml version="1.0" encoding="UTF-8"?>
+            <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+            <plist version="1.0">
+            <dict>
+            </dict>
+            </plist>"#;
 
-            let mut matching_files = Vec::new();
-            for entry in entries {
-                let entry = entry.map_err(|e| PistonError::MapDirError {
-                    path: app_bundle_path.to_path_buf(),
+            fs::write(&entitlements_path, content.trim())
+                .map_err(|e| PistonError::WriteFileError(format!("Failed to write entitlements.plist: {}", e)))?;
+
+            println!("Created minimal entitlements.plist for Distribution");
+            return Ok(())
+        }
+        //build entitlements for a target device based on an embedded.mobileprovision
+        let entitlements_path = app_bundle_path.join("entitlements.plist");
+
+        let cms = Command::new("security")
+            .args(["cms", "-D", "-i", embedded.to_str().unwrap()])
+            .output()
+            .map_err(|e| PistonError::Generic(format!("security cms failed: {}", e)))?;
+
+        let mut plutil = Command::new("plutil")
+            .args(["-extract", "Entitlements", "xml1", "-o", entitlements_path.to_str().unwrap(), "-"])
+            .stdin(Stdio::piped())
+            .spawn()
+            .map_err(|e| PistonError::Generic(format!("plutil spawn failed: {}", e)))?;
+
+        if let Some(mut stdin) = plutil.stdin.take() {
+            stdin.write_all(&cms.stdout).map_err(|e| PistonError::WritePlUtilError(format!("Failed to write plutil file: {}", e)))?;
+        }
+
+        let result = plutil.wait_with_output()
+            .map_err(|e| PistonError::Generic(format!("plutil failed: {}", e)))?;
+        if !result.status.success() {
+            return Err(PistonError::Generic("Failed to extract entitlements.plist".to_string()));
+        }
+
+        println!("✅ Entitlements.plist extracted from embedded profile");
+        Ok(())
+    }
+
+    //check if we already posess a provisioning profile for the target device
+    pub fn is_device_provisioned(
+        app_bundle_path: &PathBuf,
+        device_id: &str,
+        udid: &str,
+        idp_path: &str,
+    ) -> Result<bool, PistonError> {
+        println!("Checking provisioning status...");
+
+        // Look for ANY .mobileprovision in the bundle
+        let entries = fs::read_dir(app_bundle_path)
+            .map_err(|e| PistonError::ReadDirError { path: app_bundle_path.clone(), source: e })?;
+
+        let mut profile_files = vec![];
+        for entry in entries {
+            let entry = entry.map_err(|e| PistonError::MapDirError{
+                path: app_bundle_path.to_path_buf(),
+                source: e,
+        })?;
+            let name = entry.file_name().to_string_lossy().into_owned();
+            if name.ends_with(".mobileprovision") {
+                profile_files.push(entry.path());
+            }
+        }
+
+        if profile_files.is_empty() {
+            println!("No provisioning profile found in bundle");
+            return Ok(false);
+        }
+
+        // Check each profile
+        for profile_path in profile_files {
+            let output = Command::new("security")
+                .args(["cms", "-D", "-i", profile_path.to_str().unwrap()])
+                .output()
+                .map_err(|e| PistonError::QueryProvisionError{
+                    path: profile_path.to_path_buf(),
                     source: e,
                 })?;
-                let file_name = entry.file_name().to_string_lossy().into_owned();
-                if file_name.ends_with(".mobileprovision") {
-                    matching_files.push(file_name);
-                }
-            }
 
-            match matching_files.len() {
-                0 => {
-                    println!("No provisioning profile found");
-                    return Ok(false);
+            let xml = String::from_utf8_lossy(&output.stdout);
+
+            if xml.contains(&format!("<string>{}</string>", udid)) {
+                println!("✅ Device is in provisioning profile: {}", profile_path.display());
+
+                // Check if it's installed on the device
+                let list = Command::new(idp_path)
+                    .args(["list", "--udid", udid])
+                    .output();
+                let list_res = list.unwrap();
+                if !list_res.status.success() {
+                    return Err(PistonError::Generic(format!("Failed to list provisioning profiles with IDP")))
                 }
-                1 => {
-                    println!("Exactly one provisioning profile found");
-                    mobileprovision_file = matching_files[0].clone();
-                }
-                _ => {
-                    println!("something weird happened finding the provisioning profile");
-                    return Ok(false);
-                }
-            }
-        // 
-        
-        let profile_path_str = format!("{}/{}", &app_bundle_path.display(), &mobileprovision_file);
-        let profile_path = Path::new(&profile_path_str);
-        //query the mobile provision profile
-        //excute command `security cms -D -i /output/path/to/app/bundle/file.mobileprovision`
-        let output = Command::new("security")
-            .arg("cms")
-            .arg("-D")
-            .arg("-i")
-            .arg(profile_path)
-            .output()
-            .map_err(|e| PistonError::QueryProvisionError {
-                path: profile_path.to_path_buf(),
-                source: e,
-            })?;
-        if !output.status.success() {
-            return Err(PistonError::Generic(format!("security command failed")));
-        }
-        //check for an existing device provision
-        let xml = String::from_utf8(output.stdout)
-            .map_err(|e| PistonError::ParseUTF8Error(format!("error parsing xml from mobile provision")))?;
-        let key_str = "<key>ProvisionedDevices</key>";
-        let Some(key_pos) = xml.find(key_str) else {
-            println!("provision profile does not contain valid syntax: <key>ProvisionedDevice</key>");
-            return Ok(false);
-        };
-        let start_after_key = key_pos + key_str.len();
-        let rest_after_key = &xml[start_after_key..];
-        let string_open = "<array>";
-        let Some(array_pos) = rest_after_key.find(string_open) else {
-            println!("provision profile does not contain valid syntax: <array>");
-            return Ok(false);
-        };
-        let start_of_array = array_pos + string_open.len();
-        let rest_after_open = &rest_after_key[start_of_array..];
-        let string_close = "</array>";
-        let Some(close_pos) = rest_after_open.find(string_close) else {
-            println!("provision profile does not contain valid syntax: </array>");
-            return Ok(false);
-        };
-        let array_content = &rest_after_open[..close_pos];
-        let device_entry = format!("<string>{}</string>", udid);
-        //check if the profile contains the device id
-        println!("checking if array content: {:?} contains device entry: {:?}", &array_content, &device_entry);
-        if array_content.contains(&device_entry) {
-            println!("provisioning profile contains the device id...checking device for installation");
-            //check that the profile is installed on the device
-            if let Some(key_pos) = xml.find("<key>Name</key>") {
-                if let Some(string_start) = xml[key_pos..].find("<string>") {
-                    let start = key_pos + string_start + "<string>".len();
-                    if let Some(string_end) = xml[start..].find("</string>") {
-                        let profile_name = xml[start..start + string_end].trim().to_string();
-                        if !profile_name.is_empty() {
-                            //list the installed provisions
-                            let output = Command::new(idp_path)
-                                .args(["list", "--udid", udid])
-                                .output();
-                            let output_res = output.unwrap();
-                            if !output_res.status.success() {
-                                return Err(PistonError::Generic(format!("Failed to list provisioning profiles with IDP")));
-                            }
-                            let profiles = String::from_utf8_lossy(&output_res.stdout);
-                            if profiles.contains(&profile_name) {
-                                println!("target device is already provisioned");
-                                return Ok(true)
-                            }else{
-                                println!("provisioning profile is not currently installed on the target device");
-                                return Ok(false)
-                            }
-                        }
-                    }
+                let installed = String::from_utf8_lossy(&list_res.stdout);
+                if installed.contains(profile_path.file_name().unwrap().to_str().unwrap()) {
+                    return Ok(true);
                 }
             }
-            return Err(PistonError::Generic("Name not found in provisioning profile".to_string()));
-        } else {
-            println!("target device is not provisioned");
-            return Ok(false)
         }
+
+        println!("Device is NOT provisioned in any profile");
+        Ok(false)
     }
 
-    //TODO this
-    pub fn sign_app_bundle(app_bundle: &str, security_profile: &str) -> Result<(), PistonError> {
+    //sign an ios app bundle
+    pub fn sign_app_bundle(app_bundle_path: &PathBuf, security_profile: &str) -> Result<(), PistonError> {
+        let app_bundle = app_bundle_path.display().to_string();
         println!("Signing bundle: {}", app_bundle);
         // Delete any old signature so we can re-sign after provisioning added the profile
         let code_signature_dir = format!("{}/_CodeSignature", app_bundle);
@@ -1018,6 +1041,7 @@ impl AscClient {
         if code_signature_path.exists() {
             let _ = fs::remove_dir_all(&code_signature_path);
         }
+        AscClient::ensure_entitlements(&app_bundle_path)?;
         let output = Command::new("codesign")
             .args([
                 "--force",
@@ -1025,8 +1049,8 @@ impl AscClient {
                 "--entitlements", &format!("{}/entitlements.plist", app_bundle),
                 "--timestamp",
                 "--options", "runtime",
-                "--deep",                     // ← critical
-                app_bundle,
+                "--deep",
+                &app_bundle,
             ])
             .stdout(Stdio::inherit())
             .stderr(Stdio::inherit())

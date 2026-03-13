@@ -78,6 +78,8 @@ pub enum PistonError {
 
     DeviceProvisionError(String),
 
+    SecurityFindIdentityError(String),
+
     UnsupportedOSError{ os: String, target: String },
 
     CopyFileError{ input_path: PathBuf, output_path: PathBuf, source: IoError },
@@ -146,6 +148,7 @@ impl fmt::Display for PistonError {
             PistonError::XcrunLaunchError(err) => write!(f, "Error launching app bundle on target device via xcrun: {}", err),
             PistonError::CodesignError(err) => write!(f, "Error signing app bundle with codesign: {}", err),
             PistonError::DeviceProvisionError(err) => write!(f, "Error provisioning target device with idp: {}", err),
+            PistonError::SecurityFindIdentityError(err) => write!(f, "Error checking for local identities with `security find-identity -v -p codesigning`: {}", err),
             PistonError::UnsupportedOSError{ os, target, .. } => write!(f, "Host system: {:?} does not support the target: {:?}", os, target),
             PistonError::CopyFileError { input_path, output_path, .. } => write!(f, "Failed to copy {:?} to {:?}", input_path, output_path),
             PistonError::MacOSIconError { input_path, output_path, .. } => write!(f, "Failed to format icon {:?} to {:?}", input_path, output_path),
