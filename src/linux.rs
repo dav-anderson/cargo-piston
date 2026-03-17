@@ -107,7 +107,7 @@ impl LinuxBuilder {
         //MACOS HOST ONLY
         if std::env::consts::OS == "macos"{
             println!("Building for Linux on Macos using Zig linker");
-            Command::new("bash")
+            let builder = Command::new("bash")
                 .arg("-c")
                 .arg(format!("{} {}", self.zigbuild_path.as_ref().unwrap(), &cargo_args))
                 .current_dir(self.cwd.clone())
@@ -116,10 +116,13 @@ impl LinuxBuilder {
                 .stderr(Stdio::inherit())
                 .output()
                 .map_err(|e| PistonError::BuildError(format!("Cargo build failed: {}", e)))?;
+            if !builder.status.success() {
+                return Err(PistonError::BuildError(format!("Cargo build failed: {}", String::from_utf8_lossy(&builder.stderr))))
+            }
 
         //LINUX HOST
         }else{
-            Command::new("bash")
+            let builder = Command::new("bash")
                 .arg("-c")
                 .arg(&cargo_cmd)
                 .current_dir(self.cwd.clone())
@@ -127,6 +130,9 @@ impl LinuxBuilder {
                 .stderr(Stdio::inherit())
                 .output()
                 .map_err(|e| PistonError::BuildError(format!("Cargo build failed: {}", e)))?;
+            if !builder.status.success() {
+                return Err(PistonError::BuildError(format!("Cargo build failed: {}", String::from_utf8_lossy(&builder.stderr))))
+            }
         }
         Ok(())
     }

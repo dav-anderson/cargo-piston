@@ -278,7 +278,7 @@ impl IOSBuilder {
         //build the binary for the specified target
         let cargo_args = format!("build --target {} {}", self.target, if self.release {"--release"} else {""});
         let cargo_cmd = format!("{} {}", self.cargo_path, cargo_args);
-        Command::new("bash")
+        let builder = Command::new("bash")
             .arg("-c")
             .arg(&cargo_cmd)
             .current_dir(self.cwd.clone())
@@ -286,6 +286,10 @@ impl IOSBuilder {
             .stderr(Stdio::inherit())
             .output()
             .map_err(|e| PistonError::BuildError(format!("Cargo build failed: {}", e)))?;
+
+        if !builder.status.success() {
+            return Err(PistonError::BuildError(format!("Cargo build failed: {}", String::from_utf8_lossy(&builder.stderr))))
+        }
 
         Ok(())
     }
@@ -383,6 +387,7 @@ impl IOSRunner{
         let _ = Command::new("xcrun")
             .args(["devicectl", "device", "uninstall", "app", "--device", device_id, "--bundle-id", bundle_id])
             .output();
+        println!("installing app ID: {} to device: {}", bundle_id, device_id);
         let output = Command::new("xcrun")
             .args(["devicectl", "device", "install", "app", "--device", &device_id, &output_path])
             .output()
@@ -391,7 +396,7 @@ impl IOSRunner{
             println!("Failed to install with Xcrun: {:?}", &output);
             return Err(PistonError::XcrunInstallError(String::from_utf8_lossy(&output.stderr).trim().to_string()));
         }
-        println!("Deploying bundle id: {} to device: {}", &bundle_id, &device_id);
+        println!("Running bundle id: {} on device: {}", &bundle_id, &device_id);
         let output = Command::new("xcrun")
             .args(["devicectl", "device", "process", "launch", "--device", &device_id, &bundle_id])
             .output()

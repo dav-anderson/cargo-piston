@@ -471,7 +471,7 @@ impl AndroidBuilder {
         let release = if self.release {"--release"} else {""};
         let cargo_command = format!("cargo build --target {}  {} --lib", self.target, release); 
         //run the cargo build command
-        Command::new("bash")
+        let builder = Command::new("bash")
             .arg("-c")
             .arg(&cargo_command)
             .current_dir(self.build_path.clone())
@@ -484,6 +484,9 @@ impl AndroidBuilder {
             .stderr(Stdio::inherit())
             .output()
             .map_err(|e| PistonError::BuildError(format!("Cargo build failed: {}", e)))?;
+        if !builder.status.success() {
+            return Err(PistonError::BuildError(format!("Cargo build failed: {}", String::from_utf8_lossy(&builder.stderr))))
+        }
         println!("finished building .so library");
         Ok(())
     }

@@ -175,7 +175,7 @@ impl MacOSBuilder {
         //build the binary for the specified target
         let cargo_args = format!("build --target {} {}", self.target, if self.release {"--release"} else {""});
         let cargo_cmd = format!("{} {}", self.cargo_path, cargo_args);
-        Command::new("bash")
+        let builder = Command::new("bash")
             .arg("-c")
             .arg(&cargo_cmd)
             .current_dir(self.cwd.clone())
@@ -183,6 +183,9 @@ impl MacOSBuilder {
             .stderr(Stdio::inherit())
             .output()
             .map_err(|e| PistonError::BuildError(format!("Cargo build failed: {}", e)))?;
+        if !builder.status.success() {
+            return Err(PistonError::BuildError(format!("Cargo build failed: {}", String::from_utf8_lossy(&builder.stderr))))
+        }
 
         Ok(())
     }
@@ -220,11 +223,6 @@ impl MacOSRunner {
         let mut op = MacOSRunner::new(release, cwd, env_vars)?;
 
         op.run()?;
-        // let device = "device";
-        // let mut op = MacOSRunner::new(device)?;
-        //TODO check for signing certificate & sign?
-        //>>run
-        // op.run();
 
         Ok(())
     }
