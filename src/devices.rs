@@ -12,7 +12,7 @@ pub id: String,
 pub udid: String,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct AndroidDevice {
     model: String,
     pub id: String,

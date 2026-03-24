@@ -193,12 +193,6 @@ impl AndroidManifest {
     pub fn write_to(&self, dir: &Path) -> Result<(), PistonError> {
         // let file_path = dir.join("AndroidManifest.xml");
         println!("writing {:?}...", dir);
-        //empty dir if exists
-        // Helper::empty_directory(&dir)?;
-        // create_dir_all(&dir).map_err(|e| PistonError::CreateDirAllError {
-        // path: dir.to_path_buf(),
-        // source: e,
-        // })?;
         let file = File::create(&dir)
             .map_err(|e| PistonError::CreateManifestError(format!("Failed to create manifest file: {}", e)))?;
         
@@ -244,21 +238,22 @@ pub struct AndroidBuilder {
 }
 
 impl AndroidBuilder {
-    pub fn start(release: bool, target: String, cwd: PathBuf, env_vars: HashMap<String, String>) -> Result<(), PistonError>{
-    println!("building for android");
-    let mut op = AndroidBuilder::new(release, target, cwd, env_vars)?;
+    pub fn start(release: bool, target: String, cwd: PathBuf, env_vars: HashMap<String, String>, device_target: Option<AndroidDevice>) -> Result<(PathBuf, String), PistonError>{
+        println!("building for android");
+        let mut op = AndroidBuilder::new(release, target, cwd, env_vars)?;
 
-    //>>prebuild
-    //TODO check for signing certificate
-    op.pre_build()?;
+        //>>prebuild
+        //TODO check for signing certificate
+        op.pre_build()?;
 
-    //>>build
-    op.build()?;
+        //>>build
+        op.build()?;
 
-    //>>Postbuild
-    op.post_build()?;
+        //>>Postbuild
+        op.post_build()?;
 
-    Ok(())
+        //return bundle output path and app name
+        Ok((op.output_path.unwrap(), op.app_name))
     }
 
     fn new(release: bool, target: String, cwd: PathBuf, env_vars: HashMap<String, String>) -> Result<Self, PistonError> {
@@ -286,11 +281,19 @@ impl AndroidBuilder {
         let app_version = Helper::get_app_version(&metadata)?;
         //generate androidmanifest.xml
         let manifest = AndroidManifest::build(&metadata, &app_name)?;
-        let build_path: PathBuf = cwd.join("target").join(if release {"release"} else {"debug"}).join("androidbuilder").join("android");
+        let build_path: PathBuf = cwd.join("target").join(if release {"release"} else {"debug"}).join("android").join("androidbuilder");
+        println!("build path: {:?}", build_path);
+        //empty dirs all build_path
+        Helper::empty_directory(build_path.as_path())?;
+        //mkdir all build_path
+        create_dir_all(&build_path).map_err(|e| PistonError::CreateDirAllError {
+        path: build_path.clone(),
+        source: e,
+        })?;
         //manifest path is cwd/target/<release>/androidbuilder/android/manifest
         let manifest_path: PathBuf = build_path.join("AndroidManifest.xml");
+        println!("manifest path: {}", manifest_path.display());
         let resources_path: PathBuf = build_path.join("app").join("src").join("main").join("res");
-        println!("build path: {:?}", build_path);
         //write AndroidManifest.xml to file
         manifest.write_to(&manifest_path.as_path())?;
         Ok(AndroidBuilder{
@@ -344,14 +347,6 @@ impl AndroidBuilder {
         if self.output_path.as_ref().is_none() {
             return Err(PistonError::Generic("output path not provided".to_string()))
         }
-        let path = output_path.as_path();
-        //empty dir if it exists
-        Helper::empty_directory(path)?;
-        //create target dirs
-        create_dir_all(self.output_path.as_ref().unwrap()).map_err(|e| PistonError::CreateDirAllError {
-        path: self.output_path.as_ref().unwrap().to_path_buf(),
-        source: e,
-        })?;
         //establish absolute paths for  mipmap dirs
         let hdpi_path: PathBuf = self.resources.join("mipmap-hdpi");
         let mdpi_path: PathBuf = self.resources.join("mipmap-mdpi");
@@ -426,7 +421,8 @@ impl AndroidBuilder {
         let base_zip = self.build_path.join("base.zip");
         self.zip_base(&base_dir, &base_zip)?;
         //build AAB with bundletool
-        let aab_path = self.build_path.join(format!("{}.aab", self.app_name));
+        let output_bind = self.output_path.clone().unwrap();
+        let aab_path = output_bind.join(format!("{}.aab", self.app_name));
         self.build_bundle(&base_zip, &aab_path)?;
 
         println!("Success in building Android App Bundle. Bundle is available at: {:?}", aab_path);
@@ -662,26 +658,58 @@ impl AndroidBuilder {
 
 }
 
-
-
 pub struct AndroidRunner{
-device: String, 
+    device: AndroidDevice, 
 }
 
 impl AndroidRunner{
 
     pub fn start(release: bool, cwd: PathBuf, env_vars: HashMap<String, String>, device: &AndroidDevice) -> Result<(), PistonError> {
         println!("Running for Android");
+        let target_string = "aarch64-linux-android".to_string();
+        let env_vars_bind = env_vars.clone();
+        let bundletool_path: &String = Helper::get_or_err(&env_vars_bind, "bundletool_path")?;
+        //build the app bundle
+        let builder = AndroidBuilder::start(release, target_string, cwd.clone(), env_vars, Some(device.clone()))?;
+
+        //deploy the app bundle to the target device
+        let runner = AndroidRunner::deploy_usb(device.id.as_ref(), builder.0, builder.1, cwd.clone(), env_vars_bind)?;
 
         Ok(())
     }
-    fn new() -> Self{
-        println!("creating AndroidRunner");
 
-        AndroidRunner{device: "device".to_string()}
-
-        //TODO run androidbuilder
+    fn deploy_usb(device_id: &str, output_path: PathBuf, app_name: String, cwd: PathBuf, env_vars: HashMap<String, String>) -> Result<(), PistonError> {
+        println!("Deploying bundle at: {} to device: {}", output_path.display(), device_id);
+        let aab_path = output_path.join(format!("{}.aab", app_name));
+        let bundletool_path: &String = Helper::get_or_err(&env_vars, "bundletool_path")?;
+        let java_path: &String = Helper::get_or_err(&env_vars, "java_path")?;
+        let sdk_path: &String = Helper::get_or_err(&env_vars, "sdk_path")?;
+        let adb_path: String = format!("{}/platform-tools/adb", sdk_path);
+        let apk_path = cwd.join(format!("{}.apks", app_name));
         //TODO extract .apk from completed aab provided by androidbuilder
+         let bundle_cmd = format!(
+            "java -jar {} build-apks --bundle={} --output={} --connected-device --adb {}",
+            &bundletool_path,
+            aab_path.display(),
+            apk_path.display(),
+            &adb_path
+
+        );
+        println!("bundletool command: {}", bundle_cmd);
+
+        let output = Command::new("bash")
+            .arg("-c")
+            .arg(&bundle_cmd)
+            .env("JAVA_HOME", &java_path)
+            .stdout(Stdio::inherit())
+            .stderr(Stdio::inherit())
+            .output()
+            .map_err(|e| PistonError::ExtractAPKError(format!("Bundletool failed to extract the APK: {}", e)))?;
+        if !output.status.success() {
+            return Err(PistonError::ExtractAPKError(format!("Bundletool failed to extract APK: {}", String::from_utf8_lossy(&output.stderr))))
+        }
         //TODO stream install the extracted .apk to the target device
+        //TODO run the app
+        Ok(())
     }
 }

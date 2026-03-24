@@ -59,6 +59,7 @@ impl IOSBuilder {
         //>>Postbuild
         op.post_build()?;
 
+        //return bundle output path and bundle id from cargo.toml & plist
         Ok((op.output_path.unwrap(), op.bundle_id))
     }
 
@@ -88,9 +89,6 @@ impl IOSBuilder {
                 None
             }
         };
-
-        println!("asc_api_key: {:?}", asc_api_key);
-
         Ok(IOSBuilder{
             release: release, 
             target: target.to_string(), 
@@ -152,7 +150,6 @@ impl IOSBuilder {
         let cwd: PathBuf = self.cwd.clone();
         println!("working dir: {:?}", cwd);
         let capitalized = Helper::capitalize_first(&self.app_name.clone());
-        println!("capitalized app name: {}", capitalized);
         let release = if self.release {"release"} else {"debug"};
         //fix the path to match ios convention
         let partial_path: PathBuf = if self.release {
@@ -163,7 +160,6 @@ impl IOSBuilder {
         println!("partial path: {:?}", partial_path);
         //establish ~/target/<release>/ios/Appname.app/Resources
         let res_path: PathBuf = partial_path.join("Resources");
-        println!("res path: {:?}", res_path);
         self.output_path = Some(cwd.join(&partial_path));
         println!("full path to ios dir: {:?}", self.output_path);
         //empty the target directory if it exists
@@ -257,8 +253,16 @@ impl IOSBuilder {
         plist_file.write_all(plist_content.trim().as_bytes())
             .map_err(|e| PistonError::WriteFileError(e.to_string()))?;
 
-        let _ = Command::new("plutil").args(["convert", "xml1", "-o", &plist_path.display().to_string(), &plist_path.display().to_string()]).output();
-        println!("Info.plist created");
+        let output = Command::new("plutil")
+            .args(["-convert", "binary1", &plist_path.display().to_string()])
+            .output()
+            .map_err(|e| PistonError::PlutilConvertError(e.to_string()))?;
+        if !output.status.success() {
+            return Err(PistonError::PlutilConvertError(String::from_utf8_lossy(&output.stderr).to_string()))
+        }
+        println!("Info.plist created & converted to binary");
+        let pkginfo_path: PathBuf = partial_path.join("PkgInfo");
+        fs::write(pkginfo_path, b"APPL????").map_err(|e| PistonError::WriteFileError(format!("PkgInfo Write failed: {}", e)))?;
         //if icon path was provided...convert
         if !self.icon_path.is_none(){
             println!("icon path provided, configuring icon");
@@ -333,6 +337,7 @@ impl IOSBuilder {
             let security_profile = asc_client.create_or_find_security_cert()?;
             println!("your security profile is: {:?}", security_profile);
             let output_path = self.output_path.clone().unwrap();
+            let app_name = self.app_name.clone();
 
             //if a device target is provided, check if the target device is provisioned
             if !self.device_target.is_none() {
@@ -348,12 +353,12 @@ impl IOSBuilder {
                     let app_name = self.app_name.clone();
                     //provision device here
                     asc_client.provision_ios_device(&target_id, &bundle_id, &app_name, &security_profile.0, &output_path, &idp_path)?;
-                    AscClient::sign_app_bundle(&output_path, security_profile.1.as_ref())?;
+                    AscClient::sign_app_bundle(&app_name, &output_path, security_profile.1.as_ref())?;
                     return Ok(())
                 }
             }
             //sign the app bundle for distribution
-            AscClient::sign_app_bundle(&output_path, security_profile.1.as_ref())?;
+            AscClient::sign_app_bundle(&app_name, &output_path, security_profile.1.as_ref())?;
         }
         Ok(())
     }
@@ -915,6 +920,11 @@ impl AscClient {
         // 7. Extract entitlements.plist
         AscClient::ensure_entitlements(&app_bundle_path)?;
 
+        let _ = Command::new("xattr")
+            .args(["-cr", app_bundle_path.to_str().unwrap()])
+            .status()
+            .map_err(|e| PistonError::Generic(format!("xattr error: {}", e)))?;
+
         // Cleanup
         let _ = fs::remove_file(profile_path);
 
@@ -1037,7 +1047,8 @@ impl AscClient {
     }
 
     //sign an ios app bundle
-    pub fn sign_app_bundle(app_bundle_path: &PathBuf, security_profile: &str) -> Result<(), PistonError> {
+    pub fn sign_app_bundle(app_name: &str, app_bundle_path: &PathBuf, security_profile: &str) -> Result<(), PistonError> {
+        let exec_path = app_bundle_path.join(app_name).display().to_string();
         let app_bundle = app_bundle_path.display().to_string();
         println!("Signing bundle: {}", app_bundle);
         // Delete any old signature so we can re-sign after provisioning added the profile
@@ -1047,14 +1058,37 @@ impl AscClient {
             let _ = fs::remove_dir_all(&code_signature_path);
         }
         AscClient::ensure_entitlements(&app_bundle_path)?;
+        //sign executable binary
         let output = Command::new("codesign")
             .args([
                 "--force",
                 "--sign", security_profile,
                 "--entitlements", &format!("{}/entitlements.plist", app_bundle),
-                "--timestamp",
                 "--options", "runtime",
+                "--timestamp",
                 "--deep",
+                "--generate-entitlement-der",
+                &exec_path,
+            ])
+            .stdout(Stdio::inherit())
+            .stderr(Stdio::inherit())
+            .output()
+            .map_err(|e| PistonError::CodesignError(e.to_string()))?;
+        if !output.status.success() {
+            return Err(PistonError::CodesignError(
+                String::from_utf8_lossy(&output.stderr).trim().to_string()
+            ));
+        }
+        //sign app bundle
+        let output = Command::new("codesign")
+            .args([
+                "--force",
+                "--sign", security_profile,
+                "--entitlements", &format!("{}/entitlements.plist", app_bundle),
+                "--options", "runtime",
+                "--timestamp",
+                "--deep",
+                "--generate-entitlement-der",
                 &app_bundle,
             ])
             .stdout(Stdio::inherit())

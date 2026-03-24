@@ -324,7 +324,7 @@ let cwd = match env::current_dir(){
         match platform {
             Platform::Android => {
             println!("build orders received for Android targeting {:?}, release is set to {:?}", cmd.target(), release);
-            AndroidBuilder::start(release, target_string, cwd, env_vars)?;
+            AndroidBuilder::start(release, target_string, cwd, env_vars, None)?;
             },
             Platform::Ios => {
             println!("build orders received for IOS targeting {:?}, release is set to {:?}", cmd.target(), release);
