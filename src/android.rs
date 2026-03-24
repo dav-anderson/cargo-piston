@@ -13,9 +13,6 @@ use crate::devices::AndroidDevice;
 //TODO build out intent filters with more robust cargo.toml parameters  
 //TODO reverse engineer cargo-apk
 
-//TODO derive APK from aab
-
-
 //     fn sign_aab(&self, aab_path: &Path) -> Result<(), PistonError> {
 //         let profile_name = if self.is_debug { "dev" } else { "release" };
 //         let keystore_env = format!("CARGO_APK_{}_KEYSTORE", profile_name.to_uppercase());
@@ -548,7 +545,6 @@ impl AndroidBuilder {
             .output()
             .map_err(|e| PistonError::ProtoLinkError(format!("aapt2 link failed: {}", e)))?;
 
-        //TODO THIS IS BUSTED AND PROBABLY UNNCESSARY FIX HIGHER UP LOGIC FLOW Ensure proto manifest is in a manifest/ subdir
         let proto_manifest_root = base_dir.join("AndroidManifest.xml");
         if proto_manifest_root.exists() {
             let manifest_dir = base_dir.join("manifest");
@@ -686,12 +682,12 @@ impl AndroidRunner{
         let sdk_path: &String = Helper::get_or_err(&env_vars, "sdk_path")?;
         let adb_path: String = format!("{}/platform-tools/adb", sdk_path);
         let apk_path = cwd.join(format!("{}.apks", app_name));
-        //TODO extract .apk from completed aab provided by androidbuilder
+        //extract .apk from completed aab provided by androidbuilder
          let bundle_cmd = format!(
-            "java -jar {} build-apks --bundle={} --output={} --connected-device --adb {}",
+            "java -jar {} build-apks --bundle={} --output={} --connected-device --overwrite --adb {}",
             &bundletool_path,
-            aab_path.display(),
-            apk_path.display(),
+            &aab_path.display(),
+            &apk_path.display(),
             &adb_path
 
         );
@@ -708,7 +704,26 @@ impl AndroidRunner{
         if !output.status.success() {
             return Err(PistonError::ExtractAPKError(format!("Bundletool failed to extract APK: {}", String::from_utf8_lossy(&output.stderr))))
         }
-        //TODO stream install the extracted .apk to the target device
+        //stream install the extracted .apk to the target device
+        let bundle_cmd = format!(
+            "java -jar {} install-apks --apks={} --device-id={} --adb {}",
+            &bundletool_path,
+            &apk_path.display(),
+            device_id,
+            &adb_path,
+        );
+
+        let output = Command::new("bash")
+            .arg("-c")
+            .arg(&bundle_cmd)
+            .env("JAVA_HOME", &java_path)
+            .stdout(Stdio::inherit())
+            .stderr(Stdio::inherit())
+            .output()
+            .map_err(|e| PistonError::InstallAPKError(format!("Bundletool failed to install the APK: {}", e)))?;
+        if !output.status.success() {
+            return Err(PistonError::InstallAPKError(format!("Bundletool failed to install APK: {}", String::from_utf8_lossy(&output.stderr))))
+        }
         //TODO run the app
         Ok(())
     }
