@@ -489,11 +489,20 @@ name="<app_name>"
 crate-type=["cdylib"]
 ```
 
-your target_sdk_version must be installed in your `~Android/sdk/platforms` path 
+Optionally, you can configure the following metadata parameters inside of your `Cargo.toml` within the `[package.metadata.android]` subheading. 
+
+version_name is drawn automatically from your `Cargo.toml` within the `[package]` subheading. 
+
+target_sdk_version must be installed in your `~Android/sdk/platforms` path.
 
 ```
 [package.metadata.android]
-target_sdk_version=31
+package=<com.example.appname>
+target_sdk_version=<31>
+min_sdk_version=<21>
+version_code=<1>
+app_label=<app_name>
+
 ```
 
 ### Create a Lib.rs in ~/src

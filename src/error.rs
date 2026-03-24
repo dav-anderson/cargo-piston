@@ -86,6 +86,8 @@ pub enum PistonError {
 
     InstallAPKError(String),
 
+    RunAPKError(String),
+
     UnsupportedOSError{ os: String, target: String },
 
     CopyFileError{ input_path: PathBuf, output_path: PathBuf, source: IoError },
@@ -158,6 +160,7 @@ impl fmt::Display for PistonError {
             PistonError::PlutilConvertError(err) => write!(f, "Error using plutil to convert filetype`: {}", err),
             PistonError::ExtractAPKError(err) => write!(f, "Error extracting APK from AAB with bundletool: {}", err),
             PistonError::InstallAPKError(err) => write!(f, "Error Installing APK with bundletool: {}", err),
+            PistonError::RunAPKError(err) => write!(f, "Error Running APK with ADB: {}", err),
             PistonError::UnsupportedOSError{ os, target, .. } => write!(f, "Host system: {:?} does not support the target: {:?}", os, target),
             PistonError::CopyFileError { input_path, output_path, .. } => write!(f, "Failed to copy {:?} to {:?}", input_path, output_path),
             PistonError::MacOSIconError { input_path, output_path, .. } => write!(f, "Failed to format icon {:?} to {:?}", input_path, output_path),

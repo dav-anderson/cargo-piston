@@ -120,7 +120,7 @@ struct AndroidManifest {
 }
 
 impl AndroidManifest {
-    pub fn build(metadata: &Metadata, app_name: &String) -> Result<Self, PistonError> {
+    pub fn build(metadata: &Metadata, app_name: &String, version: &String) -> Result<Self, PistonError> {
         let package = metadata.root_package()
             .ok_or_else(|| PistonError::ParseManifestError("No Root package found in metadata".to_string()))?;
         let crate_name = package.name.clone();
@@ -138,14 +138,13 @@ impl AndroidManifest {
             .unwrap_or(format!("com.example.{}", crate_name));
         manifest.version_code = android_meta.version_code
             .unwrap_or(1);
-        manifest.version_name = android_meta.version_name
-            .unwrap_or("1.0".to_string());
+        manifest.version_name = version.to_string();
         manifest.min_sdk_version = android_meta.min_sdk_version
             .unwrap_or(21);
         manifest.target_sdk_version = android_meta.target_sdk_version
             .unwrap_or(34);
         manifest.app_label = android_meta.label
-            .unwrap_or(format!("{} App", crate_name));
+            .unwrap_or(format!("{}", crate_name));
         manifest.app_name = app_name.to_string();
         manifest.icon = "@mipmap/ic_launcher".to_string();
 
@@ -235,7 +234,7 @@ pub struct AndroidBuilder {
 }
 
 impl AndroidBuilder {
-    pub fn start(release: bool, target: String, cwd: PathBuf, env_vars: HashMap<String, String>, device_target: Option<AndroidDevice>) -> Result<(PathBuf, String), PistonError>{
+    pub fn start(release: bool, target: String, cwd: PathBuf, env_vars: HashMap<String, String>, device_target: Option<AndroidDevice>) -> Result<(PathBuf, String, String), PistonError>{
         println!("building for android");
         let mut op = AndroidBuilder::new(release, target, cwd, env_vars)?;
 
@@ -250,7 +249,7 @@ impl AndroidBuilder {
         op.post_build()?;
 
         //return bundle output path and app name
-        Ok((op.output_path.unwrap(), op.app_name))
+        Ok((op.output_path.unwrap(), op.app_name, op.manifest.package))
     }
 
     fn new(release: bool, target: String, cwd: PathBuf, env_vars: HashMap<String, String>) -> Result<Self, PistonError> {
@@ -277,7 +276,7 @@ impl AndroidBuilder {
         let app_name = Helper::get_app_name(&metadata)?;
         let app_version = Helper::get_app_version(&metadata)?;
         //generate androidmanifest.xml
-        let manifest = AndroidManifest::build(&metadata, &app_name)?;
+        let manifest = AndroidManifest::build(&metadata, &app_name, &app_version)?;
         let build_path: PathBuf = cwd.join("target").join(if release {"release"} else {"debug"}).join("android").join("androidbuilder");
         println!("build path: {:?}", build_path);
         //empty dirs all build_path
@@ -669,12 +668,12 @@ impl AndroidRunner{
         let builder = AndroidBuilder::start(release, target_string, cwd.clone(), env_vars, Some(device.clone()))?;
 
         //deploy the app bundle to the target device
-        let runner = AndroidRunner::deploy_usb(device.id.as_ref(), builder.0, builder.1, cwd.clone(), env_vars_bind)?;
+        let runner = AndroidRunner::deploy_usb(device.id.as_ref(), builder.0, builder.1, cwd.clone(), builder.2, env_vars_bind)?;
 
         Ok(())
     }
 
-    fn deploy_usb(device_id: &str, output_path: PathBuf, app_name: String, cwd: PathBuf, env_vars: HashMap<String, String>) -> Result<(), PistonError> {
+    fn deploy_usb(device_id: &str, output_path: PathBuf, app_name: String, cwd: PathBuf, package: String, env_vars: HashMap<String, String>) -> Result<(), PistonError> {
         println!("Deploying bundle at: {} to device: {}", output_path.display(), device_id);
         let aab_path = output_path.join(format!("{}.aab", app_name));
         let bundletool_path: &String = Helper::get_or_err(&env_vars, "bundletool_path")?;
@@ -724,7 +723,25 @@ impl AndroidRunner{
         if !output.status.success() {
             return Err(PistonError::InstallAPKError(format!("Bundletool failed to install APK: {}", String::from_utf8_lossy(&output.stderr))))
         }
-        //TODO run the app
+        //run the app
+        let launch = format!("{}/android.app.NativeActivity", package);
+        let adb_cmd = format!(
+            "{} shell am start -n {}",
+            &adb_path,
+            &launch,
+        );
+
+        let output = Command::new("bash")
+            .arg("-c")
+            .arg(&adb_cmd)
+            .stdout(Stdio::inherit())
+            .stderr(Stdio::inherit())
+            .output()
+            .map_err(|e| PistonError::RunAPKError(format!("ADB failed to run the APK: {}", e)))?;
+        if !output.status.success() {
+            return Err(PistonError::RunAPKError(format!("ADB failed to run APK: {}", String::from_utf8_lossy(&output.stderr))))
+        }
+
         Ok(())
     }
 }
