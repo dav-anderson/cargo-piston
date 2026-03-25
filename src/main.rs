@@ -425,14 +425,13 @@ fn test_platform_from_target() {
 
 //TODO refactor most of main into a lib.rs
 
-//TODO implement automated signing for iOS, MacOS, Windows, and Android outputs
+//TODO implement automated signing for iOS*, MacOS, Windows, and Android outputs
 
-//TODO if apple app store connect api key provided in .env, perform setup via api if needed, otherwise assume user prefers to do it manually
-//Obtain a signing cert if it doesn't already exist
-//provision a target device if its not already provisioned
+//*ios is impelemented, however, device deployment currently breaks on the install phase due to a misread of the Info.plist CFBUndleIdentifier, open issue
 
-//TODO cargo.toml
-//more extensive android permissions
-//more extensive macos/ios permissions
+//TODO extensive android permissions for intent filters
+//TODO extensive macos/ios permissions 
+
+//TODO smarter android chipset navigation for dyanmic target builds
 
 //TODO add linux host machine support for all features
