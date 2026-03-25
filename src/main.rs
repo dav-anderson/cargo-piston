@@ -368,7 +368,7 @@ let cwd = match env::current_dir(){
         //explicit device flag
         }else{
             let tgt_unwrap = args.device.unwrap();
-            let target_device = tgt_unwrap.trim().clone();
+            let target_device = tgt_unwrap.trim();
             //explicit device flag can either be "ios" or "android" or the target device id
             println!("run orders received for a target device: {}", &tgt_unwrap);
             let devices = Devices::list_devices(env_vars.clone(), true)?;

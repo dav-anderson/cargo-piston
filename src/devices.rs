@@ -2,7 +2,6 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::process::Command;
 use std::process::Stdio;
-use regex::Regex;
 use crate::error::PistonError;
 
 #[derive(Debug, Clone)]
@@ -14,7 +13,7 @@ pub udid: String,
 
 #[derive(Debug, Clone)]
 pub struct AndroidDevice {
-    model: String,
+    // model: String,
     pub id: String,
 }
 
@@ -76,8 +75,8 @@ impl Devices {
                 if parts.len() == 2 && parts[1] == "device" {
                     //add the device serial to the vector
                     self.android.push(AndroidDevice {
-                        //TODO make this model field more dynamic if possible
-                        model: "Android Device".to_string(),
+                        //TODO make this model field more dynamic for chipset architecture currently useless
+                        // model: "Android Device".to_string(),
                         id: parts[0].to_string(),
                     });
                 }

@@ -5,21 +5,14 @@ use std::io::{ Write };
 use cargo_metadata::{ Metadata, MetadataCommand };
 use std::fs::{ copy,File, create_dir_all, remove_file };
 use serde::{ Serialize, Deserialize };
-use serde_json::{ Value, json };
-use std::thread::sleep;
-use std::time::Duration;
+use serde_json::json;
 use std::fs;
 use std::time::{SystemTime, UNIX_EPOCH};
 use ureq::Response;
+use base64::prelude::*;
 use crate::Helper;
 use crate::PistonError;
 use crate::devices::IOSDevice;
-
-#[derive(Deserialize, Default)]
-struct IOSMetadata {
-    #[serde(default)]
-    bundle_id: Option<String>,
-}
 
 
 pub struct IOSBuilder {
@@ -120,7 +113,7 @@ impl IOSBuilder {
         let xcode_select = Command::new("xcode-select")
             .arg("-p")
             .output()
-            .map_err(|e| PistonError::XcodeSelectInstallError("Failed to verify xcode tools installation".to_string()));
+            .map_err(|e| PistonError::XcodeSelectInstallError(format!("Failed to verify xcode tools installation: {}", e)));
 
         let expected_path = format!("{}/Contents/Developer", xcode_app);
 
@@ -138,7 +131,7 @@ impl IOSBuilder {
         let sdk_output = Command::new("xcodebuild")
             .arg("-showsdks")
             .output()
-            .map_err(|e| PistonError::XcodeBuildError("Failed to run xcodebuild -showsdks. Something is likely missing from your installation".to_string()));
+            .map_err(|e| PistonError::XcodeBuildError(format!("Failed to run xcodebuild -showsdks. Something is likely missing from your installation: {}", e)));
 
         let sdk_binding = sdk_output.unwrap();
         let sdks = String::from_utf8_lossy(&sdk_binding.stdout);
@@ -345,7 +338,7 @@ impl IOSBuilder {
                 let target_id = self.device_target.clone().unwrap().id;
                 let target_udid = self.device_target.clone().unwrap().udid;
                 let idp_path = self.idp_path.clone().unwrap();
-                let provisioned = AscClient::is_device_provisioned(&output_path, &target_id, &target_udid, &idp_path)?;
+                let provisioned = AscClient::is_device_provisioned(&output_path, &target_udid, &idp_path)?;
                 //if device is not provisioned and api access is available, attempt to provision
                 if provisioned == false && !self.asc_api_key.is_none() {
                     println!("attempting to provision target device {:?}", self.device_target);
@@ -365,9 +358,7 @@ impl IOSBuilder {
 
 }
 
-pub struct IOSRunner{
-device: IOSDevice, 
-}
+pub struct IOSRunner{}
 
 impl IOSRunner{
 
@@ -381,7 +372,7 @@ impl IOSRunner{
         //build the app bundle and sign
         let builder = IOSBuilder::start(release, target_string, cwd, env_vars, Some(device.clone()))?;
         //deploy the app bundle to the target device
-        let runner = IOSRunner::deploy_usb(device.id.as_ref(), &builder.0.display().to_string(), &builder.1)?;
+        IOSRunner::deploy_usb(device.id.as_ref(), &builder.0.display().to_string(), &builder.1)?;
 
         Ok(())
     }
@@ -616,7 +607,9 @@ impl AscClient {
             .as_str()
             .ok_or_else(|| PistonError::Generic("No certificateContent returned".to_string()))?;
 
-        let cert_der = base64::decode(cert_b64)
+
+        let cert_der = BASE64_STANDARD
+            .decode(cert_b64)
             .map_err(|e| PistonError::Base64DecodeError(format!("Decode failed: {}", e)))?;
 
         let cer_path = "temp_cert.cer";
@@ -702,8 +695,6 @@ impl AscClient {
     ) -> Result<(), PistonError> {
         let token = self.generate_jwt()?;
         println!("Provisioning device {} for app '{}' (bundle {})", device_id, app_name, bundle_id);
-        let cache_dir = self.get_cache_dir();
-
         // // 1. Register device if missing
         let device_resource_id = {
             let check = ureq::get("https://api.appstoreconnect.apple.com/v1/devices")
@@ -887,7 +878,9 @@ impl AscClient {
             .as_str()
             .ok_or_else(|| PistonError::Generic("No profileContent returned".to_string()))?;
 
-        let profile_data = base64::decode(b64)
+        
+        let profile_data = BASE64_STANDARD
+            .decode(b64)
             .map_err(|e| PistonError::Base64DecodeError(format!("Decode failed: {}", e)))?;
 
         let profile_path = format!("{}.mobileprovision", profile_name);
@@ -985,7 +978,6 @@ impl AscClient {
     //check if we already posess a provisioning profile for the target device
     pub fn is_device_provisioned(
         app_bundle_path: &PathBuf,
-        device_id: &str,
         udid: &str,
         idp_path: &str,
     ) -> Result<bool, PistonError> {

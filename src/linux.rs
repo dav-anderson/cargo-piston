@@ -13,7 +13,8 @@ pub struct LinuxBuilder {
     target: String,
     cwd: PathBuf,
     output_path: Option<PathBuf>,
-    icon_path: Option<String>,
+    //TODO implement icon auto handler
+    // icon_path: Option<String>,
     cargo_path: String,
     gpg_path: Option<String>,
     zigbuild_path: Option<String>,
@@ -54,7 +55,7 @@ impl LinuxBuilder {
             .exec()
             .map_err(|e| PistonError::CargoParseError(e.to_string()))?;
 
-        let icon_path = Helper::get_icon_path(&metadata);
+        // let icon_path = Helper::get_icon_path(&metadata);
         let app_name = Helper::get_app_name(&metadata)?;
         //parse the path to zigbuild if building on Macos
         let mut zigbuild_path: Option<String> = None;
@@ -68,7 +69,21 @@ impl LinuxBuilder {
             println!("Homebrew path determined: {}", &homebrew_path.clone().unwrap());
         }   
         
-        Ok(LinuxBuilder{release: release, target: target.to_string(), cwd: cwd, output_path: None, icon_path: icon_path, cargo_path: cargo_path, gpg_path: gpg_path, zigbuild_path: zigbuild_path, homebrew_path: homebrew_path, app_name: app_name, key_id: key_id, key_pass: key_pass})
+        Ok(LinuxBuilder{
+            release: release, 
+            target: target.to_string(), 
+            cwd: cwd, 
+            output_path: None, 
+            //TODO implement auto handler for icon
+            // icon_path: icon_path, 
+            cargo_path: cargo_path, 
+            gpg_path: gpg_path, 
+            zigbuild_path: zigbuild_path, 
+            homebrew_path: homebrew_path, 
+            app_name: app_name, 
+            key_id: key_id, 
+            key_pass: key_pass
+        })
     }
 
     fn pre_build(&mut self) -> Result<(), PistonError>{

@@ -138,7 +138,7 @@ impl AndroidManifest {
             .unwrap_or(format!("com.example.{}", crate_name));
         manifest.version_code = android_meta.version_code
             .unwrap_or(1);
-        manifest.version_name = version.to_string();
+        manifest.version_name = android_meta.version_name.unwrap_or(version.to_string());
         manifest.min_sdk_version = android_meta.min_sdk_version
             .unwrap_or(21);
         manifest.target_sdk_version = android_meta.target_sdk_version
@@ -215,11 +215,10 @@ pub struct AndroidBuilder {
     build_path: PathBuf,
     output_path: Option<PathBuf>,
     icon_path: Option<String>,
-    cargo_path: String,
-    gpg_path: Option<String>,
+    // cargo_path: String,
+    // gpg_path: Option<String>,
     app_name: String,
     lib_name: String,
-    app_version: String,
     manifest: AndroidManifest,
     manifest_path: PathBuf,
     ndk_path: String,
@@ -228,15 +227,16 @@ pub struct AndroidBuilder {
     resources: PathBuf,
     build_tools_version: String,
     bundletool_path: String,
-    key_id: Option<String>,
-    key_pass: Option<String>,
+    // key_id: Option<String>,
+    // key_pass: Option<String>,
+    device_target: Option<AndroidDevice>,
     // assets: Option<PathBuf>,
 }
 
 impl AndroidBuilder {
     pub fn start(release: bool, target: String, cwd: PathBuf, env_vars: HashMap<String, String>, device_target: Option<AndroidDevice>) -> Result<(PathBuf, String, String), PistonError>{
         println!("building for android");
-        let mut op = AndroidBuilder::new(release, target, cwd, env_vars)?;
+        let mut op = AndroidBuilder::new(release, target, cwd, env_vars, device_target)?;
 
         //>>prebuild
         //TODO check for signing certificate
@@ -252,19 +252,18 @@ impl AndroidBuilder {
         Ok((op.output_path.unwrap(), op.app_name, op.manifest.package))
     }
 
-    fn new(release: bool, target: String, cwd: PathBuf, env_vars: HashMap<String, String>) -> Result<Self, PistonError> {
+    fn new(release: bool, target: String, cwd: PathBuf, env_vars: HashMap<String, String>, device_target: Option<AndroidDevice>) -> Result<Self, PistonError> {
         println!("creating AndroidBuilder: release: {:?}, target: {:?}, cwd: {:?}", release, target.to_string(), cwd);
         //parse env vars
-        let cargo_path: String = env_vars.get("cargo_path").cloned().unwrap_or("cargo".to_string());
-        let gpg_path: Option<String> = env_vars.get("gpg_path").cloned();
+        // let cargo_path: String = env_vars.get("cargo_path").cloned().unwrap_or("cargo".to_string());
+        // let gpg_path: Option<String> = env_vars.get("gpg_path").cloned();
         let ndk_path: &String = Helper::get_or_err(&env_vars, "ndk_path")?;
         let sdk_path: &String = Helper::get_or_err(&env_vars, "sdk_path")?;
         let java_path: &String = Helper::get_or_err(&env_vars, "java_path")?;
         let bundletool_path: &String = Helper::get_or_err(&env_vars, "bundletool_path")?;
         let build_tools_version: String = Helper::get_build_tools_version(&sdk_path)?;
-        let key_id: Option<String> = env_vars.get("android_gpg_key_id").cloned();
-        let key_pass: Option<String> = env_vars.get("android_gpg_key_pass").cloned();
-        println!("Cargo path determined: {}", &cargo_path);
+        // let key_id: Option<String> = env_vars.get("android_gpg_key_id").cloned();
+        // let key_pass: Option<String> = env_vars.get("android_gpg_key_pass").cloned();
         //parse cargo.toml
         let metadata: Metadata = MetadataCommand::new()
             .current_dir(cwd.clone())
@@ -299,11 +298,10 @@ impl AndroidBuilder {
             build_path: build_path, 
             output_path: None, 
             icon_path: icon_path, 
-            cargo_path: cargo_path,
-            gpg_path: gpg_path,
+            // cargo_path: cargo_path,
+            // gpg_path: gpg_path,
             app_name: app_name, 
             lib_name: lib_name,
-            app_version: app_version, 
             manifest: manifest, 
             manifest_path: manifest_path,
             ndk_path: ndk_path.to_string(), 
@@ -312,8 +310,9 @@ impl AndroidBuilder {
             resources: resources_path,
             build_tools_version: build_tools_version,
             bundletool_path: bundletool_path.to_string(),
-            key_id: key_id,
-            key_pass: key_pass,
+            // key_id: key_id,
+            // key_pass: key_pass,
+            device_target: device_target,
         })
     }
 
@@ -415,7 +414,7 @@ impl AndroidBuilder {
         self.add_lib(&base_dir, self.target.as_ref())?;
         //zip base module
         let base_zip = self.build_path.join("base.zip");
-        self.zip_base(&base_dir, &base_zip)?;
+        self.zip_base(&base_dir)?;
         //build AAB with bundletool
         let output_bind = self.output_path.clone().unwrap();
         let aab_path = output_bind.join(format!("{}.aab", self.app_name));
@@ -432,6 +431,11 @@ impl AndroidBuilder {
     fn post_build(&mut self) -> Result <(), PistonError>{
         println!("post build for android");
         //TDOD sign the completed AAB
+        //TODO if a device target is provided, check if the target device is provisioned
+        if !self.device_target.is_none() {
+            println!("");
+            //NOTE: this feature will be implemented when Android adds requirements for provisioning 
+        }
         Ok(())
     }
 
@@ -593,7 +597,7 @@ impl AndroidBuilder {
         Ok(())
     }
 
-    fn zip_base(&self, base_dir: &Path, base_zip: &Path) -> Result<(), PistonError> {
+    fn zip_base(&self, base_dir: &Path) -> Result<(), PistonError> {
         let zip_path = self.build_path.join("base.zip");
         if zip_path.exists() {
             println!("removing stale zip");
@@ -653,9 +657,7 @@ impl AndroidBuilder {
 
 }
 
-pub struct AndroidRunner{
-    device: AndroidDevice, 
-}
+pub struct AndroidRunner{}
 
 impl AndroidRunner{
 
@@ -663,12 +665,11 @@ impl AndroidRunner{
         println!("Running for Android");
         let target_string = "aarch64-linux-android".to_string();
         let env_vars_bind = env_vars.clone();
-        let bundletool_path: &String = Helper::get_or_err(&env_vars_bind, "bundletool_path")?;
         //build the app bundle
         let builder = AndroidBuilder::start(release, target_string, cwd.clone(), env_vars, Some(device.clone()))?;
 
         //deploy the app bundle to the target device
-        let runner = AndroidRunner::deploy_usb(device.id.as_ref(), builder.0, builder.1, cwd.clone(), builder.2, env_vars_bind)?;
+        AndroidRunner::deploy_usb(device.id.as_ref(), builder.0, builder.1, cwd.clone(), builder.2, env_vars_bind)?;
 
         Ok(())
     }
