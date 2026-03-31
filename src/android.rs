@@ -11,85 +11,6 @@ use crate::PistonError;
 use crate::devices::AndroidDevice;
 
 //TODO build out intent filters with more robust cargo.toml parameters  
-//TODO reverse engineer cargo-apk
-
-//     fn sign_aab(&self, aab_path: &Path) -> Result<(), PistonError> {
-//         let profile_name = if self.is_debug { "dev" } else { "release" };
-//         let keystore_env = format!("CARGO_APK_{}_KEYSTORE", profile_name.to_uppercase());
-//         let password_env = format!("{}_PASSWORD", keystore_env);
-
-//         let keystore_path = std::env::var_os(&keystore_env).map(PathBuf::from);
-//         let password = std::env::var(&password_env).ok();
-
-//         let signing_key = match (keystore_path, password) {
-//             Some(path), Some(pass) => (path, pass),
-//             _ if self.is_debug => {
-//                 // Fall back to default debug key (mirrors cargo-apk; assume path from NDK or SDK)
-//                 let default_key = self.sdk_path.join("debug.keystore");  // Generate if needed with keytool
-//                 if !default_key.exists() {
-//                     self.generate_debug_key(&default_key)?;
-//                 }
-//                 (default_key, "android".to_string())  // Default pass
-//             }
-//             _ => return Err(PistonError::BuildError("Missing release key".to_string())),
-//         };
-
-//         let apksigner_path = self.sdk_path.join(format!("build-tools/{}/apksigner", self.build_tools_version));
-
-//         let sign_command = format!(
-//             "{} sign --ks {} --ks-key-alias androiddebugkey --ks-pass pass:{} {}",
-//             apksigner_path.display(),
-//             signing_key.0.display(),
-//             signing_key.1,
-//             aab_path.display()
-//         );
-
-//         Command::new("bash")
-//             .arg("-c")
-//             .arg(&sign_command)
-//             .current_dir(&self.build_path)
-//             .stdout(Stdio::inherit())
-//             .stderr(Stdio::inherit())
-//             .output()
-//             .map_err(|e| PistonError::BuildError(format!("Signing failed: {}", e)))?;
-
-//         Ok(())
-//     }
-
-//     fn generate_debug_key(&self, key_id: &Path) -> Result<(), PistonError> {
-//         let keytool_command = format!(
-//             "keytool -genkeypair -v -keystore {} -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 -dname \"CN=Android Debug,O=Android,C=US\" -storepass android -keypass android",
-//             key_id.display()
-//         );
-
-//         Command::new("bash")
-//             .arg("-c")
-//             .arg(&keytool_command)
-//             .env("JAVA_HOME", self.java_path.to_str().unwrap())
-//             .stdout(Stdio::inherit())
-//             .stderr(Stdio::inherit())
-//             .output()
-//             .map_err(|e| PistonError::BuildError(format!("keytool failed: {}", e)))?;
-
-//         Ok(())
-//     }
-
-//     // Helper for recursive copy (minimum impl; expand as needed)
-//     fn copy_dir_recursively(&self, src: &Path, dest: &Path) -> Result<(), PistonError> {
-//         for entry in fs::read_dir(src)? {
-//             let entry = entry?;
-//             let ty = entry.file_type()?;
-//             if ty.is_dir() {
-//                 self.copy_dir_recursively(&entry.path(), &dest.join(entry.file_name()))?;
-//             } else {
-//                 fs::copy(entry.path(), dest.join(entry.file_name()))
-//                     .map_err(|e| PistonError::BuildError(format!("Copy failed: {}", e)))?;
-//             }
-//         }
-//         Ok(())
-//     }
-// }
-
 
 #[derive(Deserialize, Default)]
 struct AndroidMetadata {
@@ -216,7 +137,9 @@ pub struct AndroidBuilder {
     output_path: Option<PathBuf>,
     icon_path: Option<String>,
     // cargo_path: String,
-    // gpg_path: Option<String>,
+    key_path: String,
+    key_pass: String,
+    key_alias: String,
     app_name: String,
     lib_name: String,
     manifest: AndroidManifest,
@@ -227,8 +150,6 @@ pub struct AndroidBuilder {
     resources: PathBuf,
     build_tools_version: String,
     bundletool_path: String,
-    // key_id: Option<String>,
-    // key_pass: Option<String>,
     device_target: Option<AndroidDevice>,
     // assets: Option<PathBuf>,
 }
@@ -239,14 +160,13 @@ impl AndroidBuilder {
         let mut op = AndroidBuilder::new(release, target, cwd, env_vars, device_target)?;
 
         //>>prebuild
-        //TODO check for signing certificate
         op.pre_build()?;
 
         //>>build
-        op.build()?;
+        let aab_path = op.build()?;
 
         //>>Postbuild
-        op.post_build()?;
+        op.post_build(aab_path)?;
 
         //return bundle output path and app name
         Ok((op.output_path.unwrap(), op.app_name, op.manifest.package))
@@ -256,14 +176,28 @@ impl AndroidBuilder {
         println!("creating AndroidBuilder: release: {:?}, target: {:?}, cwd: {:?}", release, target.to_string(), cwd);
         //parse env vars
         // let cargo_path: String = env_vars.get("cargo_path").cloned().unwrap_or("cargo".to_string());
-        // let gpg_path: Option<String> = env_vars.get("gpg_path").cloned();
         let ndk_path: &String = Helper::get_or_err(&env_vars, "ndk_path")?;
         let sdk_path: &String = Helper::get_or_err(&env_vars, "sdk_path")?;
         let java_path: &String = Helper::get_or_err(&env_vars, "java_path")?;
         let bundletool_path: &String = Helper::get_or_err(&env_vars, "bundletool_path")?;
         let build_tools_version: String = Helper::get_build_tools_version(&sdk_path)?;
-        // let key_id: Option<String> = env_vars.get("android_gpg_key_id").cloned();
-        // let key_pass: Option<String> = env_vars.get("android_gpg_key_pass").cloned();
+        //obtain default path for keystore
+        let user_output = Command::new("whoami")
+            .output()
+            .map_err(|e| PistonError::WhoAmIError(format!("Failed to run 'whoami': {}", e)))?;
+
+        if !user_output.status.success() {
+            return Err(PistonError::WhoAmIError(format!("Failed to run 'whoami': {}", String::from_utf8_lossy(&user_output.stderr))))
+        }
+        let user = String::from_utf8_lossy(&user_output.stdout).trim().to_string();
+        if user.is_empty() {
+            return Err(PistonError::WhoAmIError(format!("Failed to obtain user id with whoami: {}", String::from_utf8_lossy(&user_output.stderr))))
+        }
+        let default_path = format!("/Users/{}/.android/release.keystore", user);
+        //allow .env to override default key_path and key_pass and key_alias if it exists
+        let key_path: String = env_vars.get("aab_release_key").cloned().unwrap_or(default_path);
+        let key_pass: String = env_vars.get("aab_key_pass").cloned().unwrap_or("piston".to_string());
+        let key_alias: String = env_vars.get("aab_key_alias").cloned().unwrap_or("release-key".to_string());
         //parse cargo.toml
         let metadata: Metadata = MetadataCommand::new()
             .current_dir(cwd.clone())
@@ -299,7 +233,9 @@ impl AndroidBuilder {
             output_path: None, 
             icon_path: icon_path, 
             // cargo_path: cargo_path,
-            // gpg_path: gpg_path,
+            key_path: key_path,
+            key_pass: key_pass,
+            key_alias: key_alias,
             app_name: app_name, 
             lib_name: lib_name,
             manifest: manifest, 
@@ -310,8 +246,6 @@ impl AndroidBuilder {
             resources: resources_path,
             build_tools_version: build_tools_version,
             bundletool_path: bundletool_path.to_string(),
-            // key_id: key_id,
-            // key_pass: key_pass,
             device_target: device_target,
         })
     }
@@ -386,7 +320,7 @@ impl AndroidBuilder {
         Ok(())
     }
 
-    fn build(&mut self) -> Result <(), PistonError>{
+    fn build(&mut self) -> Result <PathBuf, PistonError>{
         println!("building for android");
         //build the android .so with cargo
         self.build_so()?;
@@ -422,15 +356,26 @@ impl AndroidBuilder {
 
         println!("Success in building Android App Bundle. Bundle is available at: {:?}", aab_path);
 
-        //TODO sign AAB
-        // self.sign_aab(&aab_path)?;
-
-        Ok(())
+        Ok(aab_path)
     }
 
-    fn post_build(&mut self) -> Result <(), PistonError>{
+    fn post_build(&mut self, aab_path: PathBuf) -> Result <(), PistonError>{
         println!("post build for android");
-        //TDOD sign the completed AAB
+        // let bind = self.key_path.clone();
+        //create a release key if none specified in .env and release flag is true
+        let key_path_exists = Path::new(&self.key_path).to_path_buf().exists();
+        let key_alias_exists = self.verify_key_alias()?;
+        if self.release && (!key_path_exists || !key_alias_exists){
+            //create a release key
+            self.create_release_key()?;
+        }else {
+            println!("release key found at: {}", self.key_path);
+        }
+        //sign the completed AAB with release key if release flag is true
+        if self.release{
+            //sign the bundle
+            self.sign_aab(aab_path)?;
+        }
         //TODO if a device target is provided, check if the target device is provisioned
         if !self.device_target.is_none() {
             println!("");
@@ -444,7 +389,7 @@ impl AndroidBuilder {
         //build the .so with cargo
         let host_platform = Helper::get_host_platform(self.ndk_path.as_ref())?;
         //set linker
-        let api_level = self.manifest.min_sdk_version.to_string();  // Assume min_sdk_version in your struct; fallback to "21"
+        let api_level = self.manifest.min_sdk_version.to_string();
         // For linker name: for aarch64-linux-android, it's target_triple + api_level + "-clang"
         let linker_name = if self.target == "armv7-linux-androideabi" {
             format!("armv7a-linux-androideabi{}-clang", api_level)
@@ -652,6 +597,108 @@ impl AndroidBuilder {
             .map_err(|e| PistonError::BuildError(format!("bundletool failed: {}", e)))?;
         println!("finished .aab bulding bundle with bundletool");
 
+        Ok(())
+    }
+
+    fn create_release_key(&self) -> Result<(), PistonError>{
+        //proceed to key creation, state the reason for the user
+        println!("creating release key at path: {} with the alias: {}", self.key_path, self.key_alias);
+        //check if .android exists, if not create
+        if let Some(parent) = Path::new(&self.key_path).parent() {
+            create_dir_all(parent)
+                .map_err(|e| PistonError::CreateDirAllError {
+                    path: Path::new(&self.key_path).to_path_buf(),
+                    source: e,
+                })?;
+        }
+
+        //create release key with keytool
+        let output = Command::new("keytool")
+            .arg("-genkeypair")
+            .arg("-v")
+            .arg("-keystore").arg(self.key_path.clone())
+            .arg("-storepass").arg(self.key_pass.clone())
+            .arg("-keypass").arg(self.key_pass.clone())
+            .arg("-alias").arg(self.key_alias.clone())
+            .arg("-keyalg").arg("RSA")
+            .arg("-keysize").arg("2048")
+            .arg("-validity").arg("10000")
+            .arg("-dname").arg("CN=Unknown, OU=Development, O=Unknown, L=Unknown, S=Unknown, C=US")
+            .output()
+            .map_err(|e| PistonError::KeyToolError(format!("Failed to generate release key with keytool: {}", e)))?;
+
+        //TODO implement dynamic -dname params and update docs
+        if !output.status.success() {
+            return Err(PistonError::KeyToolError(format!("Failed to generate release key: {}", String::from_utf8_lossy(&output.stderr))))
+        }
+
+        println!("Release key successfully created at: {}", self.key_path);
+        Ok(())
+    }
+
+    fn verify_key_alias(&self) -> Result<bool, PistonError> {
+        //verify the key alias on record exists by querying the keystore
+        let output = Command::new("keytool")
+            .arg("-list")
+            .arg("-v")
+            .arg("-keystore").arg(self.key_path.clone())
+            .arg("-storepass").arg(self.key_pass.clone())
+            .output()
+            .map_err(|e| PistonError::KeyToolError(format!("Failed to list keystore contents: {}", e)))?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(PistonError::KeyToolError(format!("Could not use keytool to list keystore contents: {}", stderr)))
+        }
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+
+        //search for the alias on record in the keystore
+        for line in stdout.lines() {
+            if let Some(found) = line.strip_prefix("Alias name:") {
+                if found.trim() == self.key_alias {
+                    return Ok(true)
+                } else {
+                    return Ok(false)
+                }
+            }
+        }
+        Ok(false)
+
+    }
+
+    fn sign_aab(&self, aab_path: PathBuf) -> Result<(), PistonError> {
+        //sign the AAB with key_path, key_pass, and key_alias on record
+        let sdk = PathBuf::from(&self.sdk_path);
+        let apksigner_path = sdk.join(format!("build-tools/{}/apksigner", self.build_tools_version));
+        let api_level = self.manifest.min_sdk_version.to_string();
+
+        let output = Command::new(&apksigner_path)
+            .arg("sign")
+            .arg("--ks").arg(self.key_path.clone())
+            .arg("--ks-key-alias").arg(self.key_alias.clone())
+            .arg("--ks-pass").arg(format!("pass:{}", self.key_pass.clone()))
+            .arg("--key-pass").arg(format!("pass:{}", self.key_pass.clone()))
+            .arg("--min-sdk-version").arg(&api_level)
+            .arg(&aab_path)
+            .output()
+            .map_err(|e| PistonError::APKSignerError(format!("Error signing AAB: {}", e)))?;
+        
+        if !output.status.success() {
+            return Err(PistonError::APKSignerError(format!("Error signing AAB: {}", String::from_utf8_lossy(&output.stderr))))
+        }
+
+        let output = Command::new("keytool")
+            .arg("-printcert")
+            .arg("-jarfile")
+            .arg(&aab_path)
+            .output()
+            .map_err(|e| PistonError::Generic(format!("Error verifying signature: {}", e)))?;
+        if !output.status.success() {
+            return Err(PistonError::Generic(format!("Error verifying signature: {}", String::from_utf8_lossy(&output.stderr))))
+        }
+        println!("Signature verifcation: {:?}", output);
+        println!("AAB: {} successfully signed for release", aab_path.display());
         Ok(())
     }
 

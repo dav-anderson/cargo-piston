@@ -523,3 +523,16 @@ pub extern "C" fn android_main(app: AndroidApp) {
     }
 }
 ```
+
+### Designate a release key (OPTIONAL)
+
+Users can choose to designate a release key for signing their Android App Bundle when building with the release flag for upload to the Google Play Store. To designate a release key for Android App Bundles add the following values to your .env...
+
+```
+aab_keystore=/path/to/<release_key_name>.keystore
+aab_key_pass=<keystore password>
+aab_key_alias=<key alias>
+```
+
+
+Users are not required to manually specify a release key as shown above, if one is not provided a release key will be created at `~/.android/release.keystore` with the default keystore & key password `piston` and the key alias `release-key`. These defaults will be used to sign Android App Bundles with the release flag unless otherwise specified. Cargo Piston assumes the Keystore password will match the key file password.
