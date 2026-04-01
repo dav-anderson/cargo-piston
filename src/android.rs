@@ -136,7 +136,6 @@ pub struct AndroidBuilder {
     build_path: PathBuf,
     output_path: Option<PathBuf>,
     icon_path: Option<String>,
-    // cargo_path: String,
     key_path: String,
     key_pass: String,
     key_alias: String,
@@ -150,6 +149,12 @@ pub struct AndroidBuilder {
     resources: PathBuf,
     build_tools_version: String,
     bundletool_path: String,
+    common_name: String,
+    org_unit: String,
+    org: String,
+    locality: String,
+    state: String,
+    country: String,
     device_target: Option<AndroidDevice>,
     // assets: Option<PathBuf>,
 }
@@ -175,7 +180,6 @@ impl AndroidBuilder {
     fn new(release: bool, target: String, cwd: PathBuf, env_vars: HashMap<String, String>, device_target: Option<AndroidDevice>) -> Result<Self, PistonError> {
         println!("creating AndroidBuilder: release: {:?}, target: {:?}, cwd: {:?}", release, target.to_string(), cwd);
         //parse env vars
-        // let cargo_path: String = env_vars.get("cargo_path").cloned().unwrap_or("cargo".to_string());
         let ndk_path: &String = Helper::get_or_err(&env_vars, "ndk_path")?;
         let sdk_path: &String = Helper::get_or_err(&env_vars, "sdk_path")?;
         let java_path: &String = Helper::get_or_err(&env_vars, "java_path")?;
@@ -198,6 +202,17 @@ impl AndroidBuilder {
         let key_path: String = env_vars.get("aab_release_key").cloned().unwrap_or(default_path);
         let key_pass: String = env_vars.get("aab_key_pass").cloned().unwrap_or("piston".to_string());
         let key_alias: String = env_vars.get("aab_key_alias").cloned().unwrap_or("release-key".to_string());
+        //allow .env to ovverride default dname metadata if provided
+        let common_name: String = env_vars.get("common_name").cloned().unwrap_or("Unknown");
+        let org_unit: String = env_vars.get("org_unit").cloned().unwrap_or("Development");
+        let org: String = env_vars.get("org").cloned().unwrap_or("Unknown");
+        let locality: String = env_vars.get("locality").cloned().unwrap_or("Unknown");
+        let state: String = env_vars.get("state").cloned().unwrap_or("Unknown");
+        let country: String = env_vars
+            .get("country")
+            .filter(|s| s.trim().len() == 2)
+            .map(|s| s.trim().to_uppercase().to_string())
+            .unwrap_or_else(|| "US".to_string());
         //parse cargo.toml
         let metadata: Metadata = MetadataCommand::new()
             .current_dir(cwd.clone())
@@ -232,7 +247,6 @@ impl AndroidBuilder {
             build_path: build_path, 
             output_path: None, 
             icon_path: icon_path, 
-            // cargo_path: cargo_path,
             key_path: key_path,
             key_pass: key_pass,
             key_alias: key_alias,
@@ -246,6 +260,12 @@ impl AndroidBuilder {
             resources: resources_path,
             build_tools_version: build_tools_version,
             bundletool_path: bundletool_path.to_string(),
+            common_name: common_name,
+            org_unit: org_unit,
+            org: org,
+            locality: locality,
+            state: state,
+            country: country,
             device_target: device_target,
         })
     }
@@ -361,7 +381,6 @@ impl AndroidBuilder {
 
     fn post_build(&mut self, aab_path: PathBuf) -> Result <(), PistonError>{
         println!("post build for android");
-        // let bind = self.key_path.clone();
         //create a release key if none specified in .env and release flag is true
         let key_path_exists = Path::new(&self.key_path).to_path_buf().exists();
         let key_alias_exists = self.verify_key_alias()?;
@@ -623,11 +642,10 @@ impl AndroidBuilder {
             .arg("-keyalg").arg("RSA")
             .arg("-keysize").arg("2048")
             .arg("-validity").arg("10000")
-            .arg("-dname").arg("CN=Unknown, OU=Development, O=Unknown, L=Unknown, S=Unknown, C=US")
+            .arg("-dname").arg(format!("CN={}, OU={}, O={}, L={}, S={}, C={}", self.common_name, self.org_unit, self.org, self.locality, self.state, self.country))
             .output()
             .map_err(|e| PistonError::KeyToolError(format!("Failed to generate release key with keytool: {}", e)))?;
 
-        //TODO implement dynamic -dname params and update docs
         if !output.status.success() {
             return Err(PistonError::KeyToolError(format!("Failed to generate release key: {}", String::from_utf8_lossy(&output.stderr))))
         }
@@ -688,16 +706,18 @@ impl AndroidBuilder {
             return Err(PistonError::APKSignerError(format!("Error signing AAB: {}", String::from_utf8_lossy(&output.stderr))))
         }
 
-        let output = Command::new("keytool")
-            .arg("-printcert")
-            .arg("-jarfile")
-            .arg(&aab_path)
-            .output()
-            .map_err(|e| PistonError::Generic(format!("Error verifying signature: {}", e)))?;
-        if !output.status.success() {
-            return Err(PistonError::Generic(format!("Error verifying signature: {}", String::from_utf8_lossy(&output.stderr))))
-        }
-        println!("Signature verifcation: {:?}", output);
+        //validate the signature, useful for debugging
+        // let output = Command::new("keytool")
+        //     .arg("-printcert")
+        //     .arg("-jarfile")
+        //     .arg(&aab_path)
+        //     .output()
+        //     .map_err(|e| PistonError::Generic(format!("Error verifying signature: {}", e)))?;
+        // if !output.status.success() {
+        //     return Err(PistonError::Generic(format!("Error verifying signature: {}", String::from_utf8_lossy(&output.stderr))))
+        // }
+        // println!("Signature verifcation: {:?}", output);
+        
         println!("AAB: {} successfully signed for release", aab_path.display());
         Ok(())
     }

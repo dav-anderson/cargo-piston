@@ -538,3 +538,16 @@ aab_key_alias=<key alias>
 
 
 Users are not required to manually specify a release key as shown above, if one is not provided a release key will be created at `~/.android/release.keystore` with the default keystore & key password `piston` and the key alias `release-key`. These defaults will be used to sign Android App Bundles with the release flag unless otherwise specified. Cargo Piston assumes the Keystore password will match the key file password.
+
+Users should also specicfy metadata for the signature on their android release key. These parameters can be set with the following `.env` values...
+
+```
+common_name=<developer_name>
+org_unit=<department or team>
+org=<company>
+locality=<city or town>
+state=<state or province>
+country=<Two letter country code, example: 'US' for United States>
+```
+
+If any of these metadata values are not provided they are be left as "Unknown" in the dname subject field of the release key's signature.
