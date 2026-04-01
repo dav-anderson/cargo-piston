@@ -203,11 +203,11 @@ impl AndroidBuilder {
         let key_pass: String = env_vars.get("aab_key_pass").cloned().unwrap_or("piston".to_string());
         let key_alias: String = env_vars.get("aab_key_alias").cloned().unwrap_or("release-key".to_string());
         //allow .env to ovverride default dname metadata if provided
-        let common_name: String = env_vars.get("common_name").cloned().unwrap_or("Unknown");
-        let org_unit: String = env_vars.get("org_unit").cloned().unwrap_or("Development");
-        let org: String = env_vars.get("org").cloned().unwrap_or("Unknown");
-        let locality: String = env_vars.get("locality").cloned().unwrap_or("Unknown");
-        let state: String = env_vars.get("state").cloned().unwrap_or("Unknown");
+        let common_name: String = env_vars.get("common_name").cloned().unwrap_or("Unknown".to_string());
+        let org_unit: String = env_vars.get("org_unit").cloned().unwrap_or("Development".to_string());
+        let org: String = env_vars.get("org").cloned().unwrap_or("Unknown".to_string());
+        let locality: String = env_vars.get("locality").cloned().unwrap_or("Unknown".to_string());
+        let state: String = env_vars.get("state").cloned().unwrap_or("Unknown".to_string());
         let country: String = env_vars
             .get("country")
             .filter(|s| s.trim().len() == 2)
