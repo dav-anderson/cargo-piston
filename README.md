@@ -1,6 +1,6 @@
 # How to Use Cargo Piston
 
-Cargo piston is a utility tool for easily building & running rust binaries on MacOS and Linux host machines. Features are currently limited to MacOS host machines only. The crate supports building outputs for all of the listed compatiable Android, Linux, MacOS, iOS, and Windows targets. Development is planned to support building all outputs on a Linux host machine, with the exception of MacOS and iOS outputs. Support is also planned for automatic deployment to USB tethered iOS and Android devices in future releases. 
+Cargo piston is a utility tool for easily building & running rust binaries on MacOS and Linux host machines. Features are currently limited to MacOS host machines only. This crate supports building outputs for all of the listed compatiable Android, Linux, MacOS, iOS, and Windows targets. Development is planned to support building all outputs on a Linux host machine, with the exception of MacOS and iOS outputs.
 
 Once you have cargo-piston installed (either locally within a repo or globally) and your `.env` and `Cargo.toml` are properly configured, you can use cargo-piston to build and run for various rust targets. Your desired targets should be installed via rustup and should match your host system's architecture.
 
@@ -26,11 +26,13 @@ List viable USB tethered mobile devices (iOS & Android)
 
 `cargo piston list-devices`
 
-Deploy an app over USB tether to the target device
+Install and run an app over USB tether on the specified target device
 
 `cargo piston run --device <deviceID>`
 
-Cargo piston also supports generic targets which are dynamically determined based devices connected via usb and host architecture, cargo piston will make an automatic determination for the build target and device target with a generic argument. For example...
+Cargo piston also supports generic build and run targets which are dynamically determined based devices connected via usb and host architecture, cargo piston will make an automatic determination for the build target and device target with a generic argument. Both android and ios are supported.
+
+For example...
 
 `cargo piston build --target ios`
 
@@ -46,7 +48,7 @@ macos
 
 `cargo piston run --device ios`
 
-The above command will guess the appropriate ios device based on the reachable connected devices. Both android and ios are supported. 
+The above command will guess the appropriate ios device based on the reachable connected devices.
 
 ## Tested & Supported Build Targets
 
