@@ -1,6 +1,6 @@
 use std::path::{Path};
 use std::fs;
-use std::fs::{read_dir, remove_dir_all, remove_file};
+use std::fs::{copy, read_dir, remove_dir_all, remove_file, create_dir_all};
 use std::process::Command;
 use image::imageops;
 use std::path::PathBuf;
@@ -18,75 +18,161 @@ pub struct Helper {
 
 
 impl Helper {
-    pub fn empty_directory(dir_path: &Path) -> Result<(), PistonError>{
-        if !dir_path.exists() && !dir_path.is_dir(){
+    pub fn empty_directory(tgt_path: &Path, preserve: &[&str]) -> Result<(), PistonError>{
+        if !tgt_path.exists() || !tgt_path.is_dir() {
             return Ok(())
         }
-        println!("Emptying {:?}", dir_path);
-        let entries = read_dir(dir_path).map_err(|e| PistonError::ReadDirError {
-            path: dir_path.to_path_buf(),
-            source: e,
-        })?;
+        
+        println!("🧹 Cleaning :{} (preserving: {:?})", tgt_path.display(), preserve);
 
-        for entry in entries {
-            let entry = entry.map_err(|e| PistonError::ReadDirError {
-                path: dir_path.to_path_buf(),
-                source: e,
-            })?;
+        for entry in read_dir(tgt_path)
+            .map_err(|e| PistonError::ReadDirError { path: tgt_path.to_path_buf(), source: e })?
+        {
+            let entry = entry.map_err(|e| PistonError::ReadDirError { path: tgt_path.to_path_buf(), source: e })?;
             let entry_path = entry.path();
+            let name = entry.file_name().to_string_lossy().into_owned();
+
+            // Skip any directory we want to preserve
+            if entry_path.is_dir() && preserve.contains(&name.as_str()) {
+                println!("   Preserving: {}", name);
+                continue;
+            }
+
             if entry_path.is_dir() {
-                remove_dir_all(&entry_path).map_err(|e| PistonError::RemoveSubdirError {
-                    path: entry_path.clone(),
-                    source: e,
-                })?;
-            }else {
-                remove_file(&entry_path).map_err(|e| PistonError::RemoveFileError {
-                    path: entry_path.clone(),
-                    source: e,
-                })?;
+                remove_dir_all(&entry_path)
+                    .map_err(|e| PistonError::RemoveSubdirError { path: entry_path.clone(), source: e })?;
+            } else {
+                remove_file(&entry_path)
+                    .map_err(|e| PistonError::RemoveFileError { path: entry_path.clone(), source: e })?;
             }
         }
-        println!("Directory emptied: {:?}", &dir_path);
         Ok(())
     }
 
-    pub fn copy_dir_all(input: &Path, output: &Path) -> Result<(), PistonError> {
-        if !output.exists() {
-            create_dir_all(&output)
-                .map_err(|e| PistonError::CreateDirAllError {
-                    path: ouput.clone(),
-                    source: e,
-                })?;
+    pub fn sync_assets(src: &Path, dst: &Path) -> Result<(), PistonError> {
+        println!("attempting to sync assets dir: {} with destination: {}", src.display(), dst.display());
+        if !src.exists() {
+            println!("⚠️  Assets source not found at {:?} — removing target if it exists", src);
+            if dst.exists() {
+                remove_dir_all(dst).map_err(|e| PistonError::RemoveSubdirError { path: dst.to_path_buf(), source: e })?;
+            }
+            return Ok(());
         }
-        let entries = read_dir(input).map_err(|e| PistonError::ReadDirError {
-            path: input.to_path_buf(),
-            source: e,
-        })?;
-        for entry in entries {
-            let entry = entry.map_err(|e| PistonError::ReadDirError {
-                path: input.to_path_buf(),
-                source: e,
-            })?;
-            let input_path = entry.path();
-            let output_path = output.join(entry.file_name());
 
-            if entry.file_type()?.is_dir() {
-                copy_dir_all(&input_path, &output_path)
-                    .map_err(|e| PistonError::CopyFileError {
-                        input_path: &input_path,
-                        output_path: &output_path,
-                        source: e,
-                    })?;
-            }else {
-                copy(&input_path, &output_path)
-                    .map_err(|e| PistonError::CopyFileError {
-                        input_path: &input_path,
-                        output_path: &output_path,
-                        source: e,
-                    })?;
+        create_dir_all(dst)
+            .map_err(|e| PistonError::Generic(format!("Failed to create base/assets: {}", e)))?;
+
+        println!("📦 Syncing assets: {:?} → {:?}", src, dst);
+
+        Self::copy_updated_files(src, dst)?;
+        Self::remove_stale_files(src, dst)?;
+
+        println!("✅ Assets synced (only changed files were updated)");
+        Ok(())
+    }
+
+    //copy new or newer files
+    fn copy_updated_files(src: &Path, dst: &Path) -> Result<(), PistonError> {
+        for entry in read_dir(src)
+            .map_err(|e| PistonError::ReadDirError { path: src.to_path_buf(), source: e })?
+        {
+            let entry = entry.map_err(|e| PistonError::ReadDirError { path: src.to_path_buf(), source: e })?;
+            let src_path = entry.path();
+            let dst_path = dst.join(entry.file_name());
+
+            if src_path.is_dir() {
+                fs::create_dir_all(&dst_path)
+                    .map_err(|e| PistonError::Generic(format!("Failed to create asset subdir {}: {}", dst_path.display(), e)))?;
+
+                Self::copy_updated_files(&src_path, &dst_path)?;
+            } else {
+                let needs_copy = match (src_path.metadata(), dst_path.metadata()) {
+                    (Ok(src_meta), Ok(dst_meta)) => {
+                        src_meta.modified().map_err(|e| {
+                            PistonError::Generic(format!("Failed to get modified time of source {}: {}", src_path.display(), e))
+                        })? > dst_meta.modified().map_err(|e| {
+                            PistonError::Generic(format!("Failed to get modified time of destination {}: {}", dst_path.display(), e))
+                        })?
+                    }
+                    (Ok(_), Err(_)) => true,           // destination doesn't exist
+                    (Err(e), _) => {
+                        return Err(PistonError::Generic(format!(
+                            "Failed to read metadata of source {}: {}", src_path.display(), e
+                        )));
+                    }
+                };
+
+                if needs_copy {
+                    copy(&src_path, &dst_path)
+                        .map_err(|e| PistonError::Generic(format!(
+                            "Failed to copy asset {} → {}: {}", 
+                            src_path.display(), dst_path.display(), e
+                        )))?;
+                }
             }
         }
+        Ok(())
     }
+
+    //delete files in target that no longer exist in source
+    fn remove_stale_files(src: &Path, dst: &Path) -> Result<(), PistonError> {
+        for entry in read_dir(dst)
+            .map_err(|e| PistonError::ReadDirError { path: dst.to_path_buf(), source: e })?
+        {
+            let entry = entry.map_err(|e| PistonError::ReadDirError { path: dst.to_path_buf(), source: e })?;
+            let dst_path = entry.path();
+            let corresponding_src = src.join(entry.file_name());
+
+            if dst_path.is_dir() {
+                if !corresponding_src.exists() {
+                    remove_dir_all(&dst_path)
+                        .map_err(|e| PistonError::RemoveSubdirError { path: dst_path.clone(), source: e })?;
+                } else {
+                    Self::remove_stale_files(&corresponding_src, &dst_path)?;
+                }
+            } else if !corresponding_src.exists() {
+                remove_file(&dst_path)
+                    .map_err(|e| PistonError::RemoveFileError { path: dst_path.clone(), source: e })?;
+            }
+        }
+        Ok(())
+    }
+
+    // pub fn copy_dir_all(input: &Path, output: &Path) -> Result<(), PistonError> {
+    //     if !output.exists() {
+    //         create_dir_all(&output)
+    //             .map_err(|e| PistonError::CreateDirAllError {
+    //                 path: output.to_path_buf(),
+    //                 source: e,
+    //             })?;
+    //     }
+    //     let entries = read_dir(input).map_err(|e| PistonError::ReadDirError {
+    //         path: input.to_path_buf(),
+    //         source: e,
+    //     })?;
+    //     for entry in entries {
+    //         let entry = entry.map_err(|e| PistonError::ReadDirError {
+    //             path: input.to_path_buf(),
+    //             source: e,
+    //         })?;
+    //         let input_path = entry.path();
+    //         let output_path = output.join(entry.file_name());
+
+    //         if entry.file_type()
+    //             .map_err(|e| PistonError::Generic(format!("Failed to get file type of: {}, error: {}", input_path.display(), e.to_string())))?
+    //             .is_dir() {
+    //             Self::copy_dir_all(&input_path, &output_path)?;
+    //         }else {
+    //             copy(&input_path, &output_path)
+    //                 .map_err(|e| PistonError::CopyFileError {
+    //                     input_path: input_path,
+    //                     output_path: output_path,
+    //                     source: e,
+    //                 })?;
+    //         }
+    //     }
+    //     Ok(())
+    // }
 
     pub fn load_env_file() -> io::Result<HashMap<String, String>> {
         let path = std::env::current_dir()?.join(".env");
@@ -147,11 +233,6 @@ impl Helper {
         resized_img.save(target_name).map_err(|e| {
             PistonError::SaveImageError(format!("Failed to save {}: {}", target_name, e))
         })?;
-
-        println!(
-            "Resized {} to {}x{} and saved as {}",
-            input_name, width, height, target_name
-        );
         Ok(())
     }
 
@@ -236,11 +317,12 @@ impl Helper {
             .map(|s| s.to_string())
     }
 
-    pub fn get_assets_path(metadata: &Metadata) -> Option<String> {
+    pub fn get_assets_path(metadata: &Metadata) -> String {
         metadata.root_package()
             .and_then(|pkg| pkg.metadata.get("assets_path"))
             .and_then(Value::as_str)
             .map(|s| s.to_string())
+            .unwrap_or("".to_string())
     }
 
     pub fn get_app_name(metadata: &Metadata) -> Result<String, PistonError> {

@@ -102,7 +102,7 @@ impl LinuxBuilder {
         }
         let path = self.output_path.as_ref().unwrap().as_path();
         //empty the dir if it exists
-        Helper::empty_directory(path)?;
+        Helper::empty_directory(path, &[""])?;
         //create the target directory
         create_dir_all(path).map_err(|e| PistonError::CreateDirAllError {
         path: self.output_path.as_ref().unwrap().to_path_buf(),

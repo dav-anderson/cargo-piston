@@ -108,8 +108,6 @@ impl AndroidManifest {
     }
 
     pub fn write_to(&self, dir: &Path) -> Result<(), PistonError> {
-        // let file_path = dir.join("AndroidManifest.xml");
-        println!("writing {:?}...", dir);
         let file = File::create(&dir)
             .map_err(|e| PistonError::CreateManifestError(format!("Failed to create manifest file: {}", e)))?;
         
@@ -136,7 +134,7 @@ pub struct AndroidBuilder {
     build_path: PathBuf,
     output_path: Option<PathBuf>,
     icon_path: Option<String>,
-    assets: Option<PathBuf>,
+    assets: String,
     key_path: String,
     key_pass: String,
     key_alias: String,
@@ -229,7 +227,8 @@ impl AndroidBuilder {
         let build_path: PathBuf = cwd.join("target").join(if release {"release"} else {"debug"}).join("android").join("androidbuilder");
         println!("build path: {:?}", build_path);
         //empty dirs all build_path
-        Helper::empty_directory(build_path.as_path())?;
+        let preserve = ["assets"];
+        Helper::empty_directory(build_path.as_path(), &preserve)?;
         //mkdir all build_path
         create_dir_all(&build_path).map_err(|e| PistonError::CreateDirAllError {
         path: build_path.clone(),
@@ -237,7 +236,6 @@ impl AndroidBuilder {
         })?;
         //manifest path is cwd/target/<release>/androidbuilder/android/manifest
         let manifest_path: PathBuf = build_path.join("AndroidManifest.xml");
-        println!("manifest path: {}", manifest_path.display());
         let resources_path: PathBuf = build_path.join("app").join("src").join("main").join("res");
         //write AndroidManifest.xml to file
         manifest.write_to(&manifest_path.as_path())?;
@@ -276,14 +274,11 @@ impl AndroidBuilder {
         println!("pre build for android");
         println!("building the dynamic app bundle");
         let cwd: PathBuf = self.cwd.clone();
-        println!("working dir: {:?}", cwd);
         let release = if self.release {"release"} else {"debug"};
         //set the absolute build path
-        println!("working build path: {:?}", self.build_path);
-        println!("full build path with children {:?}", self.resources);
         let path = self.resources.as_path();
         //Empty the directory if it already exists
-        Helper::empty_directory(path)?;
+        Helper::empty_directory(path, &["assets"])?;
         //create the target directories
         create_dir_all(&self.resources).map_err(|e| PistonError::CreateDirAllError {
         path: self.resources.clone(),
@@ -292,7 +287,6 @@ impl AndroidBuilder {
         //set the output path
         let partial_output_path: PathBuf = format!("target/{}/android", release).into();
         let output_path = cwd.join(&partial_output_path);
-        println!("output path: {:?}", output_path);
         self.output_path = Some(output_path.clone());
         //check for valid output path
         if self.output_path.as_ref().is_none() {
@@ -304,7 +298,6 @@ impl AndroidBuilder {
         let xhdpi_path: PathBuf = self.resources.join("mipmap-xhdpi");
         let xxhdpi_path: PathBuf = self.resources.join("mipmap-xxhdpi");
         let xxxhdpi_path: PathBuf = self.resources.join("mipmap-xxxhdpi");
-        println!("mipmap paths: hdpi: {:?}, mdpi: {:?}, xhdpi: {:?}, xxhdpi: {:?}, xxxhdpi: {:?}", hdpi_path, mdpi_path, xhdpi_path, xxhdpi_path, xxxhdpi_path);
         //create mipmap dirs
         create_dir_all(&hdpi_path).map_err(|e| PistonError::CreateDirAllError {
         path: hdpi_path.clone(),
@@ -337,8 +330,6 @@ impl AndroidBuilder {
         Helper::resize_png(&self.icon_path.as_ref().unwrap(), &xxhdpi_target.display().to_string(), 144, 144)?;
         let xxxhdpi_target: PathBuf = xxxhdpi_path.join("ic_launcher.png");
         Helper::resize_png(&self.icon_path.as_ref().unwrap(), &xxxhdpi_target.display().to_string(), 192, 192)?;
-
-        println!("done preconfiguring Android build path");
         Ok(())
     }
 
@@ -351,7 +342,7 @@ impl AndroidBuilder {
         //Link manifest and resources (aapt2 link)
         let base_dir = self.build_path.join("base");
         //empty the dir if it exists
-        Helper::empty_directory(&base_dir)?;
+        Helper::empty_directory(&base_dir, &["assets"])?;
         create_dir_all(&base_dir).map_err(|e| PistonError::CreateDirAllError {
         path: base_dir.clone(),
         source: e,
@@ -359,7 +350,10 @@ impl AndroidBuilder {
         //link manifest and resources with aapt2
         self.link_manifest_and_resources(&resources, &base_dir)?;
         //add assets if any (copy to base/asssets)
-        self.include_assets(&base_dir)?;
+        let bind = &self.assets.clone();
+        let assets_src = Path::new(&bind);
+        let assets_base = &base_dir.join("assets");
+        Helper::sync_assets(&assets_src, &assets_base)?;
         //add the .so lib for a single lib
         self.add_lib(&base_dir, self.target.as_ref())?;
         //zip base module
@@ -383,7 +377,7 @@ impl AndroidBuilder {
         if self.release && (!key_path_exists || !key_alias_exists){
             //create a release key
             self.create_release_key()?;
-        }else {
+        }else if self.release{
             println!("release key found at: {}", self.key_path);
         }
         //sign the completed AAB with release key if release flag is true
@@ -443,31 +437,30 @@ impl AndroidBuilder {
         if !builder.status.success() {
             return Err(PistonError::BuildError(format!("Cargo build failed: {}", String::from_utf8_lossy(&builder.stderr))))
         }
-        println!("finished building .so library");
         Ok(())
     }
 
-    fn include_assets(&self, base_path: &PathBuf) -> Result<(), PistonError>{
-        println!("linking assets at: {} to the build directory", self.assets);
-        let assets_path = PathBuf::from(self.assets.clone());
-        if !assets_path.exists() {
-            println!("No assets found at the providing path, skipping asset inclusion");
-        }
+    // fn sync_assets(&self, base_path: &PathBuf) -> Result<(), PistonError>{
+    //     println!("linking assets at: {} to the build directory", self.assets);
+    //     let assets_path = PathBuf::from(self.assets.clone());
+    //     if !assets_path.exists() {
+    //         println!("No assets found at the providing path, skipping asset inclusion");
+    //     }
 
-        //TODO handle the condition where assets already exists 
-        // and may or may not have different contents without deleting and recopying everytime
+    //     //TODO handle the condition where assets already exists 
+    //     // and may or may not have different contents without deleting and recopying everytime
 
-        let tgt_assets = base_path.join("assets");
-        //recursive copy the contents of the asset dir to the target
-        copy_dir_all(&assets_path, &tgt_assets)
-            .map_err(|e| PistonError::CopyFileError {
-                input_path: &assets_path,
-                output_path: &tgt_assets,
-                source: e,
-            })?;
+    //     let tgt_assets = base_path.join("assets");
+    //     //recursive copy the contents of the asset dir to the target
+    //     copy_dir_all(&assets_path, &tgt_assets)
+    //         .map_err(|e| PistonError::CopyFileError {
+    //             input_path: &assets_path,
+    //             output_path: &tgt_assets,
+    //             source: e,
+    //         })?;
 
-        Ok(())
-    }
+    //     Ok(())
+    // }
 
     fn compile_resources(&self) -> Result<PathBuf, PistonError> {
         println!("compiling resources at {:?}", &self.resources);
@@ -499,7 +492,6 @@ impl AndroidBuilder {
             .stderr(Stdio::inherit())
             .output()
             .map_err(|e| PistonError::BuildError(format!("aapt2 compile failed: {}", e)))?;
-        println!("done compiling resources");
         Ok(compiled_res)
     }
 
@@ -518,8 +510,6 @@ impl AndroidBuilder {
             res_arg
         );
 
-        println!("link command: {}", link_command);
-
         Command::new("bash")
             .arg("-c")
             .arg(&link_command)
@@ -534,7 +524,7 @@ impl AndroidBuilder {
         if proto_manifest_root.exists() {
             let manifest_dir = base_dir.join("manifest");
             //empty the dir if it exists
-            Helper::empty_directory(&manifest_dir)?;
+            Helper::empty_directory(&manifest_dir, &[""])?;
             create_dir_all(&manifest_dir)
                 .map_err(|e| PistonError::CreateDirAllError {
                     path: manifest_dir.clone(),
@@ -548,9 +538,6 @@ impl AndroidBuilder {
         } else {
             return Err(PistonError::ProtoLinkError("Proto AndroidManifest.xml not generated and linked by AAPT2".to_string()))
         }
-        
-        println!("done linking manifest and resources");
-
         Ok(())
     }
 
@@ -562,17 +549,14 @@ impl AndroidBuilder {
             _ => return Err(PistonError::UnsupportedTargetError(format!("Unsupported target {}", target).to_string())),
         };
         let lib_dir = base_dir.join("lib").join(abi);
-        Helper::empty_directory(&lib_dir)?;
+        Helper::empty_directory(&lib_dir, &[""])?;
         create_dir_all(&lib_dir).map_err(|e| PistonError::CreateDirAllError {
         path: lib_dir.clone(),
         source: e,
         })?;
 
         let lib_file = format!("lib{}.so", self.lib_name);
-        println!("library file name: {}", lib_file);
-
         let so_path = self.cwd.join("target").join(target).join(if self.release { "release" } else { "debug" }).join(&lib_file);
-        println!(".so path: {:?}", so_path);
         copy(&so_path, lib_dir.join(&lib_file))
             .map_err(|e| PistonError::BuildError(format!("Failed to copy .so: {}", e)))?;
 
@@ -582,12 +566,10 @@ impl AndroidBuilder {
     fn zip_base(&self, base_dir: &Path) -> Result<(), PistonError> {
         let zip_path = self.build_path.join("base.zip");
         if zip_path.exists() {
-            println!("removing stale zip");
             remove_file(&zip_path).map_err(|e| PistonError::RemoveFileError {
                 path: zip_path.clone().to_path_buf(),
                 source: e,
             })?;
-            println!("removed old zip from: {:?}", zip_path);
         }
         println!("zipping base dir");
         let zip_command = format!(
@@ -614,7 +596,6 @@ impl AndroidBuilder {
                 path: aab_path.to_path_buf(),
                 source: e,
             })?;
-            println!("removed .aab at: {:?}", aab_path);
         }
         let bundle_command = format!(
             "java -jar {} build-bundle --modules={} --output={}",
@@ -632,8 +613,6 @@ impl AndroidBuilder {
             .stderr(Stdio::inherit())
             .output()
             .map_err(|e| PistonError::BuildError(format!("bundletool failed: {}", e)))?;
-        println!("finished .aab bulding bundle with bundletool");
-
         Ok(())
     }
 
@@ -683,8 +662,9 @@ impl AndroidBuilder {
             .map_err(|e| PistonError::KeyToolError(format!("Failed to list keystore contents: {}", e)))?;
 
         if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(PistonError::KeyToolError(format!("Could not use keytool to list keystore contents: {}", stderr)))
+            // let stderr = String::from_utf8_lossy(&output.stderr);
+            return Ok(false)
+            // return Err(PistonError::KeyToolError(format!("Could not use keytool to list keystore contents: {}", stderr)))
         }
 
         let stdout = String::from_utf8_lossy(&output.stdout);
