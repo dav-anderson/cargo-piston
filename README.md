@@ -100,7 +100,14 @@ version = "0.0.1"
 
 ```
 [package.metadata]
-icon_path = "absolute/path/to/icon.png
+icon_path = absolute/path/to/icon.png
+```
+
+### Including assets
+
+```
+[package.metadata]
+assets_path = absolute/path/to/assets/directory
 ```
 
 ## Installing locally from source

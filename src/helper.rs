@@ -50,6 +50,44 @@ impl Helper {
         Ok(())
     }
 
+    pub fn copy_dir_all(input: &Path, output: &Path) -> Result<(), PistonError> {
+        if !output.exists() {
+            create_dir_all(&output)
+                .map_err(|e| PistonError::CreateDirAllError {
+                    path: ouput.clone(),
+                    source: e,
+                })?;
+        }
+        let entries = read_dir(input).map_err(|e| PistonError::ReadDirError {
+            path: input.to_path_buf(),
+            source: e,
+        })?;
+        for entry in entries {
+            let entry = entry.map_err(|e| PistonError::ReadDirError {
+                path: input.to_path_buf(),
+                source: e,
+            })?;
+            let input_path = entry.path();
+            let output_path = output.join(entry.file_name());
+
+            if entry.file_type()?.is_dir() {
+                copy_dir_all(&input_path, &output_path)
+                    .map_err(|e| PistonError::CopyFileError {
+                        input_path: &input_path,
+                        output_path: &output_path,
+                        source: e,
+                    })?;
+            }else {
+                copy(&input_path, &output_path)
+                    .map_err(|e| PistonError::CopyFileError {
+                        input_path: &input_path,
+                        output_path: &output_path,
+                        source: e,
+                    })?;
+            }
+        }
+    }
+
     pub fn load_env_file() -> io::Result<HashMap<String, String>> {
         let path = std::env::current_dir()?.join(".env");
         let file = File::open(path)?;
@@ -194,6 +232,13 @@ impl Helper {
     pub fn get_icon_path(metadata: &Metadata) -> Option<String> {
         metadata.root_package()
             .and_then(|pkg| pkg.metadata.get("icon_path"))
+            .and_then(Value::as_str)
+            .map(|s| s.to_string())
+    }
+
+    pub fn get_assets_path(metadata: &Metadata) -> Option<String> {
+        metadata.root_package()
+            .and_then(|pkg| pkg.metadata.get("assets_path"))
             .and_then(Value::as_str)
             .map(|s| s.to_string())
     }

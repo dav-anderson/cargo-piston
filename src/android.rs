@@ -136,6 +136,7 @@ pub struct AndroidBuilder {
     build_path: PathBuf,
     output_path: Option<PathBuf>,
     icon_path: Option<String>,
+    assets: Option<PathBuf>,
     key_path: String,
     key_pass: String,
     key_alias: String,
@@ -156,7 +157,6 @@ pub struct AndroidBuilder {
     state: String,
     country: String,
     device_target: Option<AndroidDevice>,
-    // assets: Option<PathBuf>,
 }
 
 impl AndroidBuilder {
@@ -221,6 +221,7 @@ impl AndroidBuilder {
 
         let lib_name = Helper::get_lib_name(&metadata)?;
         let icon_path = Helper::get_icon_path(&metadata);
+        let assets = Helper::get_assets_path(&metadata);
         let app_name = Helper::get_app_name(&metadata)?;
         let app_version = Helper::get_app_version(&metadata)?;
         //generate androidmanifest.xml
@@ -247,6 +248,7 @@ impl AndroidBuilder {
             build_path: build_path, 
             output_path: None, 
             icon_path: icon_path, 
+            assets: assets,
             key_path: key_path,
             key_pass: key_pass,
             key_alias: key_alias,
@@ -354,16 +356,10 @@ impl AndroidBuilder {
         path: base_dir.clone(),
         source: e,
         })?;
+        //link manifest and resources with aapt2
         self.link_manifest_and_resources(&resources, &base_dir)?;
-
-        //TODO add assets if any (copy to base/asssets)
-        // if let Some(assets) = &self.assets {
-//             let assets_dest = base_dir.join("assets");
-//             fs::create_dir_all(&assets_dest)?;
-//             // Assume recursive copy; implement or use walkdir if needed
-//             self.copy_dir_recursively(assets, &assets_dest)?;
-//         }
-
+        //add assets if any (copy to base/asssets)
+        self.include_assets(&base_dir)?;
         //add the .so lib for a single lib
         self.add_lib(&base_dir, self.target.as_ref())?;
         //zip base module
@@ -448,6 +444,28 @@ impl AndroidBuilder {
             return Err(PistonError::BuildError(format!("Cargo build failed: {}", String::from_utf8_lossy(&builder.stderr))))
         }
         println!("finished building .so library");
+        Ok(())
+    }
+
+    fn include_assets(&self, base_path: &PathBuf) -> Result<(), PistonError>{
+        println!("linking assets at: {} to the build directory", self.assets);
+        let assets_path = PathBuf::from(self.assets.clone());
+        if !assets_path.exists() {
+            println!("No assets found at the providing path, skipping asset inclusion");
+        }
+
+        //TODO handle the condition where assets already exists 
+        // and may or may not have different contents without deleting and recopying everytime
+
+        let tgt_assets = base_path.join("assets");
+        //recursive copy the contents of the asset dir to the target
+        copy_dir_all(&assets_path, &tgt_assets)
+            .map_err(|e| PistonError::CopyFileError {
+                input_path: &assets_path,
+                output_path: &tgt_assets,
+                source: e,
+            })?;
+
         Ok(())
     }
 
