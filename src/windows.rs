@@ -14,8 +14,7 @@ pub struct WindowsBuilder {
     cwd: PathBuf,
     output_path: Option<PathBuf>,
     icon_path: Option<String>,
-    //TODO bundle assets
-    // assets: String,
+    assets: String,
     embed_resources_ok: bool,
     cargo_path: String,
     //TODO automatic signing (not gpg)
@@ -49,7 +48,6 @@ impl WindowsBuilder {
         // let gpg_path: Option<String> = env_vars.get("gpg_path").cloned();
         // let key_id: Option<String> = env_vars.get("windows_gpg_key_id").cloned();
         // let key_pass: Option<String> = env_vars.get("windows_gpg_key_pass").cloned();
-        println!("Cargo path determined: {}", &cargo_path);
         //parse cargo.toml
         let metadata: Metadata = MetadataCommand::new()
             .current_dir(cwd.clone())
@@ -62,9 +60,8 @@ impl WindowsBuilder {
         } else {
             false
         };
-        println!("Embed Resources Installed: {}", embed_resources_ok);
         let icon_path = Helper::get_icon_path(&metadata);
-        // let assets = Helper::get_assets_path(&metadata);
+        let assets = Helper::get_assets_path(&metadata);
         let app_name = Helper::get_app_name(&metadata)?;
         Ok(WindowsBuilder{
             release: release, 
@@ -72,7 +69,7 @@ impl WindowsBuilder {
             cwd: cwd, 
             output_path: None, 
             icon_path: icon_path, 
-            // assets: assets,
+            assets: assets,
             embed_resources_ok: embed_resources_ok, 
             cargo_path: cargo_path, 
             // gpg_path: gpg_path, 
@@ -85,19 +82,17 @@ impl WindowsBuilder {
     fn pre_build(&mut self) -> Result <(), PistonError>{
         println!("building the dynamic app bundle");
         let cwd: PathBuf = self.cwd.clone();
-        println!("working dir: {:?}", cwd);
         let rel_output: PathBuf = if self.release {
             "target/release/windows".into()
         }else {"target/debug/windows".into()};
         self.output_path = Some(cwd.join(&rel_output));
-        println!("windows dir: {:?}", self.output_path);
         //empty the target directory if it exists
         if self.output_path.as_ref().is_none() {
             return Err(PistonError::Generic("output path not provided".to_string()))
         }
         let path = self.output_path.as_ref().unwrap().as_path();
         //empty the dir if it exists
-        Helper::empty_directory(path, &[""])?;
+        Helper::empty_directory(path, &["assets"])?;
         //create the target directory
         create_dir_all(path).map_err(|e| PistonError::CreateDirAllError {
         path: self.output_path.as_ref().unwrap().to_path_buf(),
@@ -108,31 +103,30 @@ impl WindowsBuilder {
         let content = format!("IDI_ICON1 ICON \"{}\"", rc_icon.display());
         //create the app.rc file
         write(&rc_path, content.as_bytes()).map_err(|e| PistonError::WriteFileError(e.to_string()))?;
-        println!("created {:?} with content: {}", rc_path, content);   
         //TODO add a winres config check to the cargo.toml for app naming...or maybe just automate this?
         //[package.metadata.winres]
         //OriginalFilename = "<appname>.exe"
+
+        //sync assets
+        let bind = &self.assets.clone();
+        let assets_src = Path::new(&bind);
+        let assets_tgt = path.join("assets");
+        Helper::sync_assets(assets_src, &assets_tgt)?;
         //if icon path was provided...embed
         if !self.icon_path.is_none() && self.embed_resources_ok{
             println!("icon path provided and embed resources installed, configuring icon");
             //convert the .png at icon_path to a .ico which resides in the app bundle
             let icon_output: PathBuf = cwd.join(rc_icon);
-            println!("icon output path: {}", icon_output.display());
             let img_path_clone = self.icon_path.clone().unwrap();
-            println!("image path clone: {}", &img_path_clone);
             let img_path = Path::new(&img_path_clone);
-            println!("image path as path: {}", &img_path.display());
             //open the image
             let img = image::open(img_path).map_err(|e| PistonError::OpenImageError {
             path: img_path.to_path_buf(),
             source: e,
             })?;
-            println!("image opened");
             // Resize to the specified size
             let resized = imageops::resize(&img, 64, 64, imageops::FilterType::Lanczos3);
-            println!("image resized");
             let resized_img = DynamicImage::ImageRgba8(resized);
-            println!("image converted");
             //create the image file
             let file = std::fs::File::create(icon_output.clone()).map_err(|e| PistonError::CreateFileError {
                 path: icon_output.clone().to_path_buf(),
@@ -140,7 +134,6 @@ impl WindowsBuilder {
             })?;
             //write the image file
             let mut writer = std::io::BufWriter::new(file);
-            println!("new image file written");
             //encode the image file
             let encoder = image::codecs::ico::IcoEncoder::new(&mut writer);
             encoder.write_image(
@@ -213,9 +206,6 @@ impl WindowsBuilder {
         let binary_path = self.cwd.join("target").join(self.target.clone()).join(if self.release {"release"} else {"debug"}).join(format!("{}.exe", self.app_name.clone()));
         let bundle_path = self.output_path.as_ref().unwrap().join(format!("{}.exe", self.app_name.clone()));
         //bundle path should be cwd + target + <target output> + <--release flag or None for debug> + <appname>.exe
-        println!("binary path is: {}", &binary_path.display());
-        println!("bundle path is: {}", &bundle_path.display());
-        println!("copying binary to app bundle");
         //move the target binary into the app bundle at the proper location
         copy(&binary_path, &bundle_path).map_err(|e| PistonError::CopyFileError {
             input_path: binary_path.clone().to_path_buf(),
