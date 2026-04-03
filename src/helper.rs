@@ -50,7 +50,7 @@ impl Helper {
     }
 
     pub fn sync_assets(src: &Path, tgt: &Path) -> Result<(), PistonError> {
-        println!("attempting to sync assets dir: {} with destination: {}", src.display(), tgt.display());
+        println!("syncing assets source: {} with target: {}", src.display(), tgt.display());
         if !src.exists() {
             println!("⚠️  Assets source not found at {:?} — removing target if it exists", src);
             if tgt.exists() {

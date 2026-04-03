@@ -13,8 +13,7 @@ pub struct MacOSBuilder {
     cwd: PathBuf,
     output_path: Option<PathBuf>,
     icon_path: Option<String>,
-    //TODO bundle assets
-    // assets: String,
+    assets: String,
     cargo_path: String,
     app_name: String,
     app_version: String,
@@ -57,7 +56,7 @@ impl MacOSBuilder {
             .map_err(|e| PistonError::CargoParseError(e.to_string()))?;
 
         let icon_path = Helper::get_icon_path(&metadata);
-        // let assets = Helper::get_assets_path(&metadata);
+        let assets = Helper::get_assets_path(&metadata);
         let app_name = Helper::get_app_name(&metadata)?;
         let app_version = Helper::get_app_version(&metadata)?;
         Ok(MacOSBuilder{
@@ -66,7 +65,7 @@ impl MacOSBuilder {
             cwd: cwd, 
             output_path: None, 
             icon_path: icon_path, 
-            // assets: assets,
+            assets: assets,
             cargo_path: cargo_path, 
             app_name: app_name, 
             app_version: app_version, 
@@ -97,6 +96,7 @@ impl MacOSBuilder {
         //establish ~/target/release/macos/Appname.app/Contents/Resources
         let res_path: PathBuf = partial_path.join("Resources");
         println!("res path: {:?}", res_path);
+        let assets_tgt = cwd.join(&res_path).join("assets");
         let macos_path = partial_path.join("MacOS");
         self.output_path = Some(cwd.join(&macos_path));
         println!("full path to macos dir: {:?}", self.output_path);
@@ -107,7 +107,7 @@ impl MacOSBuilder {
         //Empty the directory if it already exists
         let path = res_path.as_path();
         //empty the dir if it exists
-        Helper::empty_directory(path, &[""])?;
+        Helper::empty_directory(path, &["assets"])?;
         //create the target directories
         create_dir_all(path).map_err(|e| PistonError::CreateDirAllError {
         path: self.output_path.as_ref().unwrap().to_path_buf(),
@@ -118,6 +118,10 @@ impl MacOSBuilder {
             path: self.output_path.as_ref().unwrap().to_path_buf(),
             source: e,
         })?;
+        //sync assets
+        let bind = &self.assets.clone();
+        let assets_src = Path::new(&bind);
+        Helper::sync_assets(assets_src, &assets_tgt)?;
         //establish app icon target path ~/macos/release/Appname.app/Contents/Resources/macos_icon.icns
         let icon_path: PathBuf = res_path.join("macos_icon.icns");
         //establish Info.plist path ~/macos/release/Appname.app/Contents/Info.plist

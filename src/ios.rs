@@ -63,7 +63,6 @@ impl IOSBuilder {
         let cargo_path = env_vars.get("cargo_path").cloned().unwrap_or("cargo".to_string());
         let idp_path = env_vars.get("idp_path").cloned();
         let keystore_path = env_vars.get("keystore_path").cloned();
-        println!("Cargo path determined: {}", &cargo_path);
         //parse cargo.toml
         let metadata: Metadata = MetadataCommand::new()
             .current_dir(cwd.clone())
@@ -142,9 +141,7 @@ impl IOSBuilder {
             return Err(PistonError::IOSSdkMissingError("IOS sdk is missing. Try running 'xcodebuild -downloadPlatform iOS'".to_string()))
         }
         //build the app bundle
-        println!("building the dynamic app bundle");
         let cwd: PathBuf = self.cwd.clone();
-        println!("working dir: {:?}", cwd);
         let capitalized = Helper::capitalize_first(&self.app_name.clone());
         let release = if self.release {"release"} else {"debug"};
         //fix the path to match ios convention
@@ -156,7 +153,6 @@ impl IOSBuilder {
         //establish ~/target/<release>/ios/Appname.app/Resources
         let res_path: PathBuf = partial_path.join("Resources");
         self.output_path = Some(cwd.join(&partial_path));
-        println!("full path to ios dir: {:?}", self.output_path);
         if self.output_path.as_ref().is_none() {
             return Err(PistonError::Generic("output path not provided".to_string()))
         }
@@ -179,7 +175,6 @@ impl IOSBuilder {
         Helper::sync_assets(assets_src, &assets_tgt)?;
         //establish Info.plist path ~/ios/release/Appname.app/Info.plist
         let plist_path: PathBuf = partial_path.join("Info.plist");
-        println!("plist path: {:?}", plist_path);
         //if a plist file exists, first remove it.
         if plist_path.exists() {
             remove_file(&plist_path).map_err(|e| PistonError::RemoveFileError {
@@ -258,7 +253,6 @@ impl IOSBuilder {
         if !output.status.success() {
             return Err(PistonError::PlutilConvertError(String::from_utf8_lossy(&output.stderr).to_string()))
         }
-        println!("Info.plist created & converted to binary");
         let pkginfo_path: PathBuf = partial_path.join("PkgInfo");
         fs::write(pkginfo_path, b"APPL????").map_err(|e| PistonError::WriteFileError(format!("PkgInfo Write failed: {}", e)))?;
         //if icon path was provided...convert
@@ -270,7 +264,6 @@ impl IOSBuilder {
             let icon_path180: PathBuf = res_path.join("ios_icon180.png");
             Helper::resize_png(&self.icon_path.as_ref().unwrap(), &icon_path180.display().to_string(), 180, 180)?;
         }
-        println!("done configuring ios bundle");
         Ok(())
         
     }
@@ -301,9 +294,6 @@ impl IOSBuilder {
         let binary_path = self.cwd.join("target").join(self.target.clone()).join(if self.release {"release"} else {"debug"}).join(self.app_name.clone());
         let bundle_path = self.output_path.as_ref().unwrap().join(self.app_name.clone());
         //bundle path should be cwd + target + <target output> + <--release flag or None for debug> + <appname>.exe
-        println!("binary path is: {}", &binary_path.display());
-        println!("bundle path is: {}", &bundle_path.display());
-        println!("copying binary to app bundle");
         //move the target binary into the app bundle at the proper location
         copy(&binary_path, &bundle_path).map_err(|e| PistonError::CopyFileError {
             input_path: binary_path.clone().to_path_buf(),
@@ -319,8 +309,6 @@ impl IOSBuilder {
             
             fs::set_permissions(&exe_path, std::fs::Permissions::from_mode(0o755))
                 .map_err(|e| PistonError::Generic(format!("Failed to make binary executable: {}", e)))?;
-            
-            println!("Set executable permission on {}", exe_path.display());
         }
         //output the proper location in the terminal for the user to see 
         println!("iOS app bundle available at: {}", &bundle_path.display());
@@ -687,7 +675,7 @@ impl AscClient {
         jsonwebtoken::encode(&header, &claims, &key).map_err(|e| PistonError::ASCClientJWTEncodeError(e.to_string()) )
     }
 
-    //Registers device if needed → creates/re-uses Ad Hoc profile → 
+    //Registers device if needed → creates/re-uses profile → 
     // downloads .mobileprovision → embeds it → installs to device → extracts entitlements.plist
     pub fn provision_ios_device(
         &self,
