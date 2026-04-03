@@ -14,8 +14,11 @@ pub struct WindowsBuilder {
     cwd: PathBuf,
     output_path: Option<PathBuf>,
     icon_path: Option<String>,
+    //TODO bundle assets
+    // assets: String,
     embed_resources_ok: bool,
     cargo_path: String,
+    //TODO automatic signing (not gpg)
     // gpg_path: Option<String>,
     app_name: String,
     // key_id: Option<String>,
@@ -61,6 +64,7 @@ impl WindowsBuilder {
         };
         println!("Embed Resources Installed: {}", embed_resources_ok);
         let icon_path = Helper::get_icon_path(&metadata);
+        // let assets = Helper::get_assets_path(&metadata);
         let app_name = Helper::get_app_name(&metadata)?;
         Ok(WindowsBuilder{
             release: release, 
@@ -68,6 +72,7 @@ impl WindowsBuilder {
             cwd: cwd, 
             output_path: None, 
             icon_path: icon_path, 
+            // assets: assets,
             embed_resources_ok: embed_resources_ok, 
             cargo_path: cargo_path, 
             // gpg_path: gpg_path, 

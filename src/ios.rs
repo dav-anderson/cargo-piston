@@ -21,6 +21,7 @@ pub struct IOSBuilder {
     cwd: PathBuf,
     output_path: Option<PathBuf>,
     icon_path: Option<String>,
+    assets: String,
     cargo_path: String,
     app_name: String,
     app_version: String,
@@ -70,6 +71,7 @@ impl IOSBuilder {
             .map_err(|e| PistonError::CargoParseError(e.to_string()))?;
 
         let icon_path = Helper::get_icon_path(&metadata);
+        let assets = Helper::get_assets_path(&metadata);
         let app_name = Helper::get_app_name(&metadata)?;
         let app_version = Helper::get_app_version(&metadata)?;
         let bundle_id = Helper::get_bundle_id(&metadata, &app_name);
@@ -87,9 +89,10 @@ impl IOSBuilder {
             target: target.to_string(), 
             cwd: cwd, 
             output_path: None, 
-            icon_path: icon_path, 
-            cargo_path: cargo_path, 
-            app_name: app_name, 
+            icon_path: icon_path,
+            assets: assets,
+            cargo_path: cargo_path,
+            app_name: app_name,
             app_version: app_version, 
             bundle_id: bundle_id, 
             min_os_version: min_os_version, 
@@ -150,28 +153,30 @@ impl IOSBuilder {
         }else {
             format!("target/{}/ios/{}.app",release, capitalized).into()
         };
-        println!("partial path: {:?}", partial_path);
         //establish ~/target/<release>/ios/Appname.app/Resources
         let res_path: PathBuf = partial_path.join("Resources");
         self.output_path = Some(cwd.join(&partial_path));
         println!("full path to ios dir: {:?}", self.output_path);
-        //empty the target directory if it exists
         if self.output_path.as_ref().is_none() {
             return Err(PistonError::Generic("output path not provided".to_string()))
         }
-        //Empty the directory if it already exists
         let path = res_path.as_path();
-        //empty the dir if it exists
+        //empty the resources dir if it exists
         if let Some(path) = &self.output_path {
             if path.exists() {
                 let _ = fs::remove_dir_all(path);
             }
         }
-        //create the target directories
+        //create the resources directory
         create_dir_all(path).map_err(|e| PistonError::CreateDirAllError {
         path: self.output_path.as_ref().unwrap().to_path_buf(),
         source: e,
         })?;
+        //sync assets
+        let bind = &self.assets.clone();
+        let assets_src = Path::new(&bind);
+        let assets_tgt = self.output_path.clone().unwrap().join("assets");
+        Helper::sync_assets(assets_src, &assets_tgt)?;
         //establish Info.plist path ~/ios/release/Appname.app/Info.plist
         let plist_path: PathBuf = partial_path.join("Info.plist");
         println!("plist path: {:?}", plist_path);
@@ -440,7 +445,6 @@ pub struct AscClient {
 }
 
 impl AscClient {
-    //TODO ensure this cache is working properly
     //get cached metadata for ios builds
     fn get_cache_dir(&self) -> PathBuf {
         PathBuf::from("target/ios-cache")

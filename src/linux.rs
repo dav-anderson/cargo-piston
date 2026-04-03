@@ -15,6 +15,8 @@ pub struct LinuxBuilder {
     output_path: Option<PathBuf>,
     //TODO implement icon auto handler
     // icon_path: Option<String>,
+    //TODO bundle assets
+    // assets: String,
     cargo_path: String,
     gpg_path: Option<String>,
     zigbuild_path: Option<String>,
@@ -56,6 +58,7 @@ impl LinuxBuilder {
             .map_err(|e| PistonError::CargoParseError(e.to_string()))?;
 
         // let icon_path = Helper::get_icon_path(&metadata);
+        // let assets = Helper::get_assets_path(&metadata);
         let app_name = Helper::get_app_name(&metadata)?;
         //parse the path to zigbuild if building on Macos
         let mut zigbuild_path: Option<String> = None;
@@ -76,6 +79,7 @@ impl LinuxBuilder {
             output_path: None, 
             //TODO implement auto handler for icon
             // icon_path: icon_path, 
+            // assets: assets,
             cargo_path: cargo_path, 
             gpg_path: gpg_path, 
             zigbuild_path: zigbuild_path, 

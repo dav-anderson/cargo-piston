@@ -227,8 +227,7 @@ impl AndroidBuilder {
         let build_path: PathBuf = cwd.join("target").join(if release {"release"} else {"debug"}).join("android").join("androidbuilder");
         println!("build path: {:?}", build_path);
         //empty dirs all build_path
-        let preserve = ["assets"];
-        Helper::empty_directory(build_path.as_path(), &preserve)?;
+        Helper::empty_directory(build_path.as_path(), &["assets"])?;
         //mkdir all build_path
         create_dir_all(&build_path).map_err(|e| PistonError::CreateDirAllError {
         path: build_path.clone(),
@@ -278,7 +277,7 @@ impl AndroidBuilder {
         //set the absolute build path
         let path = self.resources.as_path();
         //Empty the directory if it already exists
-        Helper::empty_directory(path, &["assets"])?;
+        Helper::empty_directory(path, &[])?;
         //create the target directories
         create_dir_all(&self.resources).map_err(|e| PistonError::CreateDirAllError {
         path: self.resources.clone(),
@@ -524,7 +523,7 @@ impl AndroidBuilder {
         if proto_manifest_root.exists() {
             let manifest_dir = base_dir.join("manifest");
             //empty the dir if it exists
-            Helper::empty_directory(&manifest_dir, &[""])?;
+            Helper::empty_directory(&manifest_dir, &[])?;
             create_dir_all(&manifest_dir)
                 .map_err(|e| PistonError::CreateDirAllError {
                     path: manifest_dir.clone(),
@@ -549,7 +548,7 @@ impl AndroidBuilder {
             _ => return Err(PistonError::UnsupportedTargetError(format!("Unsupported target {}", target).to_string())),
         };
         let lib_dir = base_dir.join("lib").join(abi);
-        Helper::empty_directory(&lib_dir, &[""])?;
+        Helper::empty_directory(&lib_dir, &[])?;
         create_dir_all(&lib_dir).map_err(|e| PistonError::CreateDirAllError {
         path: lib_dir.clone(),
         source: e,

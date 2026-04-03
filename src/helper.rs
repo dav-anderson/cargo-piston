@@ -49,23 +49,23 @@ impl Helper {
         Ok(())
     }
 
-    pub fn sync_assets(src: &Path, dst: &Path) -> Result<(), PistonError> {
-        println!("attempting to sync assets dir: {} with destination: {}", src.display(), dst.display());
+    pub fn sync_assets(src: &Path, tgt: &Path) -> Result<(), PistonError> {
+        println!("attempting to sync assets dir: {} with destination: {}", src.display(), tgt.display());
         if !src.exists() {
             println!("⚠️  Assets source not found at {:?} — removing target if it exists", src);
-            if dst.exists() {
-                remove_dir_all(dst).map_err(|e| PistonError::RemoveSubdirError { path: dst.to_path_buf(), source: e })?;
+            if tgt.exists() {
+                remove_dir_all(tgt).map_err(|e| PistonError::RemoveSubdirError { path: tgt.to_path_buf(), source: e })?;
             }
             return Ok(());
         }
 
-        create_dir_all(dst)
+        create_dir_all(tgt)
             .map_err(|e| PistonError::Generic(format!("Failed to create base/assets: {}", e)))?;
 
-        println!("📦 Syncing assets: {:?} → {:?}", src, dst);
+        println!("📦 Syncing assets: {:?} → {:?}", src, tgt);
 
-        Self::copy_updated_files(src, dst)?;
-        Self::remove_stale_files(src, dst)?;
+        Self::copy_updated_files(src, tgt)?;
+        Self::remove_stale_files(src, tgt)?;
 
         println!("✅ Assets synced (only changed files were updated)");
         Ok(())

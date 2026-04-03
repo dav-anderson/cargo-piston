@@ -13,9 +13,12 @@ pub struct MacOSBuilder {
     cwd: PathBuf,
     output_path: Option<PathBuf>,
     icon_path: Option<String>,
+    //TODO bundle assets
+    // assets: String,
     cargo_path: String,
     app_name: String,
     app_version: String,
+    //TODO automatic signing
     // key_path: Option<String>,
 }
 
@@ -54,6 +57,7 @@ impl MacOSBuilder {
             .map_err(|e| PistonError::CargoParseError(e.to_string()))?;
 
         let icon_path = Helper::get_icon_path(&metadata);
+        // let assets = Helper::get_assets_path(&metadata);
         let app_name = Helper::get_app_name(&metadata)?;
         let app_version = Helper::get_app_version(&metadata)?;
         Ok(MacOSBuilder{
@@ -62,6 +66,7 @@ impl MacOSBuilder {
             cwd: cwd, 
             output_path: None, 
             icon_path: icon_path, 
+            // assets: assets,
             cargo_path: cargo_path, 
             app_name: app_name, 
             app_version: app_version, 
