@@ -1,5 +1,5 @@
 use cargo_metadata::{Metadata, MetadataCommand};
-use std::path::PathBuf;
+use std::path::{ PathBuf, Path };
 use std::env;
 use std::io::Write;
 use std::fs::{create_dir_all, copy};
@@ -15,8 +15,7 @@ pub struct LinuxBuilder {
     output_path: Option<PathBuf>,
     //TODO implement icon auto handler
     // icon_path: Option<String>,
-    //TODO bundle assets
-    // assets: String,
+    assets: String,
     cargo_path: String,
     gpg_path: Option<String>,
     zigbuild_path: Option<String>,
@@ -58,7 +57,7 @@ impl LinuxBuilder {
             .map_err(|e| PistonError::CargoParseError(e.to_string()))?;
 
         // let icon_path = Helper::get_icon_path(&metadata);
-        // let assets = Helper::get_assets_path(&metadata);
+        let assets = Helper::get_assets_path(&metadata);
         let app_name = Helper::get_app_name(&metadata)?;
         //parse the path to zigbuild if building on Macos
         let mut zigbuild_path: Option<String> = None;
@@ -79,7 +78,7 @@ impl LinuxBuilder {
             output_path: None, 
             //TODO implement auto handler for icon
             // icon_path: icon_path, 
-            // assets: assets,
+            assets: assets,
             cargo_path: cargo_path, 
             gpg_path: gpg_path, 
             zigbuild_path: zigbuild_path, 
@@ -106,12 +105,17 @@ impl LinuxBuilder {
         }
         let path = self.output_path.as_ref().unwrap().as_path();
         //empty the dir if it exists
-        Helper::empty_directory(path, &[""])?;
+        Helper::empty_directory(path, &["assets"])?;
         //create the target directory
         create_dir_all(path).map_err(|e| PistonError::CreateDirAllError {
         path: self.output_path.as_ref().unwrap().to_path_buf(),
         source: e,
         })?;
+        //sync assets
+        let bind = &self.assets.clone();
+        let assets_src = Path::new(&bind);
+        let assets_tgt = path.join("assets");
+        Helper::sync_assets(assets_src, &assets_tgt)?;
         println!("Finished Pre Build for Linux");
         Ok(())
     }
