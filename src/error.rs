@@ -98,6 +98,8 @@ pub enum PistonError {
 
     CopyFileError{ input_path: PathBuf, output_path: PathBuf, source: IoError },
 
+    LipoError{ first_binary: PathBuf, second_binary:PathBuf, source: String },
+
     MacOSIconError{ input_path: PathBuf, output_path: PathBuf, source: IoError },
 
     ReadDirError{ path: PathBuf, source: IoError },
@@ -171,6 +173,7 @@ impl fmt::Display for PistonError {
             PistonError::KeyToolError(err) => write!(f, "Error running 'keytool': {}", err),
             PistonError::APKSignerError(err) => write!(f, "Error running 'apksigner': {}", err),
             PistonError::UnsupportedOSError{ os, target, .. } => write!(f, "Host system: {:?} does not support the target: {:?}", os, target),
+            PistonError::LipoError{ first_binary, second_binary, .. } => write!(f, "Error making universal binary with Lipo first binary: {:?}, second binary: {:?}", first_binary, second_binary),
             PistonError::CopyFileError { input_path, output_path, .. } => write!(f, "Failed to copy {:?} to {:?}", input_path, output_path),
             PistonError::MacOSIconError { input_path, output_path, .. } => write!(f, "Failed to format icon {:?} to {:?}", input_path, output_path),
             PistonError::ReadDirError { path, .. } => write!(f, "Failed to read directory {:?}", path),

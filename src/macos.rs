@@ -76,9 +76,9 @@ impl MacOSBuilder {
      fn pre_build(&mut self) -> Result <(), PistonError>{
         println!("Pre build for macos");
         //TODO check for xcode installation
-        //Check for x code select pathing
-        //check for xcode command line tools
-        //check xcode for updates
+        //TODO Check for x code select pathing
+        //TODO check for xcode command line tools
+        //TODO check xcode for updates
    
 
         println!("building the dynamic app bundle");
@@ -205,26 +205,80 @@ impl MacOSBuilder {
         if !builder.status.success() {
             return Err(PistonError::BuildError(format!("Cargo build failed: {}", String::from_utf8_lossy(&builder.stderr))))
         }
+        //second target triple for universal binary build
+        if self.release{
+            let secondary = if self.target.contains("aarch64") {"x86_64-apple-darwin"} else {"aarch64-apple-darwin"};
+            let cargo_args_second = format!("build --target {} {}", secondary, if self.release {"--release"} else {""});
+            let cargo_cmd_second = format!("{} {}", self.cargo_path, cargo_args_second);
+            let builder_second = Command::new("bash")
+                .arg("-c")
+                .arg(&cargo_cmd_second)
+                .current_dir(self.cwd.clone())
+                .stdout(Stdio::inherit())
+                .stderr(Stdio::inherit())
+                .output()
+                .map_err(|e| PistonError::BuildError(format!("Second Cargo build failed: {}", e)))?;
+            if !builder_second.status.success() {
+                return Err(PistonError::BuildError(format!("Second Cargo build failed: {}", String::from_utf8_lossy(&builder.stderr))))
+            }
+        }
 
         Ok(())
     }
 
     fn post_build(&mut self) -> Result<(), PistonError>{
         println!("post build for macos");
+
+        //TODO obtain certificate if needed
+        //TODO Sign if release
+        //TODO zip with Notary tool and staple
+        
         let binary_path = self.cwd.join("target").join(self.target.clone()).join(if self.release {"release"} else {"debug"}).join(self.app_name.clone());
         let bundle_path = self.output_path.as_ref().unwrap().join(self.app_name.clone());
-        //bundle path should be cwd + target + <target output> + <--release flag or None for debug> + <appname>.exe
-        println!("binary path is: {}", &binary_path.display());
-        println!("bundle path is: {}", &bundle_path.display());
-        println!("copying binary to app bundle");
-        //move the target binary into the app bundle at the proper location
-        copy(&binary_path, &bundle_path).map_err(|e| PistonError::CopyFileError {
-            input_path: binary_path.clone().to_path_buf(),
-            output_path: bundle_path.clone().to_path_buf(),
-            source: e,
-        })?;
-        //output the proper location in the terminal for the user to see 
-        println!("MacOS app bundle available at: {}", &bundle_path.display());
+
+        //if release flag false, copy target triple only
+        if !self.release {
+            //bundle path should be cwd + target + <target output> + <--release flag or None for debug> + <appname>.exe
+            println!("binary path is: {}", &binary_path.display());
+            println!("bundle path is: {}", &bundle_path.display());
+            println!("copying binary to app bundle");
+            //move the target binary into the app bundle at the proper location
+            copy(&binary_path, &bundle_path).map_err(|e| PistonError::CopyFileError {
+                input_path: binary_path.clone().to_path_buf(),
+                output_path: bundle_path.clone().to_path_buf(),
+                source: e,
+            })?;
+            println!("Target MacOS app bundle available at: {}", &bundle_path.display());
+        //if release flag true, build universal binary
+        } else {
+            let secondary = if self.target.contains("aarch64") {"x86_64-apple-darwin"} else {"aarch64-apple-darwin"};
+            let secondary_path = self.cwd.join("target").join(secondary).join("release").join(self.app_name.clone());
+            //bundle path should be cwd + target + <target output> + <--release flag or None for debug> + <appname>.exe
+            println!("binary path is: {}", &binary_path.display());
+            println!("secondary binary path is: {}", &secondary_path.display());
+            println!("bundle path is: {}", &bundle_path.display());
+            println!("creating universal binary in the app bundle");
+            let lipo = Command::new("lipo")
+                .arg("-create")
+                .arg(&binary_path)
+                .arg(&secondary_path)
+                .arg("-output")
+                .arg(&bundle_path)
+                .output()
+                .map_err(|e| PistonError::LipoError{
+                    first_binary: binary_path.clone(),
+                    second_binary: secondary_path.clone(),
+                    source: e.to_string()
+                })?;
+            if !lipo.status.success() {
+                return Err(PistonError::LipoError{
+                    first_binary: binary_path,
+                    second_binary: secondary_path,
+                    source: String::from_utf8_lossy(&lipo.stderr).to_string()         
+                })
+            }
+            println!("Universal MacOS app bundle available at: {}", &bundle_path.display());
+        }
         Ok(())
     }
 }
