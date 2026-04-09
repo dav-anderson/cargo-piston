@@ -19,6 +19,7 @@ mod macos;
 mod windows;
 mod helper;
 mod error;
+mod asc;
 
 #[derive(Parser)]
 #[command(name = "piston")] //top level command
