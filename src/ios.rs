@@ -100,7 +100,7 @@ impl IOSBuilder {
 
     fn pre_build(&mut self) -> Result <(), PistonError>{
         //TODO check xcode for updates?
-        //TODO allow user to specify a security cert for offline signing
+        //TODO allow user to specify a security cert for offline signing?
         println!("Pre build for ios");
         //check for xcode installation
         let xcode_app = "/Applications/Xcode.app";
@@ -315,7 +315,7 @@ impl IOSBuilder {
         } else {
             println!("keystore path & ASC API key properly configured");
             let asc_client = AscClient{ api_key: self.asc_api_key.clone(), keystore_path: self.keystore_path.clone().unwrap()};
-            //Note: this presently always create an IOS_DISTRIBUTION cert
+            //obtain security certificate
             let security_profile = asc_client.create_or_find_security_cert()?;
             println!("your security profile is: {:?}", security_profile);
             let output_path = self.output_path.clone().unwrap();
@@ -335,12 +335,12 @@ impl IOSBuilder {
                     let app_name = self.app_name.clone();
                     //provision device here
                     asc_client.provision_ios_device(&target_id, &bundle_id, &app_name, &security_profile.0, &output_path, &idp_path)?;
-                    AscClient::sign_app_bundle(&app_name, &output_path, security_profile.1.as_ref())?;
+                    AscClient::sign_app_bundle(&app_name, &output_path, security_profile.1.as_ref(), true)?;
                     return Ok(())
                 }
             }
             //sign the app bundle for distribution
-            AscClient::sign_app_bundle(&app_name, &output_path, security_profile.1.as_ref())?;
+            AscClient::sign_app_bundle(&app_name, &output_path, security_profile.1.as_ref(), true)?;
         }
         Ok(())
     }

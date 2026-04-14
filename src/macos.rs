@@ -6,6 +6,7 @@ use std::io::Write;
 use std::process::{ Command, Stdio };
 use crate::Helper;
 use crate::PistonError;
+use crate::asc::{ AscApiKey, AscClient };
 
 pub struct MacOSBuilder {
     release: bool,
@@ -17,8 +18,8 @@ pub struct MacOSBuilder {
     cargo_path: String,
     app_name: String,
     app_version: String,
-    //TODO automatic signing
-    // key_path: Option<String>,
+    asc_api_key: Option<AscApiKey>,
+    keystore_path: Option<String>,
 }
 
 impl MacOSBuilder {
@@ -46,9 +47,7 @@ impl MacOSBuilder {
         println!("creating MacOSBuilder: release: {:?}, target: {:?}, cwd: {:?}", release, target.to_string(), cwd);
         //parse env vars
         let cargo_path = env_vars.get("cargo_path").cloned().unwrap_or("cargo".to_string());
-        // let key_string = if release {"macos_release_keypath"} else {"macos_debug_keypath"};
-        // let key_path = env_vars.get(key_string).cloned();
-        println!("Cargo path determined: {}", &cargo_path);
+        let keystore_path = env_vars.get("keystore_path").cloned();
         //parse cargo.toml
         let metadata: Metadata = MetadataCommand::new()
             .current_dir(cwd.clone())
@@ -59,6 +58,14 @@ impl MacOSBuilder {
         let assets = Helper::get_assets_path(&metadata);
         let app_name = Helper::get_app_name(&metadata)?;
         let app_version = Helper::get_app_version(&metadata)?;
+
+        let asc_api_key: Option<AscApiKey> = match AscApiKey::from_hm(&env_vars) {
+            Ok(key) => Some(key),
+            Err(e) => {
+                println!("Failed to obtain AscApiKey, check .env configuration: {}", e);
+                None
+            }
+        };
         Ok(MacOSBuilder{
             release: release, 
             target: target.to_string(), 
@@ -69,18 +76,38 @@ impl MacOSBuilder {
             cargo_path: cargo_path, 
             app_name: app_name, 
             app_version: app_version, 
-            // key_path: key_path
+            asc_api_key: asc_api_key,
+            keystore_path: keystore_path,
         })
     }
 
      fn pre_build(&mut self) -> Result <(), PistonError>{
-        println!("Pre build for macos");
-        //TODO check for xcode installation
-        //TODO Check for x code select pathing
-        //TODO check for xcode command line tools
         //TODO check xcode for updates
-   
+        //TODO allow user to specify a security cert for offline signing?
+        println!("Pre build for macos");
+        //check for xcode installation
+        let xcode_app = "/Applications/Xcode.app";
+        if !Path::new(xcode_app).exists() {
+            return Err(PistonError::XcodeInstallError(format!("Xcode installation not found at {} Please download xcode from the apple app store at https://apps.apple.com/us/app/xcode/id497799835", xcode_app)))?;
+        }
+        //Check for xcode-select command line tools installation and pathing
+        let xcode_select = Command::new("xcode-select")
+            .arg("-p")
+            .output()
+            .map_err(|e| PistonError::XcodeSelectInstallError(format!("Failed to verify xcode tools installation: {}", e)));
 
+        let expected_path = format!("{}/Contents/Developer", xcode_app);
+
+        let path = String::from_utf8(xcode_select.unwrap().stdout)
+            .unwrap()
+            .trim()
+            .to_string();
+        //verify that xcode-select path matches the expected query
+        if path == expected_path {
+            println!("xcode-select path match")
+        }else {
+            return Err(PistonError::XcodeSelectPathingError(format!("Xcode-select path query of {} does not match the expected value of {}...set the path with 'sudo xcode-select -s /Applications/Xcode.app/Contents/Developer'",path, expected_path)))
+        }   
         println!("building the dynamic app bundle");
         let cwd: PathBuf = self.cwd.clone();
         println!("working dir: {:?}", cwd);
@@ -228,11 +255,6 @@ impl MacOSBuilder {
 
     fn post_build(&mut self) -> Result<(), PistonError>{
         println!("post build for macos");
-
-        //TODO obtain certificate if needed
-        //TODO Sign if release
-        //TODO zip with Notary tool and staple
-        
         let binary_path = self.cwd.join("target").join(self.target.clone()).join(if self.release {"release"} else {"debug"}).join(self.app_name.clone());
         let bundle_path = self.output_path.as_ref().unwrap().join(self.app_name.clone());
 
@@ -278,6 +300,25 @@ impl MacOSBuilder {
                 })
             }
             println!("Universal MacOS app bundle available at: {}", &bundle_path.display());
+        }
+
+        //automated signing
+        //TODO this cannot use the API, we need to check for a manually provided key on the keychain
+        //and attempt to sign with that instead
+        if self.keystore_path.is_none() || self.asc_api_key.is_none() || !self.release{
+            println!("Either the Keystore path or ASC API key missing from .env or app not designated for release, skipping automated signing");
+        } else {
+            println!("keystore path & ASC API key properly configured");
+            let asc_client = AscClient{ api_key: self.asc_api_key.clone(), keystore_path: self.keystore_path.clone().unwrap()};
+            //obtain certificate
+            let security_profile = asc_client.create_or_find_security_cert()?;
+            println!("your security profile is: {:?}", security_profile);
+            let output_path = self.output_path.clone().unwrap();
+            let app_name = self.app_name.clone();
+            //sign the app bundle for distribution
+            AscClient::sign_app_bundle(&app_name, &output_path, security_profile.1.as_ref(), false)?;
+            //TODO zip with Notary tool and staple
+
         }
         Ok(())
     }

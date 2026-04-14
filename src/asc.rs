@@ -2,13 +2,12 @@ use serde_json::json;
 use serde::{ Serialize, Deserialize };
 use std::collections::HashMap;
 use std::fs;
-use std::path::{ Path, PathBuf };
+use std::path::PathBuf;
 use std::process::{ Command, Stdio };
 use ureq::Response;
 use base64::prelude::*;
 use std::time::{SystemTime, UNIX_EPOCH};
 use std::io::Write;
-
 use crate::PistonError;
 
 
@@ -48,14 +47,9 @@ pub struct AscClient {
 }
 
 impl AscClient {
-    //get cached metadata for ios builds
-    fn get_cache_dir(&self) -> PathBuf {
-        PathBuf::from("target/ios-cache")
-    }
-
     //load the cached security certificate identity
-    fn load_cert_cache(&self) -> Option<(String, String)> {
-        let path = self.get_cache_dir().join("cert_cache.json");
+    fn load_cert_cache(&self, cache_dir: &PathBuf) -> Option<(String, String)> {
+        let path = cache_dir.join("cert_cache.json");
         if let Ok(content) = fs::read_to_string(&path) {
             if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
                 let cert_id = json["cert_id"].as_str()?.to_string();
@@ -67,23 +61,26 @@ impl AscClient {
     }
 
     //cache security certificate identity
-    fn save_cert_cache(&self, cert_id: &str, signing_identity: &str) {
-        let dir = self.get_cache_dir();
-        let _ = fs::create_dir_all(&dir);
+    fn save_cert_cache(&self, cert_id: &str, signing_identity: &str, cache_dir: &PathBuf) {
+        let _ = fs::create_dir_all(&cache_dir);
         let data = json!({
             "cert_id": cert_id,
             "signing_identity": signing_identity
         });
-        let _ = fs::write(dir.join("cert_cache.json"), data.to_string());
+        let _ = fs::write(cache_dir.join("cert_cache.json"), data.to_string());
     }
 
-    // Creates or re-uses an iOS Distribution certificate
+    // Creates or re-uses a universal security certificate
     // Returns: (certificate_id, signing_identity_name) — name is normalized for codesign, ASC API returns something unique
     pub fn create_or_find_security_cert(
-        &self,
+        &self
     ) -> Result<(String, String), PistonError> {
-        // First check cache
-        if let Some((cert_id, signing_identity)) = self.load_cert_cache() {
+        let cert_type = "DISTRIBUTION";
+        let id_type = "Apple Distribution";
+
+        let cache_dir = PathBuf::from("target/asc-cache");
+        //1. Check cache
+        if let Some((cert_id, signing_identity)) = self.load_cert_cache(&cache_dir) {
             // Quick local keychain check
             let check = Command::new("security")
                 .args(["find-identity", "-v", "-p", "codesigning"])
@@ -97,7 +94,7 @@ impl AscClient {
             }
         }
         // If cache missing locally → create/re-use credentials via API
-        // 0. Unlock keychain
+        //2. Unlock keychain
         let keychain_path = format!("{}/login.keychain-db", self.keystore_path.clone());
         let _ = Command::new("security")
             .args(["unlock-keychain", &keychain_path])
@@ -114,8 +111,6 @@ impl AscClient {
         println!("✅ Keychain unlocked");
 
         let token = self.generate_jwt()?;
-        let cert_type = "IOS_DISTRIBUTION";
-        let id_type = "Distribution";
 
         println!("Checking for existing {} certificate in ASC...", id_type);
 
@@ -130,7 +125,8 @@ impl AscClient {
 
         let json: serde_json::Value = list_resp.into_json()
             .map_err(|e| PistonError::IntoJSONError(e.to_string()))?;
-
+        
+        //reuse existing certificate if possible
         if let Some(existing) = json["data"].as_array().and_then(|arr| arr.first()) {
             let cert_id = existing["id"].as_str().unwrap().to_string();
             let cert_name = existing["attributes"]["name"]
@@ -148,20 +144,20 @@ impl AscClient {
 
             let output = String::from_utf8_lossy(&check.stdout);
 
-            if output.contains(&cert_name) || 
-            output.contains(&cert_name.replace("iOS Distribution", "iPhone Distribution")) {
-                println!("✅ Certificate also found in local keychain → reusing");
+                println!("*******************DEBUG LINE CHECK BELOW FOR A MATCH AND MAKE SURE THE LOGIC IS RIGHT**********************");
+                println!("output: {:?}", output);
+                println!("cert name: {:?}", cert_name);
 
-                // Normalize to what codesign expects
-                let signing_identity = cert_name.replace("iOS Distribution", "iPhone Distribution");
-                return Ok((cert_id, signing_identity));
+            if output.contains(&cert_name){
+                println!("✅ Certificate also found in local keychain → reusing");
+                return Ok((cert_id, cert_name));
             } else {
                 println!("⚠️  Certificate exists in ASC but missing locally → creating a new one");
                 // No automatic revocation, we just create a fresh certificate (Apple allows multiples)
             }
         }
 
-        // CREATE NEW SECURITY CERTIFICATE
+        //3. CREATE NEW SECURITY CERTIFICATE
         println!("Generating new {} certificate...", id_type);
 
         let key_path = "temp_key.pem";
@@ -197,7 +193,7 @@ impl AscClient {
             .set("Content-Type", "application/json")
             .send_json(&body)
             .map_err(|e| PistonError::ASCClientUreqError {
-                endpoint: "upload CSR".to_string(),
+                endpoint: "upload CSR: https://api.appstoreconnect.apple.com/v1/certificates".to_string(),
                 e: format!("Upload failed: {}", e),
             })?;
 
@@ -252,13 +248,10 @@ impl AscClient {
         let _ = fs::remove_file(csr_path);
         let _ = fs::remove_file(cer_path);
 
-        // Normalize to what codesign actually expects
-        let signing_identity = cert_name.replace("iOS Distribution", "iPhone Distribution");
-
-        println!("✅ New {} certificate created and imported (ID: {}, Name for codesign: {})", id_type, cert_id, signing_identity);
+        println!("✅ New {} certificate created and imported (ID: {}, Name for codesign: {})", id_type, cert_id, cert_name);
         //cache the security credentials locally
-        self.save_cert_cache(&cert_id, &signing_identity);
-        Ok((cert_id, signing_identity))
+        self.save_cert_cache(&cert_id, &cert_name, &cache_dir);
+        Ok((cert_id, cert_name))
     }
 
     //generates a JWT for interfacing with Apple AppStoreConnect API
@@ -496,9 +489,10 @@ impl AscClient {
             .map_err(|e| PistonError::WriteFileError(format!("Failed to write profile: {}", e)))?;
 
         //cache mobile provision locally
-        let cache_dir = self.get_cache_dir().join("profiles");
-        let _ = fs::create_dir_all(&cache_dir);
-        let cached_profile = cache_dir.join(format!("{}.mobileprovision", profile_name));
+        let cache_dir = PathBuf::from("target/ios-cache");
+        let cache_dir_pro = cache_dir.join("profiles");
+        let _ = fs::create_dir_all(&cache_dir_pro);
+        let cached_profile = cache_dir_pro.join(format!("{}.mobileprovision", profile_name));
         let _ = fs::copy(&profile_path, &cached_profile);
 
         // 5. Embed into .app bundle
@@ -646,63 +640,149 @@ impl AscClient {
         Ok(false)
     }
 
-    //sign an ios app bundle
-    pub fn sign_app_bundle(app_name: &str, app_bundle_path: &PathBuf, security_profile: &str) -> Result<(), PistonError> {
-        let exec_path = app_bundle_path.join(app_name).display().to_string();
-        let app_bundle = app_bundle_path.display().to_string();
-        println!("Signing bundle: {}", app_bundle);
-        // Delete any old signature so we can re-sign after provisioning added the profile
-        let code_signature_dir = format!("{}/_CodeSignature", app_bundle);
-        let code_signature_path = Path::new(&code_signature_dir);
-        if code_signature_path.exists() {
-            let _ = fs::remove_dir_all(&code_signature_path);
+    //sign an ios or macos app bundle
+    //sign an ios or macos app bundle for App Store distribution
+    pub fn sign_app_bundle(
+        app_name: &str,
+        app_bundle_path: &PathBuf,
+        security_profile: &str,
+        ios: bool,
+    ) -> Result<(), PistonError> {
+        let bundle_path = app_bundle_path.display().to_string();
+        println!("🔏 Signing {} bundle: {}", if ios { "iOS" } else { "macOS" }, bundle_path);
+
+        // Remove any old signature
+        let code_signature_dir = app_bundle_path.join("_CodeSignature");
+        if code_signature_dir.exists() {
+            let _ = fs::remove_dir_all(&code_signature_dir);
         }
-        AscClient::ensure_entitlements(&app_bundle_path)?;
-        //sign executable binary
-        let output = Command::new("codesign")
-            .args([
-                "--force",
-                "--sign", security_profile,
-                "--entitlements", &format!("{}/entitlements.plist", app_bundle),
-                "--options", "runtime",
-                "--timestamp",
-                "--deep",
-                "--generate-entitlement-der",
-                &exec_path,
-            ])
-            .stdout(Stdio::inherit())
-            .stderr(Stdio::inherit())
-            .output()
-            .map_err(|e| PistonError::CodesignError(e.to_string()))?;
-        if !output.status.success() {
-            return Err(PistonError::CodesignError(
-                String::from_utf8_lossy(&output.stderr).trim().to_string()
-            ));
+
+        AscClient::ensure_entitlements(app_bundle_path)?;
+
+        if ios {
+            // ==================== iOS SIGNING (two-step) ====================
+            println!("   → Signing iOS executable...");
+
+            let status = Command::new("codesign")
+                .args([
+                    "--force",
+                    "--sign", security_profile,
+                    "--entitlements", &format!("{}/entitlements.plist", bundle_path),
+                    "--options", "runtime",
+                    "--timestamp",
+                    "--deep",
+                    "--generate-entitlement-der",
+                    &app_bundle_path.join(app_name).display().to_string(),
+                ])
+                .stdout(Stdio::inherit())
+                .stderr(Stdio::inherit())
+                .status()
+                .map_err(|e| PistonError::CodesignError(e.to_string()))?;
+
+            if !status.success() {
+                return Err(PistonError::CodesignError("Failed to sign iOS executable".to_string()));
+            }
         }
-        //sign app bundle
-        let output = Command::new("codesign")
-            .args([
-                "--force",
-                "--sign", security_profile,
-                "--entitlements", &format!("{}/entitlements.plist", app_bundle),
-                "--options", "runtime",
-                "--timestamp",
-                "--deep",
-                "--generate-entitlement-der",
-                &app_bundle,
-            ])
+
+        // ==================== COMMON FINAL BUNDLE SIGNING ====================
+        println!("   → Signing outer bundle...");
+
+        let entitlements_path = format!("{}/entitlements.plist", bundle_path);
+
+        let mut args = vec![
+            "--force",
+            "--sign", security_profile,
+            "--entitlements", &entitlements_path,
+            "--timestamp",
+            "--deep",
+            "--generate-entitlement-der",
+            &bundle_path,
+        ];
+
+        // macOS App Store builds should NOT use --options runtime
+        if ios {
+            args.insert(4, "--options");
+            args.insert(5, "runtime");
+        }
+
+        let status = Command::new("codesign")
+            .args(&args)
             .stdout(Stdio::inherit())
             .stderr(Stdio::inherit())
             .output()
             .map_err(|e| PistonError::CodesignError(e.to_string()))?;
 
-        if !output.status.success() {
+        if !status.status.success() {
             return Err(PistonError::CodesignError(
-                String::from_utf8_lossy(&output.stderr).trim().to_string()
+                String::from_utf8_lossy(&status.stderr)
+                    .trim()
+                    .to_string(),
             ));
         }
 
-        println!("✅ Bundle signed successfully");
+        println!("✅ {} bundle signed successfully!", if ios { "iOS" } else { "macOS" });
         Ok(())
     }
 }
+//     pub fn sign_app_bundle(app_name: &str, app_bundle_path: &PathBuf, security_profile: &str, ios: bool) -> Result<(), PistonError> {
+//         let exec_path = app_bundle_path.join(app_name).display().to_string();
+//         let app_bundle = app_bundle_path.display().to_string();
+//         println!("Signing {} bundle: {}", if ios {"IOS"} else {"MacOS"}, app_bundle);
+//         // Delete any old signature so we can re-sign after provisioning added the profile
+//         let code_signature_dir = format!("{}/_CodeSignature", app_bundle);
+//         let code_signature_path = Path::new(&code_signature_dir);
+//         if code_signature_path.exists() {
+//             let _ = fs::remove_dir_all(&code_signature_path);
+//         }
+//         AscClient::ensure_entitlements(&app_bundle_path)?;
+//         //sign ios binary
+//         if ios {
+//             //sign executable binary
+//             let output = Command::new("codesign")
+//                 .args([
+//                     "--force",
+//                     "--sign", security_profile,
+//                     "--entitlements", &format!("{}/entitlements.plist", app_bundle),
+//                     "--options", "runtime",
+//                     "--timestamp",
+//                     "--deep",
+//                     "--generate-entitlement-der",
+//                     &exec_path,
+//                 ])
+//                 .stdout(Stdio::inherit())
+//                 .stderr(Stdio::inherit())
+//                 .output()
+//                 .map_err(|e| PistonError::CodesignError(e.to_string()))?;
+//             if !output.status.success() {
+//                 return Err(PistonError::CodesignError(
+//                     String::from_utf8_lossy(&output.stderr).trim().to_string()
+//                 ));
+//             }
+//         }
+//         //sign app bundle
+//         let output = Command::new("codesign")
+//             .args([
+//                 "--force",
+//                 "--sign", security_profile,
+//                 "--entitlements", &format!("{}/entitlements.plist", app_bundle),
+//                 "--options", "runtime",
+//                 "--timestamp",
+//                 "--deep",
+//                 "--generate-entitlement-der",
+//                 &app_bundle,
+//             ])
+//             .stdout(Stdio::inherit())
+//             .stderr(Stdio::inherit())
+//             .output()
+//             .map_err(|e| PistonError::CodesignError(e.to_string()))?;
+
+//         if !output.status.success() {
+//             return Err(PistonError::CodesignError(
+//                 String::from_utf8_lossy(&output.stderr).trim().to_string()
+//             ));
+//         }
+
+//         println!("✅ Bundle signed successfully for {}", if ios {"iOS"} else {"MacOS"});
+//         Ok(())
+//     }
+// }
