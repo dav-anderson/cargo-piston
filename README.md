@@ -30,7 +30,7 @@ Install and run an app over USB tether on the specified target device
 
 `cargo piston run --device <deviceID>`
 
-Cargo piston also supports generic build and run targets which are dynamically determined based devices connected via usb and host architecture, cargo piston will make an automatic determination for the build target and device target with a generic argument. Both android and ios are supported.
+Cargo piston also supports generic targets which are dynamically determined based on the devices connected via usb and host system architecture. Cargo piston will make an automatic determination for the build target and device target with a generic argument.
 
 For example...
 
@@ -52,7 +52,7 @@ The above command will guess the appropriate ios device based on the reachable c
 
 ## Tested & Supported Build Targets
 
-In theory this tool should support build targets for all of the supported Operting Systems, but they will only be added explicitly after being tested. If you test any of the unsupported targets in main.rs please let me know by opening an issue on the github repo.
+In theory this tool should support build targets for all of the supported Operting Systems, but they will only be added explicitly after being tested. If you test any of the unsupported targets in main.rs please open an Issue or Pull Request on the github repository.
 
 ### Windows
 
