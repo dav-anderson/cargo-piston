@@ -293,6 +293,8 @@ impl MacOSBuilder {
 
         //automated signing
         //TODO add support for Developer ID signing for distribution outside of app store
+        //NOTE these certs are not obtainable via the ASC API and will require manual config
+        //also requires zip + Notary tool sign & staple to comply with gatekeeper
         if self.keystore_path.is_none() || self.asc_api_key.is_none() || !self.release{
             println!("Either the Keystore path or ASC API key missing from .env or app not designated for release, skipping automated signing");
         } else {
@@ -306,7 +308,6 @@ impl MacOSBuilder {
             let app_name = self.app_name.clone();
             //sign the app bundle for distribution
             AscClient::sign_app_bundle(&app_name, &output_path, security_profile.1.as_ref(), false)?;
-            //TODO zip with Notary tool and staple
 
         }
         Ok(())
