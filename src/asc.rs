@@ -531,6 +531,7 @@ impl AscClient {
     // Always extracts entitlements.plist from the embedded.mobileprovision in the bundle
     // Works whether we just provisioned or are reusing a cached profile
     pub fn ensure_entitlements(app_bundle_path: &PathBuf) -> Result<(), PistonError> {
+        println!("ENSURING ENTITLEMENTS for: {:?}", app_bundle_path.display());
         let embedded = app_bundle_path.join("embedded.mobileprovision");
         //no device target specified, build Entitlements for distribution
         if !embedded.exists() {
@@ -657,7 +658,8 @@ impl AscClient {
             let _ = fs::remove_dir_all(&code_signature_dir);
         }
 
-        AscClient::ensure_entitlements(app_bundle_path)?;
+        let path = if ios {app_bundle_path.clone()} else {app_bundle_path.clone().join("Contents")};
+        AscClient::ensure_entitlements(&path)?;
 
         if ios {
             // ==================== iOS SIGNING (two-step) ====================
@@ -667,7 +669,7 @@ impl AscClient {
                 .args([
                     "--force",
                     "--sign", security_profile,
-                    "--entitlements", &format!("{}/entitlements.plist", bundle_path),
+                    "--entitlements", &format!("{}/entitlements.plist", path.display()),
                     "--options", "runtime",
                     "--timestamp",
                     "--deep",
@@ -687,7 +689,7 @@ impl AscClient {
         // ==================== COMMON FINAL BUNDLE SIGNING ====================
         println!("   → Signing outer bundle...");
 
-        let entitlements_path = format!("{}/entitlements.plist", bundle_path);
+        let entitlements_path = format!("{}/entitlements.plist", path.display());
 
         let mut args = vec![
             "--force",
@@ -696,6 +698,7 @@ impl AscClient {
             "--timestamp",
             "--deep",
             "--generate-entitlement-der",
+            "--verbose",
             &bundle_path,
         ];
 

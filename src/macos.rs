@@ -17,6 +17,7 @@ pub struct MacOSBuilder {
     assets: String,
     cargo_path: String,
     app_name: String,
+    bundle_id: String,
     app_version: String,
     asc_api_key: Option<AscApiKey>,
     keystore_path: Option<String>,
@@ -58,6 +59,7 @@ impl MacOSBuilder {
         let assets = Helper::get_assets_path(&metadata);
         let app_name = Helper::get_app_name(&metadata)?;
         let app_version = Helper::get_app_version(&metadata)?;
+        let bundle_id = Helper::get_bundle_id(&metadata, &app_name);
 
         let asc_api_key: Option<AscApiKey> = match AscApiKey::from_hm(&env_vars) {
             Ok(key) => Some(key),
@@ -75,6 +77,7 @@ impl MacOSBuilder {
             assets: assets,
             cargo_path: cargo_path, 
             app_name: app_name, 
+            bundle_id: bundle_id,
             app_version: app_version, 
             asc_api_key: asc_api_key,
             keystore_path: keystore_path,
@@ -108,29 +111,20 @@ impl MacOSBuilder {
         }else {
             return Err(PistonError::XcodeSelectPathingError(format!("Xcode-select path query of {} does not match the expected value of {}...set the path with 'sudo xcode-select -s /Applications/Xcode.app/Contents/Developer'",path, expected_path)))
         }   
-        println!("building the dynamic app bundle");
         let cwd: PathBuf = self.cwd.clone();
-        println!("working dir: {:?}", cwd);
         let capitalized = Helper::capitalize_first(&self.app_name.clone());
-        println!("capitalized app name: {}", capitalized);
         let release = if self.release {"release"} else {"debug"};
-        let partial_path: PathBuf = if self.release {
-            format!("target/{}/macos/{}.app/Contents",release, capitalized).into()
+        let true_bundle_path: PathBuf = if self.release {
+            format!("target/{}/macos/{}.app",release, capitalized).into()
         }else {
-            format!("target/{}/macos/{}.app/Contents",release, capitalized).into()
+            format!("target/{}/macos/{}.app",release, capitalized).into()
         };
-        println!("partial path: {:?}", partial_path);
+        let contents_path: PathBuf = true_bundle_path.join("Contents");
         //establish ~/target/release/macos/Appname.app/Contents/Resources
-        let res_path: PathBuf = partial_path.join("Resources");
-        println!("res path: {:?}", res_path);
+        let res_path: PathBuf = contents_path.join("Resources");
         let assets_tgt = cwd.join(&res_path).join("assets");
-        let macos_path = partial_path.join("MacOS");
-        self.output_path = Some(cwd.join(&macos_path));
-        println!("full path to macos dir: {:?}", self.output_path);
-        //empty the target directory if it exists
-        if self.output_path.as_ref().is_none() {
-            return Err(PistonError::Generic("output path not provided".to_string()))
-        }
+        let macos_path = contents_path.join("MacOS");
+        self.output_path = Some(cwd.join(&true_bundle_path));
         //Empty the directory if it already exists
         let path = res_path.as_path();
         //empty the dir if it exists
@@ -152,8 +146,7 @@ impl MacOSBuilder {
         //establish app icon target path ~/macos/release/Appname.app/Contents/Resources/macos_icon.icns
         let icon_path: PathBuf = res_path.join("macos_icon.icns");
         //establish Info.plist path ~/macos/release/Appname.app/Contents/Info.plist
-        let plist_path: PathBuf = partial_path.join("Info.plist");
-        println!("plist path: {:?}", plist_path);
+        let plist_path: PathBuf = contents_path.join("Info.plist");
         //if a plist file exists, first remove it.
         if plist_path.exists() {
             remove_file(&plist_path).map_err(|e| PistonError::RemoveFileError {
@@ -178,28 +171,29 @@ impl MacOSBuilder {
                 <string>{}</string>
                 <key>CFBundleExecutable</key>
                 <string>{}</string>
+                <key>CFBundleIdentifier</key>
+                <string>{}</string>
                 <key>CFBundleIconFile</key>
                 <string>macos_icon</string>
                 <key>CFBundleVersion</key>
                 <string>{}</string>
+                <key>CFBundlePackageType</key>
+                <string>APPL</string>
             </dict>
             </plist>
             "#,
             &capitalized,
             &self.app_name.clone(),
+            &self.bundle_id.clone(),
             &self.app_version.clone(),
         );
         plist_file.write_all(plist_content.as_bytes()).map_err(|e| PistonError::WriteFileError(e.to_string()))?;
-        println!("Info.plist created");
         //if icon path was provided...convert
         if !self.icon_path.is_none(){
             println!("icon path provided, configuring icon");
             //convert the .png at icon_path to an .icns which resides in the app bundle
-            println!("icon output path: {}", icon_path.display());
             let img_path_clone = self.icon_path.clone().unwrap();
-            println!("image path clone: {}", &img_path_clone);
             let img_path = Path::new(&img_path_clone);
-            println!("image path as path: {}", &img_path.display());
             //Configure icon
             Command::new("sips")
                 .args(["-s", "format", "icns", &img_path_clone, "--out", &icon_path.display().to_string()])
@@ -209,7 +203,6 @@ impl MacOSBuilder {
                     output_path: icon_path,
                     source: e,
                 })?;
-            println!("done configuring macos icon");
         }
         println!("done configuring MacOS bundle");
         Ok(())
@@ -255,37 +248,33 @@ impl MacOSBuilder {
 
     fn post_build(&mut self) -> Result<(), PistonError>{
         println!("post build for macos");
+        //binary_path: /Users/<user>/<appname>/target/<target-triple>/<release>/<appname>
         let binary_path = self.cwd.join("target").join(self.target.clone()).join(if self.release {"release"} else {"debug"}).join(self.app_name.clone());
-        let bundle_path = self.output_path.as_ref().unwrap().join(self.app_name.clone());
-
+        //binary_tgt_path: /Users/<user>/<appname>/target/<release>/macos/<Appname>.app/Contents/MacOS/<appname>
+        let binary_target_path = self.output_path.as_ref().unwrap().join("Contents").join("MacOS").join(self.app_name.clone());
         //if release flag false, copy target triple only
         if !self.release {
             //bundle path should be cwd + target + <target output> + <--release flag or None for debug> + <appname>.exe
-            println!("binary path is: {}", &binary_path.display());
-            println!("bundle path is: {}", &bundle_path.display());
             println!("copying binary to app bundle");
             //move the target binary into the app bundle at the proper location
-            copy(&binary_path, &bundle_path).map_err(|e| PistonError::CopyFileError {
+            copy(&binary_path, &binary_target_path).map_err(|e| PistonError::CopyFileError {
                 input_path: binary_path.clone().to_path_buf(),
-                output_path: bundle_path.clone().to_path_buf(),
+                output_path: binary_target_path.clone().to_path_buf(),
                 source: e,
             })?;
-            println!("Target MacOS app bundle available at: {}", &bundle_path.display());
+            println!("MacOS app bundle available at: {}", &binary_target_path.display());
         //if release flag true, build universal binary
         } else {
+            println!("creating universal binary in the app bundle");
             let secondary = if self.target.contains("aarch64") {"x86_64-apple-darwin"} else {"aarch64-apple-darwin"};
             let secondary_path = self.cwd.join("target").join(secondary).join("release").join(self.app_name.clone());
-            //bundle path should be cwd + target + <target output> + <--release flag or None for debug> + <appname>.exe
-            println!("binary path is: {}", &binary_path.display());
-            println!("secondary binary path is: {}", &secondary_path.display());
-            println!("bundle path is: {}", &bundle_path.display());
-            println!("creating universal binary in the app bundle");
+            //secondary_path: /Users/<user>/<appname>/target/<secondary-target-triple>/<release>/<appname>
             let lipo = Command::new("lipo")
                 .arg("-create")
                 .arg(&binary_path)
                 .arg(&secondary_path)
                 .arg("-output")
-                .arg(&bundle_path)
+                .arg(&binary_target_path)
                 .output()
                 .map_err(|e| PistonError::LipoError{
                     first_binary: binary_path.clone(),
@@ -299,12 +288,11 @@ impl MacOSBuilder {
                     source: String::from_utf8_lossy(&lipo.stderr).to_string()         
                 })
             }
-            println!("Universal MacOS app bundle available at: {}", &bundle_path.display());
+            println!("Universal MacOS app bundle available at: {}", &binary_target_path.display());
         }
 
         //automated signing
-        //TODO this cannot use the API, we need to check for a manually provided key on the keychain
-        //and attempt to sign with that instead
+        //TODO add support for Developer ID signing for distribution outside of app store
         if self.keystore_path.is_none() || self.asc_api_key.is_none() || !self.release{
             println!("Either the Keystore path or ASC API key missing from .env or app not designated for release, skipping automated signing");
         } else {
@@ -314,6 +302,7 @@ impl MacOSBuilder {
             let security_profile = asc_client.create_or_find_security_cert()?;
             println!("your security profile is: {:?}", security_profile);
             let output_path = self.output_path.clone().unwrap();
+
             let app_name = self.app_name.clone();
             //sign the app bundle for distribution
             AscClient::sign_app_bundle(&app_name, &output_path, security_profile.1.as_ref(), false)?;
