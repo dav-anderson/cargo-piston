@@ -439,28 +439,6 @@ impl AndroidBuilder {
         Ok(())
     }
 
-    // fn sync_assets(&self, base_path: &PathBuf) -> Result<(), PistonError>{
-    //     println!("linking assets at: {} to the build directory", self.assets);
-    //     let assets_path = PathBuf::from(self.assets.clone());
-    //     if !assets_path.exists() {
-    //         println!("No assets found at the providing path, skipping asset inclusion");
-    //     }
-
-    //     //TODO handle the condition where assets already exists 
-    //     // and may or may not have different contents without deleting and recopying everytime
-
-    //     let tgt_assets = base_path.join("assets");
-    //     //recursive copy the contents of the asset dir to the target
-    //     copy_dir_all(&assets_path, &tgt_assets)
-    //         .map_err(|e| PistonError::CopyFileError {
-    //             input_path: &assets_path,
-    //             output_path: &tgt_assets,
-    //             source: e,
-    //         })?;
-
-    //     Ok(())
-    // }
-
     fn compile_resources(&self) -> Result<PathBuf, PistonError> {
         println!("compiling resources at {:?}", &self.resources);
         //remove compiled_resources.zip if it exists

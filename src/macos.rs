@@ -10,6 +10,7 @@ use crate::asc::{ AscApiKey, AscClient };
 
 pub struct MacOSBuilder {
     release: bool,
+    external: bool,
     target: String,
     cwd: PathBuf,
     output_path: Option<PathBuf>,
@@ -21,16 +22,19 @@ pub struct MacOSBuilder {
     app_version: String,
     asc_api_key: Option<AscApiKey>,
     keystore_path: Option<String>,
+    external_cert: Option<String>,
 }
 
 impl MacOSBuilder {
-    pub fn start(release: bool, target: String, cwd: PathBuf, env_vars: HashMap<String, String>) -> Result<(), PistonError> {
+    pub fn start(release: bool, target: String, cwd: PathBuf, env_vars: HashMap<String, String>, external: bool) -> Result<(), PistonError> {
         println!("building for MacOS");
         //check operating system (requires MacOS)
         if std::env::consts::OS != "macos"{
             return Err(PistonError::UnsupportedOSError{os: std::env::consts::OS.to_string(), target: target})
         }
-        let mut op = MacOSBuilder::new(release, target, cwd, env_vars)?;
+        //set release to true if external is true
+        let release_override = if external {true} else release;
+        let mut op = MacOSBuilder::new(release_override, target, cwd, env_vars, external)?;
         //TODO check for signing certificate & sign?
         //>>prebuild
         op.pre_build()?;
@@ -44,11 +48,12 @@ impl MacOSBuilder {
         Ok(())
     }
 
-    fn new(release: bool, target: String, cwd: PathBuf, env_vars: HashMap<String, String>) -> Result<Self, PistonError> {
+    fn new(release: bool, target: String, cwd: PathBuf, env_vars: HashMap<String, String>, external: bool) -> Result<Self, PistonError> {
         println!("creating MacOSBuilder: release: {:?}, target: {:?}, cwd: {:?}", release, target.to_string(), cwd);
         //parse env vars
         let cargo_path = env_vars.get("cargo_path").cloned().unwrap_or("cargo".to_string());
         let keystore_path = env_vars.get("keystore_path").cloned();
+        let external_cert = env_vars.get("external_cert").cloned();
         //parse cargo.toml
         let metadata: Metadata = MetadataCommand::new()
             .current_dir(cwd.clone())
@@ -81,6 +86,7 @@ impl MacOSBuilder {
             app_version: app_version, 
             asc_api_key: asc_api_key,
             keystore_path: keystore_path,
+            external_cert: external_cert,
         })
     }
 
@@ -292,22 +298,31 @@ impl MacOSBuilder {
         }
 
         //automated signing
-        //TODO add support for Developer ID signing for distribution outside of app store
-        //NOTE these certs are not obtainable via the ASC API and will require manual config
-        //also requires zip + Notary tool sign & staple to comply with gatekeeper
-        if self.keystore_path.is_none() || self.asc_api_key.is_none() || !self.release{
-            println!("Either the Keystore path or ASC API key missing from .env or app not designated for release, skipping automated signing");
-        } else {
+        if self.keystore_path.is_none() || self.asc_api_key.is_none() {
+            println!("Either the Keystore path or ASC API key missing from .env, skipping automated signing");
+        } else if self.external {
+            //if external-release not properly configured, throw error
+            if self.external_cert.is_none() {
+                return PistonError::Generic("external-release certificate is not properly configured, see documentation")
+            }
+            //perform external release sign if properly configured
+            //TODO this is not currently completely implemented
+            AscClient::sign_app_bundle(&app_name, &output_path, self.external_cert.as_ref(), false)?;
+
+            //TODO zip + notarytool bundle
+
+        }else {
             println!("keystore path & ASC API key properly configured");
-            let asc_client = AscClient{ api_key: self.asc_api_key.clone(), keystore_path: self.keystore_path.clone().unwrap()};
+            let asc = AscClient{ api_key: self.asc_api_key.clone(), keystore_path: self.keystore_path.clone().unwrap()};
             //obtain certificate
-            let security_profile = asc_client.create_or_find_security_cert()?;
+            let security_cert = asc.create_or_find_security_cert()?;
+            let security_profile = format!("{} {}", security_cert.1.as_ref(), security_cert.0.as_ref())
             println!("your security profile is: {:?}", security_profile);
             let output_path = self.output_path.clone().unwrap();
 
             let app_name = self.app_name.clone();
             //sign the app bundle for distribution
-            AscClient::sign_app_bundle(&app_name, &output_path, security_profile.1.as_ref(), false)?;
+            AscClient::sign_app_bundle(&app_name, &output_path, security_profile, false)?;
 
         }
         Ok(())

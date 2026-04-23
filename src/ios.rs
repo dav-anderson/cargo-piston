@@ -316,7 +316,8 @@ impl IOSBuilder {
             println!("keystore path & ASC API key properly configured");
             let asc_client = AscClient{ api_key: self.asc_api_key.clone(), keystore_path: self.keystore_path.clone().unwrap()};
             //obtain security certificate
-            let security_profile = asc_client.create_or_find_security_cert()?;
+            let security_cert = asc_client.create_or_find_security_cert()?;
+            let security_profile = format!("{} {}", security_cert.1.as_ref(), security_cert.0.as_ref())
             println!("your security profile is: {:?}", security_profile);
             let output_path = self.output_path.clone().unwrap();
             let app_name = self.app_name.clone();
@@ -335,12 +336,12 @@ impl IOSBuilder {
                     let app_name = self.app_name.clone();
                     //provision device here
                     asc_client.provision_ios_device(&target_id, &bundle_id, &app_name, &security_profile.0, &output_path, &idp_path)?;
-                    AscClient::sign_app_bundle(&app_name, &output_path, security_profile.1.as_ref(), true)?;
+                    AscClient::sign_app_bundle(&app_name, &output_path, security_profile, true)?;
                     return Ok(())
                 }
             }
             //sign the app bundle for distribution
-            AscClient::sign_app_bundle(&app_name, &output_path, security_profile.1.as_ref(), true)?;
+            AscClient::sign_app_bundle(&app_name, &output_path, security_profile, true)?;
         }
         Ok(())
     }

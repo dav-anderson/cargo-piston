@@ -650,7 +650,7 @@ impl AscClient {
         ios: bool,
     ) -> Result<(), PistonError> {
         let bundle_path = app_bundle_path.display().to_string();
-        println!("🔏 Signing {} bundle: {}", if ios { "iOS" } else { "macOS" }, bundle_path);
+        println!("🔏 Signing {} bundle: {} with security profile: {} {}", if ios { "iOS" } else { "macOS" }, bundle_path, security_profile, profile_id);
 
         // Remove any old signature
         let code_signature_dir = app_bundle_path.join("_CodeSignature");

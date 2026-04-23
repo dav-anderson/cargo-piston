@@ -41,6 +41,10 @@ enum PistonCmd {
 struct CommonArgs {
     #[clap(flatten)]
     subcommand_args: cargo_subcommand::Args,
+
+    #[clap(long = "release-external")]
+    external: bool
+
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Parser)]
@@ -48,7 +52,6 @@ struct CommonArgs {
 struct BuildArgs {
     #[clap(flatten)]
     common: CommonArgs,
-    //add custom global options if needed e.g. #[clap(short, long)] device: Option<String>
     #[clap(long)]
     dry_run: bool
 }
@@ -58,7 +61,6 @@ struct BuildArgs {
 struct RunArgs {
     #[clap(flatten)]
     common: CommonArgs,
-    //can add custom global options if needed e.g. #[clap(short, long)] device: Option<String>
     #[clap(long)]
     device: Option<String>
 }
@@ -274,6 +276,7 @@ let cwd = match env::current_dir(){
         };
         //handle the release flag
         let release: bool = cmd.args().release;
+        let external: bool = args.common.external;
         let host_architecture = {
             let output = Command::new("rustc")
                 .arg("-vV")
@@ -341,7 +344,7 @@ let cwd = match env::current_dir(){
             },
             Platform::Macos => {
             println!("build orders received for Macos targeting {:?}, release is set to {:?}", cmd.target(), release);
-            MacOSBuilder::start(release, target_string, cwd, env_vars)?;
+            MacOSBuilder::start(release, target_string, cwd, env_vars, external)?;
             },
             Platform::Unknown => bail!("Unknown or unsupported target: {:?}", target_opt),
         };
