@@ -1,20 +1,23 @@
 use cargo_metadata::{Metadata, MetadataCommand};
 use std::path::{ PathBuf, Path };
 use std::env;
-use std::io::Write;
-use std::fs::{create_dir_all, copy};
+use std::io::{self, Write, Cursor};
+use std::fs::{self, File, create_dir_all, copy};
+use std::os::unix::fs::PermissionsExt;
 use std::process::{Command, Stdio};
- use std::collections::HashMap;
+use backhand::{FilesystemWriter, NodeHeader};
+use std::collections::HashMap;
 use crate::error::PistonError;
 use crate::helper::Helper;
 
 pub struct LinuxBuilder {
     release: bool,
+    appimage: bool,
     target: String,
     cwd: PathBuf,
     output_path: Option<PathBuf>,
     //TODO implement icon auto handler
-    // icon_path: Option<String>,
+    icon_path: Option<String>,
     assets: String,
     cargo_path: String,
     gpg_path: Option<String>,
@@ -26,10 +29,9 @@ pub struct LinuxBuilder {
 }
 
 impl LinuxBuilder {
-    pub fn start(release: bool, target: String, cwd: PathBuf, env_vars: HashMap<String, String>) -> Result<(), PistonError> {
+    pub fn start(release: bool, appimage: bool, target: String, cwd: PathBuf, env_vars: HashMap<String, String>) -> Result<(), PistonError> {
     println!("building for linux");
-    let mut op = LinuxBuilder::new(release, target, cwd, env_vars)?;
-    //TODO embed icon image?
+    let mut op = LinuxBuilder::new(release, appimage, target, cwd, env_vars)?;
     //>>prebuild
     op.pre_build()?;
 
@@ -42,7 +44,7 @@ impl LinuxBuilder {
     Ok(())
     }
 
-    fn new(release: bool, target: String, cwd: PathBuf, env_vars: HashMap<String, String>) -> Result<Self, PistonError> {
+    fn new(release: bool, appimage: bool, target: String, cwd: PathBuf, env_vars: HashMap<String, String>) -> Result<Self, PistonError> {
         println!("creating LinuxBuilder: release: {:?}, target: {:?}, cwd: {:?}", release, target.to_string(), cwd);
         //parse env vars
         let cargo_path: String = env_vars.get("cargo_path").cloned().unwrap_or("cargo".to_string());
@@ -56,7 +58,7 @@ impl LinuxBuilder {
             .exec()
             .map_err(|e| PistonError::CargoParseError(e.to_string()))?;
 
-        // let icon_path = Helper::get_icon_path(&metadata);
+        let icon_path = Helper::get_icon_path(&metadata);
         let assets = Helper::get_assets_path(&metadata);
         let app_name = Helper::get_app_name(&metadata)?;
         //parse the path to zigbuild if building on Macos
@@ -73,11 +75,11 @@ impl LinuxBuilder {
         
         Ok(LinuxBuilder{
             release: release, 
+            appimage: appimage,
             target: target.to_string(), 
             cwd: cwd, 
             output_path: None, 
-            //TODO implement auto handler for icon
-            // icon_path: icon_path, 
+            icon_path: icon_path, 
             assets: assets,
             cargo_path: cargo_path, 
             gpg_path: gpg_path, 
@@ -167,6 +169,12 @@ impl LinuxBuilder {
         //bundle path should be cwd + target + <target output> + <--release flag or None for debug> + <appname>.exe
         println!("binary path is: {}", &binary_path.display());
         println!("bundle path is: {}", &bundle_path.display());
+        let icon_path = if self.icon_path.is_none() {None} else {Some(PathBuf::from(self.icon_path.as_ref().unwrap()))};
+        if self.appimage {
+            println!("creating app image")
+            let image = AppImage::build(self.app_name.clone(), binary_path.clone(), bundle_path.clone(), icon_path, None)?;
+            println!("image was created: {:?}", image);
+        }
         println!("copying binary to app bundle");
         //move the target binary into the app bundle at the proper location
         copy(&binary_path, &bundle_path).map_err(|e| PistonError::CopyFileError {
@@ -305,5 +313,159 @@ impl GPGSigner{
 
         return format!("successfully signed {} with signature at {:?}", bundle_path.display(), sig_path.display());
         
+    }
+}
+
+
+#[derive(Debug)]
+pub struct AppImage {}
+
+impl AppImage {
+    /// Builds a complete, standalone AppImage and returns the path to the final file.
+    pub fn build(app_name: String, binary_path: PathBuf, output_dir: PathBuf, icon_path: Option<PathBuf>, description: Option<String>) -> Result<PathBuf, PistonError> {
+        println!("🔨 Building AppImage for {}", app_name);
+
+        let appimage_name = format!("{}.AppImage", app_name);
+        let final_appimage = output_dir.join(&appimage_name);
+
+        // 1. Create SquashFS writer
+        let mut fs = FilesystemWriter::default();
+
+        let appdir_prefix = format!("{}.AppDir", app_name);
+
+        // Build AppDir structure
+        fs.push_dir_all(
+            &format!("{appdir_prefix}/usr/bin"),
+            NodeHeader { permissions: 0o755, ..NodeHeader::default() },
+        )
+        .map_err(|e| PistonError::Generic(format!("Failed to create dir usr/bin: {}", e)))?;
+
+        fs.push_dir_all(
+            &format!("{appdir_prefix}/usr/share/applications"),
+            NodeHeader { permissions: 0o755, ..NodeHeader::default() },
+        )
+        .map_err(|e| PistonError::Generic(format!("Failed to create dir usr/share/applications: {}", e)))?;
+
+        fs.push_dir_all(
+            &format!("{appdir_prefix}/usr/share/icons/hicolor/256x256/apps"),
+            NodeHeader { permissions: 0o755, ..NodeHeader::default() },
+        )
+        .map_err(|e| PistonError::Generic(format!("Failed to create dir usr/share/icons/...: {}", e)))?;
+
+        // Binary
+        {
+            let binary_data = fs::read(&binary_path)
+                .map_err(|e| PistonError::Generic(format!("Failed to read binary {}: {}", &binary_path.display(), e)))?;
+
+            fs.push_file(
+                Cursor::new(binary_data),
+                &format!("{appdir_prefix}/usr/bin/{}", &app_name),
+                NodeHeader { permissions: 0o755, ..NodeHeader::default() },
+            )
+            .map_err(|e| PistonError::Generic(format!("Failed to push binary into AppDir: {}", e)))?;
+        }
+
+        // AppRun
+        let apprun_content = format!(
+            "#!/bin/sh\nexec \"$APPDIR/usr/bin/{}\" \"$@\"\n",
+            app_name
+        );
+        fs.push_file(
+            Cursor::new(apprun_content.into_bytes()),
+            &format!("{appdir_prefix}/AppRun"),
+            NodeHeader { permissions: 0o755, ..NodeHeader::default() },
+        )
+        .map_err(|e|  PistonError::Generic(format!("Failed to push apprun content: {}", e)))?;
+
+        // .desktop file
+        let desktop_content = format!(
+            r#"[Desktop Entry]
+Name={}
+Exec=AppRun
+Icon={}
+Type=Application
+Categories=Utility;
+Comment={}
+"#,
+            app_name,
+            app_name,
+            description.as_deref().unwrap_or("Rust application")
+        );
+        fs.push_file(
+            Cursor::new(desktop_content.into_bytes()),
+            &format!("{appdir_prefix}/{}.desktop", app_name),
+            NodeHeader { permissions: 0o644, ..NodeHeader::default() },
+        )
+        .map_err(|e|  PistonError::Generic(format!("Failed to push {}.desktop: {}", app_name, e)))?;
+
+        // Icon + required AppImage symlinks
+        if let Some(icon) = &icon_path {
+            if icon.exists() {
+                let icon_dest = format!(
+                    "{appdir_prefix}/usr/share/icons/hicolor/256x256/apps/{}.png",
+                    app_name
+                );
+
+                {
+                    let file = fs::read(icon)
+                        .map_err(|e| PistonError::Generic(format!("Failed to read icon {}: {}", icon.display(), e)))?;
+
+                    let mut header = NodeHeader::default();
+                    header.permissions = 0o644;
+
+                    fs.push_file(Cursor::new(file), &icon_dest, header)
+                        .map_err(|e| PistonError::Generic(format!("Failed to push icon into AppDir: {}", e)))?;
+                }
+
+                let dir_icon = format!("{appdir_prefix}/.DirIcon");
+                let root_icon = format!("{appdir_prefix}/{}.png", app_name);
+
+                fs.push_symlink(icon_dest.clone(), &dir_icon, NodeHeader { permissions: 0o755, ..NodeHeader::default() })
+                    .map_err(|e| PistonError::Generic(format!("Failed to create .DirIcon symlink: {}", e)))?;
+                fs.push_symlink(icon_dest, &root_icon, NodeHeader { permissions: 0o755, ..NodeHeader::default() })
+                    .map_err(|e| PistonError::Generic(format!("Failed to create root icon symlink: {}", e)))?;
+            } else {
+                println!("⚠️  Icon not found at {:?} — skipping icon", icon);
+            }
+        }
+
+        // 2. Write squashfs to temp file
+        let squash_path = output_dir.join(format!("{}.squashfs", app_name));
+        let mut squash_file = File::create(&squash_path)
+            .map_err(|e| PistonError::Generic(format!("Failed to create squashfs file: {}", e)))?;
+        fs.write(&mut squash_file)
+            .map_err(|e| PistonError::Generic(format!("Failed to write squashfs: {}", e)))?;
+
+        // 3. Prepend runtime
+        let runtime_path = Path::new("runtime-x86_64");
+        if !runtime_path.exists() {
+            return Err(PistonError::Generic(
+                "runtime-x86_64 not found. Download from https://github.com/AppImage/type2-runtime/releases/download/continuous/runtime-x86_64".to_string()
+            ));
+        }
+
+        let mut runtime = File::open(runtime_path)
+            .map_err(|e| PistonError::Generic(format!("Failed to open runtime: {}", e)))?;
+
+        let mut appimage_file = File::create(&final_appimage)
+            .map_err(|e| PistonError::Generic(format!("Failed to create final AppImage: {}", e)))?;
+
+        io::copy(&mut runtime, &mut appimage_file)
+            .map_err(|e| PistonError::Generic(format!("Failed to copy runtime: {}", e)))?;
+
+        let mut squash = File::open(&squash_path)
+            .map_err(|e| PistonError::Generic(format!("Failed to open squashfs: {}", e)))?;
+
+        io::copy(&mut squash, &mut appimage_file)
+            .map_err(|e| PistonError::Generic(format!("Failed to append squashfs: {}", e)))?;
+
+        fs::set_permissions(&final_appimage, fs::Permissions::from_mode(0o755))
+            .map_err(|e| PistonError::Generic(format!("Failed to set permissions: {}", e)))?;
+
+        // Cleanup
+        let _ = fs::remove_file(squash_path);
+
+        println!("✅ AppImage built: {}", final_appimage.display());
+        Ok(final_appimage)
     }
 }

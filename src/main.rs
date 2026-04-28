@@ -1,4 +1,3 @@
-use anyhow::{bail, Result};
 use clap::{Parser};
 use cargo_subcommand::Subcommand;
 use std::env;
@@ -21,6 +20,8 @@ mod helper;
 mod error;
 mod asc;
 
+pub type Result<T> = std::result::Result<T, PistonError>;
+
 #[derive(Parser)]
 #[command(name = "piston")] //top level command
 struct Cmd {
@@ -41,9 +42,12 @@ enum PistonCmd {
 struct CommonArgs {
     #[clap(flatten)]
     subcommand_args: cargo_subcommand::Args,
-
     #[clap(long = "release-external")]
-    external: bool
+    external: bool,
+    #[clap(long = "release-appimage")]
+    appimage: bool,
+
+
 
 }
 
@@ -242,12 +246,13 @@ fn main() -> Result<()> {
  env_logger::init();
 
 //read .env file
-let env_vars = Helper::load_env_file()?;
+let env_vars = Helper::load_env_file()
+    .map_err(|e| PistonError::Generic(format!("Error loading ENV file: {}", e)))?;
 
 // Parse local current working dir
 let cwd = match env::current_dir(){
     Ok(cwd) => cwd,
-    Err(_) => bail!("error getting working directory")
+    Err(_) => return Err(PistonError::Generic(format!("Error getting working directory")))
 };
 
  //parse command
@@ -259,9 +264,10 @@ let cwd = match env::current_dir(){
     PistonSubCmd::Build(args) => {
         //TODO remove this after implementing linux host builder support
         if std::env::consts::OS == "linux" {
-            bail!("Linux host support not yet implemented");
+            return Err(PistonError::Generic(format!("Linux host support not yet implemented. Please try Cargo Piston on MacOS.")))
         }
-        let cmd = Subcommand::new(args.common.subcommand_args)?;
+        let cmd = Subcommand::new(args.common.subcommand_args)
+            .map_err(|e| PistonError::Generic(format!("Error parsing subcommand: {}", e )))?;
         //handle the target flag
         let target_opt = cmd.target();
         //determine the target platform
@@ -276,18 +282,28 @@ let cwd = match env::current_dir(){
         };
         //handle the release flag
         let release: bool = cmd.args().release;
+        //special release variants
         let external: bool = args.common.external;
+        let appimage: bool = args.common.appimage;
+        //override the release flag with special release variants
+        let release_override: bool = if external || appimage {true} else {release};
         let host_architecture = {
             let output = Command::new("rustc")
                 .arg("-vV")
-                .output();
-            let stdout = output.unwrap().stdout;
-            let stdout_str = String::from_utf8_lossy(&stdout);
-            let value = stdout_str.lines()
-                .find(|line| line.starts_with("host:"))
-                .map(|line| line.trim_start_matches("host: ").trim().to_string())
-                .unwrap_or_else(|| "Unknown".to_string());
-            value
+                .output()
+                .map_err(|e| PistonError::Generic(format!("Error spawning rustc command: {}", e)))?;
+        let stdout_str = String::from_utf8_lossy(&output.stdout);
+
+        stdout_str
+            .lines()
+            .find(|line| line.starts_with("host:"))
+            .and_then(|line| {
+                line.trim_start_matches("host:")
+                    .trim()
+                    .to_string()
+                    .into()
+            })
+            .ok_or(PistonError::Generic(format!("error parsing host architecture")))?
         };
         //determine the target to pass into the builder if no flag is provided
         let target_string = if cmd.target().is_none() {
@@ -298,13 +314,13 @@ let cwd = match env::current_dir(){
                     "aarch64-apple-ios".to_string()
                 }else if host_architecture.contains("x86_64"){
                     "x86_64-apple-ios".to_string()
-                } else {bail!("Unsupported host architecture for dynamic targeting")}
+                } else {return Err(PistonError::Generic(format!("Unsupported host architecture for dynamimc targeting. Try an explicit target.")))}
             } else if cmd.target() == Some("android") {
                 if host_architecture.contains("aarch64"){
                     "aarch64-linux-android".to_string()
                 }else if host_architecture.contains("x86_64"){
                     "x86_64-linux-android".to_string()
-                }else {bail!("Unsupported host architecture for dynamic targeting")}
+                }else {return Err(PistonError::Generic(format!("Unsupported host architecture for dynamimc targeting. Try an explicit target.")))}
             } else if cmd.target() == Some("windows") {
                 "x86_64-pc-windows-gnu".to_string()
             } else if cmd.target() == Some("linux") {
@@ -312,13 +328,13 @@ let cwd = match env::current_dir(){
                     "aarch64-unknown-linux-gnu".to_string()
                 }else if host_architecture.contains("x86_64"){
                     "x86_64-unknown-linux-gnu".to_string()
-                }else {bail!("Unsupported host architecture for dynamic targeting")}
+                }else {return Err(PistonError::Generic(format!("Unsupported host architecture for dynamimc targeting. Try an explicit target.")))}
             }else if cmd.target() == Some("macos") {
                 if host_architecture.contains("aarch64"){
                     "aarch64-apple-darwin".to_string()
                 }else if host_architecture.contains("x86_64"){
                     "x86_64-apple-darwin".to_string()
-                }else {bail!("Unsupported host architecture for dynamic targeting")}
+                }else {return Err(PistonError::Generic(format!("Unsupported host architecture for dynamimc targeting. Try an explicit target.")))}
             }
             //flag provided, pass in provided value
             else {
@@ -328,32 +344,33 @@ let cwd = match env::current_dir(){
         match platform {
             Platform::Android => {
             println!("build orders received for Android targeting {:?}, release is set to {:?}", cmd.target(), release);
-            AndroidBuilder::start(release, target_string, cwd, env_vars, None)?;
+            AndroidBuilder::start(release_override, target_string, cwd, env_vars, None)?;
             },
             Platform::Ios => {
             println!("build orders received for IOS targeting {:?}, release is set to {:?}", cmd.target(), release);
-            IOSBuilder::start(release, target_string, cwd, env_vars, None)?;
+            IOSBuilder::start(release_override, target_string, cwd, env_vars, None)?;
             },
             Platform::Linux => {
             println!("build orders received for Linux targeting {:?}, release is set to {:?}", cmd.target(), release);
-            LinuxBuilder::start(release, target_string, cwd, env_vars)?;
+            LinuxBuilder::start(release_override, appimage, target_string, cwd, env_vars)?;
             },
             Platform::Windows => {
             println!("build orders received for Windows targeting {:?}, release is set to {:?}", cmd.target(), release);
-            WindowsBuilder::start(release, target_string, cwd, env_vars)?;
+            WindowsBuilder::start(release_override, target_string, cwd, env_vars)?;
             },
             Platform::Macos => {
             println!("build orders received for Macos targeting {:?}, release is set to {:?}", cmd.target(), release);
-            MacOSBuilder::start(release, target_string, cwd, env_vars, external)?;
+            MacOSBuilder::start(release_override, external, target_string, cwd, env_vars)?;
             },
-            Platform::Unknown => bail!("Unknown or unsupported target: {:?}", target_opt),
+            Platform::Unknown => return Err(PistonError::Generic(format!("Unknown or unsupported target: {:?}", target_opt))),
         };
         if args.dry_run {
             println!("(Dry run mode enabled)");
         }
     }
     PistonSubCmd::Run(args) =>{
-        let cmd = Subcommand::new(args.common.subcommand_args)?;
+        let cmd = Subcommand::new(args.common.subcommand_args)
+            .map_err(|e| PistonError::Generic(format!("Error parsing subcommand :{}", e)))?;
         //handle the release flag
         let release: bool = cmd.args().release;
         //no device flag, run locally
@@ -367,7 +384,7 @@ let cwd = match env::current_dir(){
                 LinuxRunner::start(release, cwd, env_vars)?;
             }
             else {
-                bail!("Unsupported host system, cargo-piston only supports macos or linux host machines. Your host machine: {:?}", std::env::consts::OS)
+                return Err(PistonError::Generic(format!("Unsupported host system, cargo-piston only supports macos or linux host machines. Your host machine: {:?}", std::env::consts::OS)))
             }
         //explicit device flag
         }else{
@@ -399,7 +416,7 @@ let cwd = match env::current_dir(){
                 println!("explicit IOS runner target: {:?}", &ios_device);
                 IOSRunner::start(release, cwd, env_vars, &ios_device.unwrap())?;
             } else {
-                bail!("Device not found");
+                return Err(PistonError::Generic(format!("Device not found")))
             }
         }
         

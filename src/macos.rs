@@ -26,15 +26,14 @@ pub struct MacOSBuilder {
 }
 
 impl MacOSBuilder {
-    pub fn start(release: bool, target: String, cwd: PathBuf, env_vars: HashMap<String, String>, external: bool) -> Result<(), PistonError> {
+    pub fn start(release: bool, external: bool, target: String, cwd: PathBuf, env_vars: HashMap<String, String>) -> Result<(), PistonError> {
         println!("building for MacOS");
         //check operating system (requires MacOS)
         if std::env::consts::OS != "macos"{
             return Err(PistonError::UnsupportedOSError{os: std::env::consts::OS.to_string(), target: target})
         }
         //set release to true if external is true
-        let release_override = if external {true} else release;
-        let mut op = MacOSBuilder::new(release_override, target, cwd, env_vars, external)?;
+        let mut op = MacOSBuilder::new(release, external, target, cwd, env_vars)?;
         //TODO check for signing certificate & sign?
         //>>prebuild
         op.pre_build()?;
@@ -48,7 +47,7 @@ impl MacOSBuilder {
         Ok(())
     }
 
-    fn new(release: bool, target: String, cwd: PathBuf, env_vars: HashMap<String, String>, external: bool) -> Result<Self, PistonError> {
+    fn new(release: bool, external: bool, target: String, cwd: PathBuf, env_vars: HashMap<String, String>) -> Result<Self, PistonError> {
         println!("creating MacOSBuilder: release: {:?}, target: {:?}, cwd: {:?}", release, target.to_string(), cwd);
         //parse env vars
         let cargo_path = env_vars.get("cargo_path").cloned().unwrap_or("cargo".to_string());
@@ -75,6 +74,7 @@ impl MacOSBuilder {
         };
         Ok(MacOSBuilder{
             release: release, 
+            external: external,
             target: target.to_string(), 
             cwd: cwd, 
             output_path: None, 
@@ -303,11 +303,11 @@ impl MacOSBuilder {
         } else if self.external {
             //if external-release not properly configured, throw error
             if self.external_cert.is_none() {
-                return PistonError::Generic("external-release certificate is not properly configured, see documentation")
+                return Err(PistonError::Generic("external-release certificate is not properly configured, see documentation".to_string()))
             }
             //perform external release sign if properly configured
             //TODO this is not currently completely implemented
-            AscClient::sign_app_bundle(&app_name, &output_path, self.external_cert.as_ref(), false)?;
+            AscClient::sign_app_bundle(&self.app_name, &self.output_path.as_ref().unwrap(), &self.external_cert.as_ref().unwrap(), false)?;
 
             //TODO zip + notarytool bundle
 
@@ -316,13 +316,13 @@ impl MacOSBuilder {
             let asc = AscClient{ api_key: self.asc_api_key.clone(), keystore_path: self.keystore_path.clone().unwrap()};
             //obtain certificate
             let security_cert = asc.create_or_find_security_cert()?;
-            let security_profile = format!("{} {}", security_cert.1.as_ref(), security_cert.0.as_ref())
+            let security_profile = format!("{} {}", security_cert.1, security_cert.0);
             println!("your security profile is: {:?}", security_profile);
             let output_path = self.output_path.clone().unwrap();
 
             let app_name = self.app_name.clone();
             //sign the app bundle for distribution
-            AscClient::sign_app_bundle(&app_name, &output_path, security_profile, false)?;
+            AscClient::sign_app_bundle(&app_name, &output_path, &security_profile, false)?;
 
         }
         Ok(())
