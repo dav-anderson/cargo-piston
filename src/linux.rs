@@ -16,7 +16,6 @@ pub struct LinuxBuilder {
     target: String,
     cwd: PathBuf,
     output_path: Option<PathBuf>,
-    //TODO implement icon auto handler
     icon_path: Option<String>,
     assets: String,
     cargo_path: String,
@@ -26,6 +25,7 @@ pub struct LinuxBuilder {
     app_name: String,
     key_id: Option<String>,
     key_pass: Option<String>,
+    runtime_path: Option<String>,
 }
 
 impl LinuxBuilder {
@@ -51,6 +51,7 @@ impl LinuxBuilder {
         let gpg_path: Option<String> = env_vars.get("gpg_path").cloned();
         let key_id: Option<String> = env_vars.get("linux_gpg_key_id").cloned();
         let key_pass: Option<String> = env_vars.get("linux_gpg_key_pass").cloned();
+        let runtime_path: Option<String> = env_vars.get("linux_runtime_path").cloned();
         println!("Cargo path determined: {}", &cargo_path);
         //parse cargo.toml
         let metadata: Metadata = MetadataCommand::new()
@@ -64,7 +65,7 @@ impl LinuxBuilder {
         //parse the path to zigbuild if building on Macos
         let mut zigbuild_path: Option<String> = None;
         let mut homebrew_path: Option<String> = None;
-        //MACOS ONLY
+        //determine zigbuild path MACOS ONLY
         if std::env::consts::OS == "macos"{
             //parse zigbuild & homebrew path from .env
             zigbuild_path = Some(env_vars.get("zigbuild_path").cloned().ok_or(PistonError::ZigbuildMissingError("Zigbuild key not found".to_string()))?);
@@ -87,7 +88,8 @@ impl LinuxBuilder {
             homebrew_path: homebrew_path, 
             app_name: app_name, 
             key_id: key_id, 
-            key_pass: key_pass
+            key_pass: key_pass,
+            runtime_path: runtime_path,
         })
     }
 
@@ -165,32 +167,48 @@ impl LinuxBuilder {
     fn post_build(&mut self) -> Result<(), PistonError>{
         println!("post build for linux");
         let binary_path = self.cwd.join("target").join(self.target.clone()).join(if self.release {"release"} else {"debug"}).join(self.app_name.clone());
-        let bundle_path = self.output_path.as_ref().unwrap().join(self.app_name.clone());
+        // let bundle_path = self.output_path.as_ref().unwrap().join(self.app_name.clone());
+        let mut bundle_path = self.output_path.as_ref().unwrap();
         //bundle path should be cwd + target + <target output> + <--release flag or None for debug> + <appname>.exe
         println!("binary path is: {}", &binary_path.display());
         println!("bundle path is: {}", &bundle_path.display());
         let icon_path = if self.icon_path.is_none() {None} else {Some(PathBuf::from(self.icon_path.as_ref().unwrap()))};
+        //app image
         if self.appimage {
-            println!("creating app image")
-            let image = AppImage::build(self.app_name.clone(), binary_path.clone(), bundle_path.clone(), icon_path, None)?;
-            println!("image was created: {:?}", image);
+            if !self.runtime_path.is_none(){
+                let image = AppImage::build(self.app_name.clone(), self.runtime_path.clone(), self.target.clone(), binary_path.clone(), bundle_path.clone(), icon_path, None)?;
+                println!("appimage was created: {:?}", image);
+                //check for valid key and sign
+                if GPGSigner::gpg_valid(self.key_id.clone(), self.gpg_path.clone()){
+                    println!("key is valid");
+                    //sign the bundle with gpg
+                    let sign = GPGSigner::gpg_sign(self.key_id.clone(), self.key_pass.clone(), self.gpg_path.clone(), &image);
+                    println!("{}", sign);
+                }
+                //output the proper location in the terminal for the user to see 
+                println!("app image available at: {}", &image.display());
+            } else {
+                return Err(PistonError::Generic(format!("Missing path to runtimes in .env")))
+            }
+        //static binary
+        }else {
+            println!("copying binary to app bundle");
+            //move the target binary into the app bundle at the proper location
+            copy(&binary_path, &bundle_path).map_err(|e| PistonError::CopyFileError {
+                input_path: binary_path.clone().to_path_buf(),
+                output_path: bundle_path.clone().to_path_buf(),
+                source: e,
+            })?;
+            //check for valid key and sign
+            if GPGSigner::gpg_valid(self.key_id.clone(), self.gpg_path.clone()){
+                println!("key is valid");
+                //sign the bundle with gpg
+                let sign = GPGSigner::gpg_sign(self.key_id.clone(), self.key_pass.clone(), self.gpg_path.clone(), &bundle_path);
+                println!("{}", sign);
+            }
+            //output the proper location in the terminal for the user to see 
+            println!("app bundle available at: {}", &bundle_path.display());
         }
-        println!("copying binary to app bundle");
-        //move the target binary into the app bundle at the proper location
-        copy(&binary_path, &bundle_path).map_err(|e| PistonError::CopyFileError {
-            input_path: binary_path.clone().to_path_buf(),
-            output_path: bundle_path.clone().to_path_buf(),
-            source: e,
-        })?;
-        //check for valid key and sign
-        if GPGSigner::gpg_valid(self.key_id.clone(), self.gpg_path.clone()){
-            println!("key is valid");
-            //sign the bundle with gpg
-            let sign = GPGSigner::gpg_sign(self.key_id.clone(), self.key_pass.clone(), self.gpg_path.clone(), &bundle_path);
-            println!("{}", sign);
-        }
-        //output the proper location in the terminal for the user to see 
-        println!("app bundle available at: {}", &bundle_path.display());
         Ok(())
     }
 }
@@ -322,7 +340,7 @@ pub struct AppImage {}
 
 impl AppImage {
     /// Builds a complete, standalone AppImage and returns the path to the final file.
-    pub fn build(app_name: String, binary_path: PathBuf, output_dir: PathBuf, icon_path: Option<PathBuf>, description: Option<String>) -> Result<PathBuf, PistonError> {
+    pub fn build(app_name: String, runtime_path: Option<String>, target: String, binary_path: PathBuf, output_dir: PathBuf, icon_path: Option<PathBuf>, description: Option<String>) -> Result<PathBuf, PistonError> {
         println!("🔨 Building AppImage for {}", app_name);
 
         let appimage_name = format!("{}.AppImage", app_name);
@@ -431,17 +449,41 @@ Comment={}
 
         // 2. Write squashfs to temp file
         let squash_path = output_dir.join(format!("{}.squashfs", app_name));
+        println!("squashfs path: {}", squash_path.display());
         let mut squash_file = File::create(&squash_path)
             .map_err(|e| PistonError::Generic(format!("Failed to create squashfs file: {}", e)))?;
         fs.write(&mut squash_file)
             .map_err(|e| PistonError::Generic(format!("Failed to write squashfs: {}", e)))?;
 
         // 3. Prepend runtime
-        let runtime_path = Path::new("runtime-x86_64");
+        println!("target is: {}", target);
+        let binding = runtime_path.unwrap();
+        let runtime_dir = Path::new(&binding);
+        // Derive the correct runtime filename based on the target triple
+        let runtime_filename = match target.as_str() {
+            t if t.starts_with("x86_64") => "runtime-x86_64",
+            t if t.starts_with("aarch64") => "runtime-aarch64",
+            t if t.starts_with("armv7")
+            || t.starts_with("arm-")
+            || t.starts_with("armv6") => "runtime-armhf",
+            t if t.starts_with("i686")
+            || t.starts_with("i386") => "runtime-i686",
+            t if t.starts_with("ppc64le") => "runtime-ppc64le",
+            t if t.starts_with("riscv64") => "runtime-riscv64",
+            _ => {
+                return Err(PistonError::Generic(format!(
+                    "Unsupported target architecture for AppImage: {}\n\
+                    Supported: x86_64, aarch64, arm*, i686, ppc64le, riscv64",
+                    target
+                )));
+            }
+        };
+        let runtime_path = runtime_dir.join(runtime_filename);
+        println!("print runtime path is: {}", runtime_path.display());
         if !runtime_path.exists() {
-            return Err(PistonError::Generic(
-                "runtime-x86_64 not found. Download from https://github.com/AppImage/type2-runtime/releases/download/continuous/runtime-x86_64".to_string()
-            ));
+            return Err(PistonError::Generic(format!(
+                "{} not found in {}", runtime_filename, runtime_dir.display() 
+            )));
         }
 
         let mut runtime = File::open(runtime_path)

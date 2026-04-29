@@ -82,7 +82,7 @@ In theory this tool should support build targets for all of the supported Operti
 
 `x86_64-unknown-linux-gnu`
 
-# Configuration
+# General Configuration
 
 ## .ENV configuration
 
@@ -114,9 +114,9 @@ assets_path = absolute/path/to/assets/directory
 Run the following command within your rust project repo to install the package locally
 `cargo install --path ../path/to/cargo-piston`
 
-## Windows Output Configuration
+# Windows Output Configuration
 
-### Install mingw-w64 via homebrew (required on MACOS only)
+## Install mingw-w64 via homebrew (required on MACOS only)
 
 `brew install mingw-w64`
 
@@ -127,14 +127,14 @@ After installing mingw-w64, add the path to the linker to your global `~/.cargo.
 linker = path/to/homebrew/bin/x86_64-w64-mingw32-gcc
 ```
 
-### App Icon
+## App Icon
 You must have embed-resource in your `Cargo.toml` as a `[build dependency]`
 ```
 [build dependency]
 embed-resource = "3.0.2"
 ```
 
-### Automated Signing
+## Automated Signing
 
 Not yet implemented for windows outputs
 
@@ -146,27 +146,27 @@ You should have your desired output filename designated in your Cargo.toml as
 OriginalFilename = "<appname>.exe"
 ``` -->
 
-## Linux Output Configuration
+# Linux Output Configuration
 
-### Cofingure paths in .env (MACOS HOST ONLY)
+## Cofingure paths in .env (MACOS HOST ONLY)
 `zigbuild_path=/Users/<username>/.cargo/bin/cargo-zigbuild`
 
 `homebrew_path=/opt/homebrew/bin`
 
-### Install zigbuild via (MACOS HOST ONLY)
+## Install zigbuild via (MACOS HOST ONLY)
 `cargo install cargo-zigbuild`
 
 Provide a path to your cargo dependency binaries in the `.env` (somewhere like `~/.cargo/bin`)
 
 `zigbuild_path=/Users/<username>/.cargo/bin/cargo-zigbuild`
 
-### Install Zig via homebrew (MACOS HOST ONLY)
+## Install Zig via homebrew (MACOS HOST ONLY)
 
 provide a path to your homebrew binaries (somewhere like `/opt/homebrew/bin`) in your `.env`
 
 `homebrew_path=/opt/homebrew/bin`
 
-### Automated Signing
+## Automated Signing
 
 Note: if you do not designate a signing key ID and password for your chosen output in the `.env`, automated signing will be skipped. See details in your output specific section.
 
@@ -205,15 +205,74 @@ Configure your `.env` with your gpg key and passphrase
 
 `linux_gpg_key_pass=<passphrase>`
 
-## MacOS & IOS Output Configuration (MACOS HOST ONLY)
+## Linux Release Options
 
-### install the X code app via the apple app store
+Linux has a variety of options for building outputs depending on how you intend to release the software and what linux distributions you wish to support.
+
+### AppImage
+
+To build a linux appimage, which is the most versatile way to release linux software, you must call the `--release-appimage` flag on your piston build
+
+Example
+
+`cargo piston build --target linux --release-appimage`
+
+Running this command requires you first obtain the proper runtime for your target architecture.
+
+Please download the following runtimes. It is reccomended that you place these runtimes in $HOME/Linux-Runtimes. You must specify the full path to your runtimes directory by setting `linux_runtime_path=full/path/to/runtimes` in your `.ENV`.
+
+Note: it is reccomended that you also download the `.asc` signature for each runtime and verify them with GPG. 
+
+X86_64 (x86 64 bit)
+
+`https://github.com/AppImage/type2-runtime/releases/download/continuous/runtime-x86_64`
+
+aarch64 (ARM 64 bit)
+
+`https://github.com/AppImage/type2-runtime/releases/download/continuous/runtime-aarch64`
+
+<!-- armhf (ARM 32 Bit)
+
+`https://github.com/AppImage/type2-runtime/releases/download/continuous/runtime-armhf`
+
+i686 (x86 32 bit)
+
+`https://github.com/AppImage/type2-runtime/releases/download/continuous/runtime-i686`
+
+ppc64le
+
+`https://github.com/AppImage/type2-runtime/releases/download/continuous/runtime-ppc64le`
+
+riscv64
+
+`https://github.com/AppImage/type2-runtime/releases/download/continuous/runtime-riscv64` -->
+
+### Static Binary tarball
+
+Not yet implemented
+
+### snap bundle
+
+Not yet implemented
+
+### flatpak bundle
+
+Not yet implemented
+
+### native .deb or .rpm
+
+Not yet implemented
+
+
+# MacOS & IOS Output Configuration (MACOS HOST ONLY)
+
+## install the X code app via the apple app store
 
 Navigate to the following URL in safari and download the x code app
 
 `https://apps.apple.com/us/app/xcode/id497799835`
 
-### install X code command line tools
+## install X code command line tools
 
 `xcode-select --install`
 
@@ -221,11 +280,11 @@ After you've installed the X code app and command line tools, point xcode-select
 
 `sudo xcode-select -s /Applications/Xcode.app/Contents/Developer`
 
-### Accept x code licenses
+## Accept x code licenses
 
 `sudo xcodebuild -license accept`
 
-### Automated Signing & Automated Device Provisioning
+## Automated Signing & Automated Device Provisioning
 
 Any app that is compiled with piston will automatically be signed for apple app store distribution, provided automated signing is properly configured.
 
@@ -277,13 +336,13 @@ Add `AppleDevIDCA.cer` to the security chain
 
 `security import full/path/to/keystore/AppleDevIDCA.cer -k full/path/to/keystore/login.keychain-db`
 
-### Universal binary
+## Universal binary
 
 Universal binaries are automatically created via lipo when you pass in the `--release` flag to a macos target build command. For example running the following command will automatically create a universal binary in the output bundle that will run on either arm64 or x86_64 architecture.
 
 `cargo piston build --target aarch64-apple-darwin --release`
 
-### External Release
+## External Release
 
 Distributing MacOS apps outside of the Apple App Store follows a different release process. This process cannot be fully automated via the ASC API key. 
 
@@ -404,9 +463,9 @@ if you do not set a bundle_id in your `Cargo.toml`, the bundle ID will default t
 if you do not set a min_os_version in your `Cargo.toml`, the mininimumOSVersion will default to 17.5
 
 
-## Android Output Configuration
+# Android Output Configuration
 
-### Install Java
+## Install Java
 
 Install Java and provide the path to the installation in your `.env` file
 
@@ -443,7 +502,7 @@ Example `.env` entry (Linux)
 `java_path=/usr/lib/jvm/java-17-openjdk-amd64`
 
 
-### Install Android Command-line tools
+## Install Android Command-line tools
 
 Install the android NDK & SDK and provide the paths to the installation in your `.env` file.
 
@@ -476,7 +535,7 @@ Accept android SDK licenses
 
 Note: if you installed java manually instead of using the installer you may need to set the JAVA_HOME var in your PATH or pass in the environment variabnle as shown above and below.
 
-### Install Android SDK & NDK
+## Install Android SDK & NDK
 
 Install platform-tools
 
@@ -503,7 +562,7 @@ Examples (MacOS)
 
 `ndk_path=<$HOME>/Android/sdk/ndk/26.1.10909125`
 
-### Install Android Bundle tool
+## Install Android Bundle tool
 
 Install Android bundletool
 
@@ -526,7 +585,7 @@ or
 
 `bundletool_path=/opt/homebrew/bundletool`
 
-### Android Cargo.Toml configuration
+## Android Cargo.Toml configuration
 
 Add the following dependencies
 
@@ -562,7 +621,7 @@ app_label=<app_name>
 
 ```
 
-### Create a Lib.rs in ~/src
+## Create a Lib.rs in ~/src
 
 Unlike other outputs, android apps require first building a cdylib, we've already designated those settings in the `Cargo.toml`, however, your project must also contain a `~/src/lib.rs` file with a main activity. It is important that if you are maintaing a cross compiled code base for multiple output types, that you wrap android specific logic in `#[cfg(target_os = "android")]` flags as shown below. 
 
@@ -581,7 +640,7 @@ pub extern "C" fn android_main(app: AndroidApp) {
 }
 ```
 
-### Automated Signing
+## Automated Signing
 
 Users can manually designate key for signing their Android App Bundle for upload to the Google Play Store. To designate a release key for Android App Bundles add the following values to your .env...
 
