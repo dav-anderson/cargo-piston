@@ -167,8 +167,7 @@ impl LinuxBuilder {
     fn post_build(&mut self) -> Result<(), PistonError>{
         println!("post build for linux");
         let binary_path = self.cwd.join("target").join(self.target.clone()).join(if self.release {"release"} else {"debug"}).join(self.app_name.clone());
-        // let bundle_path = self.output_path.as_ref().unwrap().join(self.app_name.clone());
-        let mut bundle_path = self.output_path.as_ref().unwrap();
+        let bundle_path = self.output_path.as_ref().unwrap();
         //bundle path should be cwd + target + <target output> + <--release flag or None for debug> + <appname>.exe
         println!("binary path is: {}", &binary_path.display());
         println!("bundle path is: {}", &bundle_path.display());
@@ -192,10 +191,11 @@ impl LinuxBuilder {
             }
         //static binary
         }else {
+            let target_path = bundle_path.join(self.app_name.clone());
             println!("copying binary to app bundle");
             //move the target binary into the app bundle at the proper location
-            copy(&binary_path, &bundle_path).map_err(|e| PistonError::CopyFileError {
-                input_path: binary_path.clone().to_path_buf(),
+            copy(&binary_path, &target_path).map_err(|e| PistonError::CopyFileError {
+                input_path: target_path.clone().to_path_buf(),
                 output_path: bundle_path.clone().to_path_buf(),
                 source: e,
             })?;
@@ -203,7 +203,7 @@ impl LinuxBuilder {
             if GPGSigner::gpg_valid(self.key_id.clone(), self.gpg_path.clone()){
                 println!("key is valid");
                 //sign the bundle with gpg
-                let sign = GPGSigner::gpg_sign(self.key_id.clone(), self.key_pass.clone(), self.gpg_path.clone(), &bundle_path);
+                let sign = GPGSigner::gpg_sign(self.key_id.clone(), self.key_pass.clone(), self.gpg_path.clone(), &target_path);
                 println!("{}", sign);
             }
             //output the proper location in the terminal for the user to see 
