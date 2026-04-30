@@ -98,9 +98,13 @@ impl LinuxBuilder {
         println!("building the dynamic app bundle");
         let cwd: PathBuf = self.cwd.clone();
         println!("working dir: {:?}", cwd);
-        let rel_output: PathBuf = if self.release {
+        let rel_output: PathBuf = if self.appimage {
+            "target/release-appimage/linux"
+        }else if self.release {
             "target/release/linux".into()
-        }else {"target/debug/linux".into()};
+        }else {
+            "target/debug/linux".into()
+        };
         self.output_path = Some(cwd.join(&rel_output));
         println!("linux dir: {:?}", self.output_path);
         //empty the target directory if it exists
@@ -451,7 +455,7 @@ Comment={}
             }
         }
 
-        //TODO bundle assets if they exist
+        //bundle assets if they exist
         if let Some(assets) = &assets {
             let base_dest = format!("{appdir_prefix}/assets");
             println!("Bundling assets into: {}", base_dest);

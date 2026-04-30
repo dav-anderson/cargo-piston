@@ -119,7 +119,13 @@ impl MacOSBuilder {
         }   
         let cwd: PathBuf = self.cwd.clone();
         let capitalized = Helper::capitalize_first(&self.app_name.clone());
-        let release = if self.release {"release"} else {"debug"};
+        let release = if self.external {
+            "release-external"
+        } else if self.release {
+            "release"
+        } else {
+            "debug"
+        };
         let true_bundle_path: PathBuf = if self.release {
             format!("target/{}/macos/{}.app",release, capitalized).into()
         }else {
