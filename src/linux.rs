@@ -115,11 +115,12 @@ impl LinuxBuilder {
         path: self.output_path.as_ref().unwrap().to_path_buf(),
         source: e,
         })?;
-        //sync assets
-        let bind = &self.assets.clone();
-        let assets_src = Path::new(&bind);
-        let assets_tgt = path.join("assets");
-        Helper::sync_assets(assets_src, &assets_tgt)?;
+        //TODO can maybe remove 
+        // sync assets
+        // let bind = &self.assets.clone();
+        // let assets_src = Path::new(&bind);
+        // let assets_tgt = path.join("assets");
+        // Helper::sync_assets(assets_src, &assets_tgt)?;
         println!("Finished Pre Build for Linux");
         Ok(())
     }
@@ -171,11 +172,14 @@ impl LinuxBuilder {
         //bundle path should be cwd + target + <target output> + <--release flag or None for debug> + <appname>.exe
         println!("binary path is: {}", &binary_path.display());
         println!("bundle path is: {}", &bundle_path.display());
-        let icon_path = if self.icon_path.is_none() {None} else {Some(PathBuf::from(self.icon_path.as_ref().unwrap()))};
+        let icon_path: Option<PathBuf> = if self.icon_path.is_none() {None} else {Some(PathBuf::from(self.icon_path.as_ref().unwrap()))};
+        let assets_str: &str = self.assets.as_ref();
+        let assets_path: PathBuf = PathBuf::from(assets_str);
+        let assets: Option<PathBuf> = if assets_path.exists() {Some(assets_path)} else {None};
         //app image
         if self.appimage {
             if !self.runtime_path.is_none(){
-                let image = AppImage::build(self.app_name.clone(), self.runtime_path.clone(), self.target.clone(), binary_path.clone(), bundle_path.clone(), icon_path, None)?;
+                let image = AppImage::build(self.app_name.clone(), self.runtime_path.clone(), self.target.clone(), binary_path.clone(), bundle_path.clone(), icon_path, None, assets)?;
                 println!("appimage was created: {:?}", image);
                 //check for valid key and sign
                 if GPGSigner::gpg_valid(self.key_id.clone(), self.gpg_path.clone()){
@@ -337,10 +341,10 @@ impl GPGSigner{
 
 #[derive(Debug)]
 pub struct AppImage {}
-
+//TODO need to bundle assets
 impl AppImage {
     /// Builds a complete, standalone AppImage and returns the path to the final file.
-    pub fn build(app_name: String, runtime_path: Option<String>, target: String, binary_path: PathBuf, output_dir: PathBuf, icon_path: Option<PathBuf>, description: Option<String>) -> Result<PathBuf, PistonError> {
+    pub fn build(app_name: String, runtime_path: Option<String>, target: String, binary_path: PathBuf, output_dir: PathBuf, icon_path: Option<PathBuf>, description: Option<String>, assets: Option<PathBuf>) -> Result<PathBuf, PistonError> {
         println!("🔨 Building AppImage for {}", app_name);
 
         let appimage_name = format!("{}.AppImage", app_name);
@@ -447,6 +451,22 @@ Comment={}
             }
         }
 
+        //TODO bundle assets if they exist
+        if let Some(assets) = &assets {
+            let base_dest = format!("{appdir_prefix}/assets");
+            println!("Bundling assets into: {}", base_dest);
+
+            fs.push_dir_all(
+                &base_dest,
+                NodeHeader { permissions: 0o755, ..NodeHeader::default() },)
+                .map_err(|e| PistonError::Generic(format!("Failed to create assets directory: {}", e))
+            )?;
+
+            Self::add_assets(&mut fs, assets, &base_dest)
+                .map_err(|e| PistonError::Generic(format!("Failed to bundle assets: {}", e)))?;
+            println!("Bundle assets from {}", assets.display());
+        }
+
         // 2. Write squashfs to temp file
         let squash_path = output_dir.join(format!("{}.squashfs", app_name));
         println!("squashfs path: {}", squash_path.display());
@@ -509,5 +529,37 @@ Comment={}
 
         println!("✅ AppImage built: {}", final_appimage.display());
         Ok(final_appimage)
+    }
+
+    fn add_assets(
+        fs: &mut FilesystemWriter,
+        source_dir: &Path,
+        dest_base: &str,
+    ) -> Result <(), String> {
+        for entry in fs::read_dir(source_dir).map_err(|e| e.to_string())? {
+            let entry = entry.map_err(|e| e.to_string())?;
+            let path = entry.path();
+
+            let relative = path.strip_prefix(source_dir).map_err(|e| format!("Strip prefix failed: {}", e))?;
+            let dest_path = PathBuf::from(dest_base).join(relative).to_string_lossy().into_owned();
+
+            println!(".   -> Adding: {}", dest_path);
+
+            if path.is_dir() {
+                fs.push_dir_all(&dest_path, NodeHeader { permissions: 0o755, ..NodeHeader::default() })
+                    .map_err(|e| format!("push_dir_all failed for {}: {}", dest_path, e))?;
+                Self::add_assets(fs, &path, &dest_path)?;
+            } else {
+                let data = fs::read(&path).map_err(|e| format!("Failed to read {}: {}", path.display(), e))?;
+                
+                fs.push_file(
+                    Cursor::new(data),
+                    &dest_path,
+                    NodeHeader { permissions: 0o644, ..NodeHeader::default() },
+                )
+                .map_err(|e|format!("Failed to push file {}: {}", dest_path, e))?;
+            }
+        }
+        Ok(())
     }
 }
