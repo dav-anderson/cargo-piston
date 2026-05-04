@@ -648,6 +648,7 @@ impl AscClient {
         app_bundle_path: &PathBuf,
         security_profile: &str,
         ios: bool,
+        external: bool,
     ) -> Result<(), PistonError> {
         let bundle_path = app_bundle_path.display().to_string();
         println!("🔏 Signing {} bundle: {} with security profile: {}", if ios { "iOS" } else { "macOS" }, bundle_path, security_profile);
@@ -686,7 +687,7 @@ impl AscClient {
             }
         }
 
-        // ==================== COMMON FINAL BUNDLE SIGNING ====================
+        // ==================== COMMON BUNDLE SIGNING ====================
         println!("   → Signing outer bundle...");
 
         let entitlements_path = format!("{}/entitlements.plist", path.display());
@@ -703,9 +704,9 @@ impl AscClient {
         ];
 
         // macOS App Store builds should NOT use --options runtime
-        if ios {
-            args.insert(4, "--options");
-            args.insert(5, "runtime");
+        if ios || external {
+            args.insert(5, "--options");
+            args.insert(6, "runtime");
         }
 
         let status = Command::new("codesign")
@@ -727,65 +728,3 @@ impl AscClient {
         Ok(())
     }
 }
-//     pub fn sign_app_bundle(app_name: &str, app_bundle_path: &PathBuf, security_profile: &str, ios: bool) -> Result<(), PistonError> {
-//         let exec_path = app_bundle_path.join(app_name).display().to_string();
-//         let app_bundle = app_bundle_path.display().to_string();
-//         println!("Signing {} bundle: {}", if ios {"IOS"} else {"MacOS"}, app_bundle);
-//         // Delete any old signature so we can re-sign after provisioning added the profile
-//         let code_signature_dir = format!("{}/_CodeSignature", app_bundle);
-//         let code_signature_path = Path::new(&code_signature_dir);
-//         if code_signature_path.exists() {
-//             let _ = fs::remove_dir_all(&code_signature_path);
-//         }
-//         AscClient::ensure_entitlements(&app_bundle_path)?;
-//         //sign ios binary
-//         if ios {
-//             //sign executable binary
-//             let output = Command::new("codesign")
-//                 .args([
-//                     "--force",
-//                     "--sign", security_profile,
-//                     "--entitlements", &format!("{}/entitlements.plist", app_bundle),
-//                     "--options", "runtime",
-//                     "--timestamp",
-//                     "--deep",
-//                     "--generate-entitlement-der",
-//                     &exec_path,
-//                 ])
-//                 .stdout(Stdio::inherit())
-//                 .stderr(Stdio::inherit())
-//                 .output()
-//                 .map_err(|e| PistonError::CodesignError(e.to_string()))?;
-//             if !output.status.success() {
-//                 return Err(PistonError::CodesignError(
-//                     String::from_utf8_lossy(&output.stderr).trim().to_string()
-//                 ));
-//             }
-//         }
-//         //sign app bundle
-//         let output = Command::new("codesign")
-//             .args([
-//                 "--force",
-//                 "--sign", security_profile,
-//                 "--entitlements", &format!("{}/entitlements.plist", app_bundle),
-//                 "--options", "runtime",
-//                 "--timestamp",
-//                 "--deep",
-//                 "--generate-entitlement-der",
-//                 &app_bundle,
-//             ])
-//             .stdout(Stdio::inherit())
-//             .stderr(Stdio::inherit())
-//             .output()
-//             .map_err(|e| PistonError::CodesignError(e.to_string()))?;
-
-//         if !output.status.success() {
-//             return Err(PistonError::CodesignError(
-//                 String::from_utf8_lossy(&output.stderr).trim().to_string()
-//             ));
-//         }
-
-//         println!("✅ Bundle signed successfully for {}", if ios {"iOS"} else {"MacOS"});
-//         Ok(())
-//     }
-// }

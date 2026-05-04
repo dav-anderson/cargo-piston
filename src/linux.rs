@@ -99,7 +99,7 @@ impl LinuxBuilder {
         let cwd: PathBuf = self.cwd.clone();
         println!("working dir: {:?}", cwd);
         let rel_output: PathBuf = if self.appimage {
-            "target/release-appimage/linux"
+            "target/release-appimage/linux".into()
         }else if self.release {
             "target/release/linux".into()
         }else {
@@ -199,6 +199,7 @@ impl LinuxBuilder {
             }
         //static binary
         }else {
+            println!("Building static binary");
             let target_path = bundle_path.join(self.app_name.clone());
             println!("copying binary to app bundle");
             //move the target binary into the app bundle at the proper location
@@ -207,6 +208,8 @@ impl LinuxBuilder {
                 output_path: bundle_path.clone().to_path_buf(),
                 source: e,
             })?;
+            //TODO perform copy options in a working dir then 
+            //TODO tarball the static binary and output it at the output path
             //check for valid key and sign
             if GPGSigner::gpg_valid(self.key_id.clone(), self.gpg_path.clone()){
                 println!("key is valid");

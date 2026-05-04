@@ -402,6 +402,19 @@ security import ~/key.p12 \
 -T /usr/bin/productsign
 ```
 
+Next, navigate to `https:://appleid.apple.com` and sign in with your apple developer account. You must create an app specific password for notarytool. To do this, go to `Sign-in and Security` and then click on `App-Specific Passwords`.
+
+Give your app specific password a name like "Notarytool" or "Piston" and then copy it to your clipboard.
+
+Enter the following command in your terminal (Note you can obtain your team id from logging in at `https://developer.apple.com/account` and clicking on "membership details" at the top or you can view your ID in parantheses next to your security profile/certificate). Developer email should match your security profile/developer account.
+
+```
+xcrun notarytool store-credentials "DeveloperID-Notary" \
+    --apple-id <your developer email> \
+    --team-id <your 10 character team ID> \
+    --password <your app specific password> 
+```
+
 Find the full name of your desired security certificate in your keychain with the following command.
 
 `security find-identity -v -p codesigning | grep "Developer ID"`
@@ -412,21 +425,13 @@ Example:
 
 `external_cert=Developer ID Application: Organiation Name (A8BCD8EFGH)`
 
-Next, navigate to `https:://appleid.apple.com` and sign in with your apple developer account. You must create an app specific password for notarytool.
+<!-- TODO THIS 
 
+make use of this `--keychain-profile "DeveloperID-Notary"`
+-->
 
-<!-- TODO THIS -->
+You can now build & sign MacOS apps for external release.
 
-
-
-Run the following command, remember your password. Developer email should match your security profile. Team ID should match the ID in parentheses on your security certificate. 
-
-```
-xcrun notarytool store-credentials "DeveloperID-Notary" \
---apple-id <developer_email>
---team-id <your_security_profile_ID>
---password "<notarytool_password>"
-```
 
 ## IOS Output Configuration (MACOS ONLY & after completing the MacOS setup above)
 

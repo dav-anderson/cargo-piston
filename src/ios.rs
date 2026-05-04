@@ -336,12 +336,12 @@ impl IOSBuilder {
                     let app_name = self.app_name.clone();
                     //provision device here
                     asc_client.provision_ios_device(&target_id, &bundle_id, &app_name, &security_profile, &output_path, &idp_path)?;
-                    AscClient::sign_app_bundle(&app_name, &output_path, &security_profile, true)?;
+                    AscClient::sign_app_bundle(&app_name, &output_path, &security_profile, true, false)?;
                     return Ok(())
                 }
             }
             //sign the app bundle for distribution
-            AscClient::sign_app_bundle(&app_name, &output_path, &security_profile, true)?;
+            AscClient::sign_app_bundle(&app_name, &output_path, &security_profile, true, false)?;
         }
         Ok(())
     }

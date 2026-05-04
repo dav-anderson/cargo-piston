@@ -306,17 +306,74 @@ impl MacOSBuilder {
         //automated signing
         if self.keystore_path.is_none() || self.asc_api_key.is_none() {
             println!("Either the Keystore path or ASC API key missing from .env, skipping automated signing");
+        //sign for external release outside of apple app store ecosystem
         } else if self.external {
             //if external-release not properly configured, throw error
             if self.external_cert.is_none() {
                 return Err(PistonError::Generic("external-release certificate is not properly configured, see documentation".to_string()))
             }
             //perform external release sign if properly configured
-            //TODO this is not currently completely implemented
-            AscClient::sign_app_bundle(&self.app_name, &self.output_path.as_ref().unwrap(), &self.external_cert.as_ref().unwrap(), false)?;
+            AscClient::sign_app_bundle(&self.app_name, &self.output_path.as_ref().unwrap(), &self.external_cert.as_ref().unwrap(), false, true)?;
+            let working_path = &self.output_path.as_ref().unwrap();
+            let parent = working_path
+                .parent()
+                .map(PathBuf::from)
+                .ok_or_else(|| PistonError::Generic("Failed to determine zip path via parent method".to_string()
+            ))?;
+            let zip_str = format!("{}.zip", &self.app_name);
+            let zip_path = parent.join(zip_str);
 
-            //TODO zip + notarytool bundle
+            println!("Notarizing the app bundle, waiting for apple to approve...");
+            //Zip the app
+            let zip = Command::new("ditto")
+                .args(["-c", "-k", "--keepParent"])
+                .arg(&working_path)
+                .arg(&zip_path)
+                .output()
+                .map_err(|e| PistonError::Generic(format!("Ditto failed to execute: {}", e)))?;
+            
+            if !zip.status.success() {
+                return Err(PistonError::Generic(format!(
+                    "ditto failed: {}", String::from_utf8_lossy(&zip.stderr)
+                )));
+            }
 
+            //Submit for notarization (using stored keychain profile)
+            let submit = Command::new("xcrun")
+                .args([
+                    "notarytool", "submit",])
+                .arg(&zip_path)
+                .args([
+                     "--keychain-profile", 
+                     "DeveloperID-Notary",
+                    "--wait"
+                ])
+                .output()
+                .map_err(|e| PistonError::Generic(format!("notarytool submit failed to execute: {}", e)))?;
+
+            if !submit.status.success() || String::from_utf8_lossy(&submit.stdout).contains("status: Invalid") {
+                return Err(PistonError::Generic(format!(
+                    "notarytool submit failed: {}",
+                    String::from_utf8_lossy(&submit.stderr).trim()
+                )));
+            }
+
+            // Staple the notarization ticket
+            let staple = Command::new("xcrun")
+                .args(["stapler", "staple"])
+                .arg(&working_path)
+                .output()
+                .map_err(|e| PistonError::Generic(format!("stapler failed to execute: {}", e)))?;
+
+            if !staple.status.success() {
+                return Err(PistonError::Generic(format!(
+                    "stapler failed: {}",
+                    String::from_utf8_lossy(&staple.stderr).trim()
+                )));
+            }
+
+            println!("Successfully signed & notarized the app bundle available at {}", working_path.display());
+        //sign for app store release
         }else {
             println!("keystore path & ASC API key properly configured");
             let asc = AscClient{ api_key: self.asc_api_key.clone(), keystore_path: self.keystore_path.clone().unwrap()};
@@ -328,7 +385,7 @@ impl MacOSBuilder {
 
             let app_name = self.app_name.clone();
             //sign the app bundle for distribution
-            AscClient::sign_app_bundle(&app_name, &output_path, &security_profile, false)?;
+            AscClient::sign_app_bundle(&app_name, &output_path, &security_profile, false, false)?;
 
         }
         Ok(())
