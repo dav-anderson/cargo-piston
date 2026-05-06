@@ -382,7 +382,7 @@ impl MacOSBuilder {
             let asc = AscClient{ api_key: self.asc_api_key.clone(), keystore_path: self.keystore_path.clone().unwrap()};
             //obtain certificate
             let security_cert = asc.create_or_find_security_cert(self.team_id.clone())?;
-            let security_profile = format!("{} {}", security_cert.1, security_cert.0);
+            let security_profile = format!("{} ({})", security_cert.1, security_cert.0);
             println!("your security profile is: {:?}", security_profile);
             let output_path = self.output_path.clone().unwrap();
 
