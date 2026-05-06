@@ -1,6 +1,6 @@
 use serde_json::json;
 use serde::{ Serialize, Deserialize };
-use std::collections::HashMap;
+use std::collections::{ HashMap, HashSet };
 use std::fs;
 use std::path::PathBuf;
 use std::process::{ Command, Stdio };
@@ -67,13 +67,63 @@ impl AscClient {
             "cert_id": cert_id,
             "signing_identity": signing_identity
         });
+        println!("SAVING TO CACHE: {:?}", data);
         let _ = fs::write(cache_dir.join("cert_cache.json"), data.to_string());
+    }
+
+    //parse team id from a security find-identity result
+    fn parse_team_id(&self, stdout: &str, cert_name: &str) -> Result<String, PistonError> {
+        let mut team_ids_for_cert: HashSet<String> = HashSet::new();
+
+        for line in stdout.lines() {
+            // Extract the quoted part: everything inside the "..."
+            if let (Some(start), Some(end)) = (line.find('"'), line.rfind('"')) {
+                if start < end {
+                    let quoted_content = &line[start + 1..end];
+
+                    // Inside the quotes: "certificate_name (TEAM_ID)"
+                    if let Some(paren_pos) = quoted_content.rfind(" (") {
+                        let name_part = quoted_content[..paren_pos].trim();
+                        let rest = &quoted_content[paren_pos + 2..]; // after " ("
+
+                        if let Some(close_pos) = rest.find(')') {
+                            let potential_team_id = &rest[..close_pos];
+
+                            if name_part == cert_name {
+                                team_ids_for_cert.insert(potential_team_id.to_string());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // New logic you asked for:
+        let team_id = match team_ids_for_cert.len() {
+            1 => team_ids_for_cert.into_iter().next().unwrap(),
+            0 => {
+                return Err(PistonError::Generic(format!(
+                    "No certificate matching the name '{}' was found in the keychain.",
+                    cert_name
+                )));
+            }
+            _ => {
+                // Only error when the same name has DIFFERENT team IDs
+                return Err(PistonError::Generic(format!(
+                    "Multiple certificates with the exact same name '{}' were found but with different Team IDs: {:?}. \
+                    Team ID cannot be uniquely determined. Please designate a team ID in your .env with 'team_id=<team_id>' ",
+                    cert_name, team_ids_for_cert
+                )));
+            }
+        };
+        return Ok(team_id)
     }
 
     // Creates or re-uses a universal security certificate
     // Returns: (certificate_id, signing_identity_name) — name is normalized for codesign, ASC API returns something unique
     pub fn create_or_find_security_cert(
-        &self
+        &self,
+        team_id_override: Option<String>,
     ) -> Result<(String, String), PistonError> {
         let cert_type = "DISTRIBUTION";
         let id_type = "Apple Distribution";
@@ -128,7 +178,6 @@ impl AscClient {
         
         //reuse existing certificate if possible
         if let Some(existing) = json["data"].as_array().and_then(|arr| arr.first()) {
-            let cert_id = existing["id"].as_str().unwrap().to_string();
             let cert_name = existing["attributes"]["name"]
                 .as_str()
                 .unwrap_or("Unknown")
@@ -144,13 +193,13 @@ impl AscClient {
 
             let output = String::from_utf8_lossy(&check.stdout);
 
-                println!("*******************DEBUG LINE CHECK BELOW FOR A MATCH AND MAKE SURE THE LOGIC IS RIGHT**********************");
-                println!("output: {:?}", output);
-                println!("cert name: {:?}", cert_name);
-
             if output.contains(&cert_name){
                 println!("✅ Certificate also found in local keychain → reusing");
-                return Ok((cert_id, cert_name));
+                //parse the team id from the local security profiles in the keychain if override is not set
+                let team_id = if team_id_override.is_none() {self.parse_team_id(&output, &cert_name)?} else {team_id_override.unwrap()};
+                //cache the security credentials locally
+                self.save_cert_cache(&team_id, &cert_name, &cache_dir);
+                return Ok((team_id, cert_name));
             } else {
                 println!("⚠️  Certificate exists in ASC but missing locally → creating a new one");
                 // No automatic revocation, we just create a fresh certificate (Apple allows multiples)
@@ -200,7 +249,8 @@ impl AscClient {
         let json: serde_json::Value = create_resp.into_json()
             .map_err(|e| PistonError::IntoJSONError(e.to_string()))?;
 
-        let cert_id = json["data"]["id"].as_str().unwrap().to_string();
+        println!("JSON RESP: {:?}", json);
+
         let cert_name = json["data"]["attributes"]["name"]
             .as_str()
             .unwrap_or("Unknown")
@@ -243,15 +293,23 @@ impl AscClient {
             ));
         }
 
+        // Parse the Team ID from the newly uploaded certificate
+        let check = Command::new("security")
+            .args(["find-identity", "-v", "-p", "codesigning"])
+            .output()
+            .map_err(|e| PistonError::KeyChainImportError(format!("Failed to check keychain: {}", e)))?;
+        let output = String::from_utf8_lossy(&check.stdout);
+        let team_id = if team_id_override.is_none() {self.parse_team_id(&output, &cert_name)?} else {team_id_override.unwrap()};
+
         // Cleanup
         let _ = fs::remove_file(key_path);
         let _ = fs::remove_file(csr_path);
         let _ = fs::remove_file(cer_path);
 
-        println!("✅ New {} certificate created and imported (ID: {}, Name for codesign: {})", id_type, cert_id, cert_name);
+        println!("✅ New {} certificate created and imported (TEAM_ID: {}, CERT_NAME: {})", id_type, team_id, cert_name);
         //cache the security credentials locally
-        self.save_cert_cache(&cert_id, &cert_name, &cache_dir);
-        Ok((cert_id, cert_name))
+        self.save_cert_cache(&team_id, &cert_name, &cache_dir);
+        Ok((team_id, cert_name))
     }
 
     //generates a JWT for interfacing with Apple AppStoreConnect API
@@ -641,7 +699,6 @@ impl AscClient {
         Ok(false)
     }
 
-    //sign an ios or macos app bundle
     //sign an ios or macos app bundle for App Store distribution
     pub fn sign_app_bundle(
         app_name: &str,

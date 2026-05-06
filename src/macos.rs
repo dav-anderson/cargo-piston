@@ -23,6 +23,7 @@ pub struct MacOSBuilder {
     asc_api_key: Option<AscApiKey>,
     keystore_path: Option<String>,
     external_cert: Option<String>,
+    team_id: Option<String>
 }
 
 impl MacOSBuilder {
@@ -53,6 +54,7 @@ impl MacOSBuilder {
         let cargo_path = env_vars.get("cargo_path").cloned().unwrap_or("cargo".to_string());
         let keystore_path = env_vars.get("keystore_path").cloned();
         let external_cert = env_vars.get("external_cert").cloned();
+        let team_id = env_vars.get("team_id").cloned();
         //parse cargo.toml
         let metadata: Metadata = MetadataCommand::new()
             .current_dir(cwd.clone())
@@ -87,6 +89,7 @@ impl MacOSBuilder {
             asc_api_key: asc_api_key,
             keystore_path: keystore_path,
             external_cert: external_cert,
+            team_id: team_id,
         })
     }
 
@@ -378,7 +381,7 @@ impl MacOSBuilder {
             println!("keystore path & ASC API key properly configured");
             let asc = AscClient{ api_key: self.asc_api_key.clone(), keystore_path: self.keystore_path.clone().unwrap()};
             //obtain certificate
-            let security_cert = asc.create_or_find_security_cert()?;
+            let security_cert = asc.create_or_find_security_cert(self.team_id.clone())?;
             let security_profile = format!("{} {}", security_cert.1, security_cert.0);
             println!("your security profile is: {:?}", security_profile);
             let output_path = self.output_path.clone().unwrap();
