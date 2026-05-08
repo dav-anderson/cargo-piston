@@ -351,10 +351,12 @@ impl AscClient {
         certificate_id: &str,
         app_bundle_path: &PathBuf,
         ideviceprovision_path: &str, 
+        provision_cache: &PathBuf,
     ) -> Result<(), PistonError> {
         let token = self.generate_jwt()?;
         println!("Provisioning device {} for app '{}' (bundle {})", device_id, app_name, bundle_id);
         // // 1. Register device if missing
+        println!("checking if device is registered with ASC");
         let device_resource_id = {
             let check = ureq::get("https://api.appstoreconnect.apple.com/v1/devices")
                 .set("Authorization", &format!("Bearer {}", token))
@@ -547,10 +549,8 @@ impl AscClient {
             .map_err(|e| PistonError::WriteFileError(format!("Failed to write profile: {}", e)))?;
 
         //cache mobile provision locally
-        let cache_dir = PathBuf::from("target/ios-cache");
-        let cache_dir_pro = cache_dir.join("profiles");
-        let _ = fs::create_dir_all(&cache_dir_pro);
-        let cached_profile = cache_dir_pro.join(format!("{}.mobileprovision", profile_name));
+        let _ = fs::create_dir_all(provision_cache);
+        let cached_profile = provision_cache.join(format!("{}.mobileprovision", profile_name));
         let _ = fs::copy(&profile_path, &cached_profile);
 
         // 5. Embed into .app bundle
@@ -591,9 +591,10 @@ impl AscClient {
     pub fn ensure_entitlements(app_bundle_path: &PathBuf) -> Result<(), PistonError> {
         println!("ENSURING ENTITLEMENTS for: {:?}", app_bundle_path.display());
         let embedded = app_bundle_path.join("embedded.mobileprovision");
+        let app_bundle_parent = app_bundle_path.parent().unwrap();
+        let entitlements_path = app_bundle_parent.join("entitlements.plist");
         //no device target specified, build Entitlements for distribution
         if !embedded.exists() {
-            let entitlements_path = app_bundle_path.join("entitlements.plist");
             //TODO this does not currently add any capabilities outlined in ASC bundle creation
             let content = r#"<?xml version="1.0" encoding="UTF-8"?>
             <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -609,8 +610,6 @@ impl AscClient {
             return Ok(())
         }
         //build entitlements for a target device based on an embedded.mobileprovision
-        let entitlements_path = app_bundle_path.join("entitlements.plist");
-
         let cms = Command::new("security")
             .args(["cms", "-D", "-i", embedded.to_str().unwrap()])
             .output()
@@ -637,31 +636,36 @@ impl AscClient {
     }
 
     //check if we already posess a provisioning profile for the target device
+    //TODO need to check time to live parameter inside of xml dump on a provision to make sure its still valid
     pub fn is_device_provisioned(
         app_bundle_path: &PathBuf,
-        udid: &str,
+        device_id: &str,
         idp_path: &str,
+        provision_cache: &PathBuf,
     ) -> Result<bool, PistonError> {
         println!("Checking provisioning status...");
 
         // Look for ANY .mobileprovision in the bundle
-        let entries = fs::read_dir(app_bundle_path)
-            .map_err(|e| PistonError::ReadDirError { path: app_bundle_path.clone(), source: e })?;
+        println!("reading contents of: {:?}", provision_cache.display());
+        let entries = fs::read_dir(provision_cache)
+            .map_err(|e| PistonError::ReadDirError { path: provision_cache.clone(), source: e })?;
 
         let mut profile_files = vec![];
         for entry in entries {
             let entry = entry.map_err(|e| PistonError::MapDirError{
-                path: app_bundle_path.to_path_buf(),
+                path: provision_cache.to_path_buf(),
                 source: e,
         })?;
             let name = entry.file_name().to_string_lossy().into_owned();
+            println!("found: {}", name);
             if name.ends_with(".mobileprovision") {
+                println!("file extension match, pushing: {:?}", entry);
                 profile_files.push(entry.path());
             }
         }
 
         if profile_files.is_empty() {
-            println!("No provisioning profile found in bundle");
+            println!("No provisioning profile found in provision cache");
             return Ok(false);
         }
 
@@ -676,20 +680,34 @@ impl AscClient {
                 })?;
 
             let xml = String::from_utf8_lossy(&output.stdout);
-
-            if xml.contains(&format!("<string>{}</string>", udid)) {
-                println!("✅ Device is in provisioning profile: {}", profile_path.display());
+            let target = format!("<string>{}</string>", device_id);
+            println!("Looking for {} in xml dump", target);
+            if xml.contains(&target) {
+                println!("✅ Target device is listed in provisioning profile: {}", profile_path.display());
 
                 // Check if it's installed on the device
+                println!("checking if selected profile is installed on target device");
                 let list = Command::new(idp_path)
-                    .args(["list", "--udid", udid])
+                    .args(["list", "--udid", device_id])
                     .output();
                 let list_res = list.unwrap();
                 if !list_res.status.success() {
                     return Err(PistonError::Generic(format!("Failed to list provisioning profiles with IDP")))
                 }
                 let installed = String::from_utf8_lossy(&list_res.stdout);
-                if installed.contains(profile_path.file_name().unwrap().to_str().unwrap()) {
+                println!("list response: {:?}", installed);
+                let target_partial = profile_path.file_name().unwrap().to_str().unwrap();
+                let target = target_partial.rsplit_once('.').map(|(stem, _extension)| stem.to_string()).unwrap_or(target_partial.to_string());
+                println!("Checking if installed list contains: {:?}", target);
+                if installed.contains(&target) {
+                    let target_path = app_bundle_path.join("embedded.mobileprovision");
+                    println!("Cached provisioning profile is valid, copying: {:?} to: {:?}", profile_path.display(), target_path.display());
+                    fs::copy(&profile_path, &target_path).map_err(|e| PistonError::CopyFileError {
+                        input_path: profile_path.clone(),
+                        output_path: target_path.clone(),
+                        source: e,
+                    })?;
+                    
                     return Ok(true);
                 }
             }
@@ -704,6 +722,7 @@ impl AscClient {
         app_name: &str,
         app_bundle_path: &PathBuf,
         security_profile: &str,
+        bundle_id: &str,
         ios: bool,
         external: bool,
     ) -> Result<(), PistonError> {
@@ -716,8 +735,10 @@ impl AscClient {
             let _ = fs::remove_dir_all(&code_signature_dir);
         }
 
-        let path = if ios {app_bundle_path.clone()} else {app_bundle_path.clone().join("Contents")};
-        AscClient::ensure_entitlements(&path)?;
+        AscClient::ensure_entitlements(&app_bundle_path.clone())?;
+        let app_bundle_parent = app_bundle_path.parent().unwrap();
+
+        let entitlements_path = format!("{}/entitlements.plist", app_bundle_parent.display());
 
         if ios {
             // ==================== iOS SIGNING (two-step) ====================
@@ -727,7 +748,8 @@ impl AscClient {
                 .args([
                     "--force",
                     "--sign", security_profile,
-                    "--entitlements", &format!("{}/entitlements.plist", path.display()),
+                    "--identifier", bundle_id,
+                    "--entitlements", &entitlements_path,
                     "--options", "runtime",
                     "--timestamp",
                     "--deep",
@@ -740,18 +762,17 @@ impl AscClient {
                 .map_err(|e| PistonError::CodesignError(e.to_string()))?;
 
             if !status.success() {
-                return Err(PistonError::CodesignError("Failed to sign iOS executable".to_string()));
+                return Err(PistonError::CodesignError("Failed to sign executable".to_string()));
             }
         }
 
         // ==================== COMMON BUNDLE SIGNING ====================
         println!("   → Signing outer bundle...");
 
-        let entitlements_path = format!("{}/entitlements.plist", path.display());
-
         let mut args = vec![
             "--force",
             "--sign", security_profile,
+            "--identifier", bundle_id,
             "--entitlements", &entitlements_path,
             "--timestamp",
             "--deep",
@@ -760,10 +781,10 @@ impl AscClient {
             &bundle_path,
         ];
 
-        // macOS App Store builds should NOT use --options runtime
+        //only macOS App Store builds should NOT use --options runtime
         if ios || external {
-            args.insert(5, "--options");
-            args.insert(6, "runtime");
+            args.insert(7, "--options");
+            args.insert(8, "runtime");
         }
 
         let status = Command::new("codesign")
@@ -771,7 +792,7 @@ impl AscClient {
             .stdout(Stdio::inherit())
             .stderr(Stdio::inherit())
             .output()
-            .map_err(|e| PistonError::CodesignError(e.to_string()))?;
+            .map_err(|e| PistonError::CodesignError(format!("Failed to sign outer bundle: {}", e)))?;
 
         if !status.status.success() {
             return Err(PistonError::CodesignError(

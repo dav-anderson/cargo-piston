@@ -316,7 +316,7 @@ impl MacOSBuilder {
                 return Err(PistonError::Generic("external-release certificate is not properly configured, see documentation".to_string()))
             }
             //perform external release sign if properly configured
-            AscClient::sign_app_bundle(&self.app_name, &self.output_path.as_ref().unwrap(), &self.external_cert.as_ref().unwrap(), false, true)?;
+            AscClient::sign_app_bundle(&self.app_name, &self.output_path.as_ref().unwrap(), &self.external_cert.as_ref().unwrap(), self.bundle_id.as_ref(), false, true)?;
             let working_path = &self.output_path.as_ref().unwrap();
             let parent = working_path
                 .parent()
@@ -388,7 +388,7 @@ impl MacOSBuilder {
 
             let app_name = self.app_name.clone();
             //sign the app bundle for distribution
-            AscClient::sign_app_bundle(&app_name, &output_path, &security_profile, false, false)?;
+            AscClient::sign_app_bundle(&app_name, &output_path, &security_profile, self.bundle_id.as_ref(), false, false)?;
 
         }
         Ok(())

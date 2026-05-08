@@ -208,7 +208,7 @@ impl IOSBuilder {
     <string>{}</string>
     <key>CFBundleVersion</key>
     <string>{}</string>
-    <key>LSRequiresIphoneOS</key>
+    <key>LSRequiresIPhoneOS</key>
     <true/>
     <key>MinimumOSVersion</key>
     <string>{}</string>
@@ -217,6 +217,20 @@ impl IOSBuilder {
         <integer>1</integer>
         <integer>2</integer>
     </array>
+    <key>CFBundleSupportedPlatforms</key>
+    <array>
+        <string>iPhoneOS</string>
+    </array>
+    <key>DTPlatformName</key>
+    <string>iphoneos</string>
+    <key>DTPlatformVersion</key>
+    <string>18.5</string>
+    <key>DTSDKName</key>
+    <string>iphoneos18.5</string>
+    <key>DTCompiler</key>
+    <string>com.apple.compilers.llvm.clang.1_0</string>
+    <key>DTXcode</key>
+    <string>1620</string>
     <key>CFBundleIcons</key>
     <dict>
         <key>CFBundlePrimaryIcon</key>
@@ -235,8 +249,8 @@ impl IOSBuilder {
 "#, 
     &capitalized,
     &self.bundle_id.clone(),
-    &self.app_name.clone(),
-    &self.app_name.clone(),
+    &capitalized,
+    &capitalized,
     &self.app_version.clone(),
     &self.app_version.clone(),
     &self.min_os_version.clone()
@@ -252,8 +266,6 @@ impl IOSBuilder {
         if !output.status.success() {
             return Err(PistonError::PlutilConvertError(String::from_utf8_lossy(&output.stderr).to_string()))
         }
-        let pkginfo_path: PathBuf = partial_path.join("PkgInfo");
-        fs::write(pkginfo_path, b"APPL????").map_err(|e| PistonError::WriteFileError(format!("PkgInfo Write failed: {}", e)))?;
         //if icon path was provided...convert
         if !self.icon_path.is_none(){
             println!("icon path provided, configuring icon");
@@ -290,8 +302,10 @@ impl IOSBuilder {
 
     fn post_build(&mut self) -> Result <(), PistonError>{
         println!("post build for ios");
+        let provision_cache = self.cwd.join("target").join("ios-cache").join("profiles");
         let binary_path = self.cwd.join("target").join(self.target.clone()).join(if self.release {"release"} else {"debug"}).join(self.app_name.clone());
-        let bundle_path = self.output_path.as_ref().unwrap().join(self.app_name.clone());
+        let capitalized = Helper::capitalize_first(&self.app_name.clone());
+        let bundle_path = self.output_path.as_ref().unwrap().join(&capitalized);
         //bundle path should be cwd + target + <target output> + <--release flag or None for debug> + <appname>.exe
         //move the target binary into the app bundle at the proper location
         copy(&binary_path, &bundle_path).map_err(|e| PistonError::CopyFileError {
@@ -309,6 +323,14 @@ impl IOSBuilder {
             fs::set_permissions(&exe_path, std::fs::Permissions::from_mode(0o755))
                 .map_err(|e| PistonError::Generic(format!("Failed to make binary executable: {}", e)))?;
         }
+        //strip extended attributes
+        let output = Command::new("xattr")
+            .args(["-cr", &bundle_path.display().to_string()])
+            .output()
+            .map_err(|e| PistonError::Generic(e.to_string()))?;
+        if !output.status.success() {
+            return Err(PistonError::Generic(String::from_utf8_lossy(&output.stderr).to_string()))
+        }
         //output the proper location in the terminal for the user to see 
         println!("iOS app bundle available at: {}", &bundle_path.display());
 
@@ -324,27 +346,25 @@ impl IOSBuilder {
             println!("your security profile is: {:?}", security_profile);
             let output_path = self.output_path.clone().unwrap();
             let app_name = self.app_name.clone();
-
+            let bundle_id = self.bundle_id.clone();
             //if a device target is provided, check if the target device is provisioned
             if !self.device_target.is_none() {
                 println!("device target exists, checking for existing provisioning");
                 let target_id = self.device_target.clone().unwrap().id;
-                let target_udid = self.device_target.clone().unwrap().udid;
                 let idp_path = self.idp_path.clone().unwrap();
-                let provisioned = AscClient::is_device_provisioned(&output_path, &target_udid, &idp_path)?;
+                let provisioned = AscClient::is_device_provisioned(&output_path, &target_id, &idp_path, &provision_cache)?;
                 //if device is not provisioned and api access is available, attempt to provision
                 if provisioned == false && !self.asc_api_key.is_none() {
                     println!("attempting to provision target device {:?}", self.device_target);
-                    let bundle_id = self.bundle_id.clone();
                     let app_name = self.app_name.clone();
                     //provision device here
-                    asc_client.provision_ios_device(&target_id, &bundle_id, &app_name, &security_profile, &output_path, &idp_path)?;
-                    AscClient::sign_app_bundle(&app_name, &output_path, &security_profile, true, false)?;
+                    asc_client.provision_ios_device(&target_id, &bundle_id, &app_name, &security_profile, &output_path, &idp_path, &provision_cache)?;
+                    AscClient::sign_app_bundle(&app_name, &output_path, &security_profile, &bundle_id, true, false)?;
                     return Ok(())
                 }
             }
             //sign the app bundle for distribution
-            AscClient::sign_app_bundle(&app_name, &output_path, &security_profile, true, false)?;
+            AscClient::sign_app_bundle(&app_name, &output_path, &security_profile, &bundle_id, true, false)?;
         }
         Ok(())
     }
