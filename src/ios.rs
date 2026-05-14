@@ -149,31 +149,130 @@ impl IOSBuilder {
         }else {
             format!("target/{}/ios/{}.app",release, capitalized).into()
         };
-        //establish ~/target/<release>/ios/Appname.app/Resources
-        let res_path: PathBuf = partial_path.join("Resources");
         self.output_path = Some(cwd.join(&partial_path));
         if self.output_path.as_ref().is_none() {
             return Err(PistonError::Generic("output path not provided".to_string()))
         }
-        let path = res_path.as_path();
-        //empty the resources dir if it exists
-        if let Some(path) = &self.output_path {
-            if path.exists() {
-                let _ = fs::remove_dir_all(path);
-            }
+        let bundle_path = self.output_path.as_ref().unwrap();
+        println!("Bundle path: {:?}", bundle_path);
+
+        //empty the app bundle directory if it exists
+        if bundle_path.as_path().exists() {
+            let _ = fs::remove_dir_all(bundle_path);
         }
-        //create the resources directory
+        
+        //Create the app bundle directory
+        create_dir_all(bundle_path).map_err(|e| PistonError::CreateDirAllError {
+            path: bundle_path.to_path_buf(),
+            source: e,
+        })?;
+
+        println!("syncing resources...");
+        let parent = bundle_path.parent();
+        println!("parent path: {:?}", parent);
+        let assets_path = parent.unwrap().join("Assets.xcassets");
+        println!("Assets path: {:?}", assets_path.display());
+        let appicon_path = assets_path.join("AppIcon.appiconset");
+        println!("App icon path: {:?}", appicon_path);
+
+        let path = appicon_path.as_path();
+
+        //empty the AppIcon dir if it exists
+        if appicon_path.exists() {
+            let _ = fs::remove_dir_all(path);
+        }
+        
+        //create the AppIcon and Assets directory
         create_dir_all(path).map_err(|e| PistonError::CreateDirAllError {
         path: self.output_path.as_ref().unwrap().to_path_buf(),
         source: e,
         })?;
-        //sync assets
-        let bind = &self.assets.clone();
-        let assets_src = Path::new(&bind);
-        let assets_tgt = self.output_path.clone().unwrap().join("assets");
-        Helper::sync_assets(assets_src, &assets_tgt)?;
+
+        //if icon path was provided...convert
+        if !self.icon_path.is_none(){
+            println!("icon path provided, configuring icon");
+            //resize the icon to both appropriate ios dimensions
+            let icon_path120: PathBuf = appicon_path.join("ios_icon120.png");
+            Helper::resize_png(&self.icon_path.as_ref().unwrap(), &icon_path120.display().to_string(), 120, 120)?;
+            let icon_path180: PathBuf = appicon_path.join("ios_icon180.png");
+            Helper::resize_png(&self.icon_path.as_ref().unwrap(), &icon_path180.display().to_string(), 180, 180)?;
+        }
+
+
+        //create Contents.json within Appicon.appiconset
+        let contents_path: PathBuf = appicon_path.join("Contents.json");
+        //if a contents file exists, first remove it.
+        if contents_path.exists() {
+            remove_file(&contents_path).map_err(|e| PistonError::RemoveFileError {
+                path: contents_path.clone().to_path_buf(),
+                source: e,
+            })?;
+        }
+        //create a new Contents.json file
+        let mut contents_file = File::create(&contents_path).map_err(|e| PistonError::CreateFileError {
+            path: contents_path.clone().to_path_buf(),
+            source: e,
+        })?;
+
+        //populate the Contents.json file
+        let json_contents = r#"{
+    "images": [
+        {
+            "size": "120x120",
+            "idiom": "iphone",
+            "filename": "ios_icon120.png",
+            "scale": "1x"
+        },
+        {
+            "size": "180x180",
+            "idiom": "iphone",
+            "filename": "ios_icon180.png",
+            "scale": "1x" 
+        }
+    ],
+    "info": {
+        "version": 1,
+        "author": "xcode"
+    }
+}"#;
+        
+        //write the contents.json file
+        contents_file.write_all(json_contents.trim().as_bytes())
+            .map_err(|e| PistonError::WriteFileError(e.to_string()))?;
+
+
+        //TODO sync assets is currently disabled 
+        //eventually this will move assets into subdirs contained within Assets.xcassets/
+
+        // sync assets
+        // let bind = &self.assets.clone();
+        // let assets_src = Path::new(&bind);
+        // let parent = self.output_path.clone().unwrap().parent();
+        // let assets_tgt = parent.join("Assets.xcassets");
+        // Helper::sync_assets(assets_src, &assets_tgt)?;
+
+        let assets_output = bundle_path.join("Assets.car");
+        //compile assets to Testbuild.app/Assets.car
+        let status = Command::new("xcrun")
+            .args([
+                "actool", 
+                "--output-format", "human-readable-text",
+                "--platform", "iphoneos",
+                "--minimum-deployment-target", "15.0",
+                "--app-icon", "AppIcon",
+                "--compile", 
+                &assets_path.display().to_string(),
+                &assets_output.display().to_string()
+            ])
+            .output()
+            .map_err(|e| PistonError::Generic(format!("Failed to compile assets: {}", e)))?;
+
+        if !status.status.success(){
+            return Err(PistonError::Generic(format!("Failed to compile assets: {}", String::from_utf8_lossy(&status.stderr))))
+        }
+
         //establish Info.plist path ~/ios/release/Appname.app/Info.plist
-        let plist_path: PathBuf = partial_path.join("Info.plist");
+        let plist_path: PathBuf = bundle_path.join("Info.plist");
         //if a plist file exists, first remove it.
         if plist_path.exists() {
             remove_file(&plist_path).map_err(|e| PistonError::RemoveFileError {
@@ -231,17 +330,14 @@ impl IOSBuilder {
     <string>com.apple.compilers.llvm.clang.1_0</string>
     <key>DTXcode</key>
     <string>1620</string>
+    <key>CFBundleIconName</key>
+    <string>AppIcon</string>
     <key>CFBundleIcons</key>
     <dict>
         <key>CFBundlePrimaryIcon</key>
         <dict>
-            <key>CFBundleIconFiles</key>
-            <array>
-                <string>Resources/ios_icon120</string>
-                <string>Resources/ios_icon180</string>
-            </array>
-            <key>UIPrerenderedIcon</key>
-            <false/>
+            <key>CFBundleIconName</key>
+            <string>AppIcon</string>
         </dict>
     </dict>
 </dict>
@@ -265,15 +361,6 @@ impl IOSBuilder {
             .map_err(|e| PistonError::PlutilConvertError(e.to_string()))?;
         if !output.status.success() {
             return Err(PistonError::PlutilConvertError(String::from_utf8_lossy(&output.stderr).to_string()))
-        }
-        //if icon path was provided...convert
-        if !self.icon_path.is_none(){
-            println!("icon path provided, configuring icon");
-            //resize the icon to both appropriate ios dimensions
-            let icon_path120: PathBuf = res_path.join("ios_icon120.png");
-            Helper::resize_png(&self.icon_path.as_ref().unwrap(), &icon_path120.display().to_string(), 120, 120)?;
-            let icon_path180: PathBuf = res_path.join("ios_icon180.png");
-            Helper::resize_png(&self.icon_path.as_ref().unwrap(), &icon_path180.display().to_string(), 180, 180)?;
         }
         Ok(())
         
@@ -392,6 +479,12 @@ impl IOSRunner{
 
     //TODO this is currently broken 
     fn deploy_usb(device_id: &str, output_path: &str, bundle_id: &str) -> Result<(), PistonError> {
+        //Make a .ipa payload
+        //TODO empty temp payload dir if it exists
+        //create temp payload dir
+        //zip temp payload dir into an .ipa
+        //remove temp payload dir
+        //install the .ipa instead of the .app
         // Force-remove any old version of the app (same bundle ID)
         let _ = Command::new("xcrun")
             .args(["devicectl", "device", "uninstall", "app", "--device", device_id, "--bundle-id", bundle_id])

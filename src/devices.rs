@@ -8,7 +8,6 @@ use crate::error::PistonError;
 pub struct IOSDevice {
 pub model: String,
 pub id: String,
-pub udid: String,
 }
 
 #[derive(Debug, Clone)]
@@ -87,12 +86,12 @@ impl Devices {
 
     }
 
-    fn populate_ios(&mut self) -> Result<(), PistonError>{
-        // Run the command `xcrun devicectl list devices`
-        let output = match Command::new("xcrun").args(["devicectl", "list", "devices"]).stdout(Stdio::piped()).output() {
-                Ok(o) => o,
-                Err(e) => return Err(PistonError::XcrunDevicectlError(e.to_string())),
-            };
+    fn populate_ios(&mut self) -> Result<(), PistonError> {
+        // Run the command `xcrun xctrace list devices`
+        let output = match Command::new("xcrun").args(["xctrace", "list", "devices"]).stdout(Stdio::piped()).output() {
+            Ok(o) => o,
+            Err(e) => return Err(PistonError::XcrunDevicectlError(e.to_string())),
+        };
 
         // Convert the output to a UTF-8 string.
         let stdout = match str::from_utf8(&output.stdout){
@@ -100,83 +99,54 @@ impl Devices {
             Err(e) => return Err(PistonError::ParseUTF8Error(e.to_string())),
         };
 
-        // Split the output into lines.
+        // Split the output into lines (matching the style of the original function).
         let lines: Vec<String> = stdout.lines().map(str::to_string).collect();
 
-        //if no results
-        if lines.len() < 2 {
-            return Ok(());
-        }
+        let mut in_devices_section = false;
 
-        let dash_line = &lines[1];
-
-        // Find column ranges from dash line
-        let mut columns: Vec<(usize, usize)> = Vec::new();
-        let dash_chars: Vec<char> = dash_line.chars().collect();
-        let mut i = 0;
-        while i < dash_chars.len() {
-            if dash_chars[i] == '-' {
-                let start = i;
-                let mut j = i;
-                while j < dash_chars.len() && dash_chars[j] == '-' {
-                    j += 1;
-                }
-                columns.push((start, j));
-                i = j;
-            } else {
-                i += 1;
-            }
-        }
-
-        // Process device lines (skip header and dash line)
-        for line in &lines[2..] {
+        for line in &lines {
             let trimmed = line.trim();
             if trimmed.is_empty() {
                 continue;
             }
 
-            let line_chars: Vec<char> = line.chars().collect();
-
-            let mut fields: Vec<String> = Vec::new();
-            for &(start, end) in &columns {
-                let actual_end = end.min(line_chars.len());
-                let field_slice = if start < line_chars.len() {
-                    &line_chars[start..actual_end]
-                } else {
-                    &[]
-                };
-                let field: String = field_slice.iter().collect();
-                fields.push(field.trim().to_string());
-            }
-
-            // fields[0]: name, [1]: hostname, [2]: identifier, [3]: state, [4]: model
-            if fields.len() < 4 {
+            if trimmed == "== Devices ==" {
+                in_devices_section = true;
                 continue;
             }
 
-            let name = fields[0].to_lowercase();
-            if name != "iphone" {
+            if trimmed == "== Devices Offline ==" {
+                in_devices_section = false;
+                break; // No need to process anything after the offline section
+            }
+
+            if !in_devices_section {
                 continue;
             }
 
-            let state = &fields[3];
-            if !state.starts_with("available") {
+            // Only parse iPhones (following the original function's lowercase convention for filtering).
+            if !trimmed.to_lowercase().starts_with("iphone") {
                 continue;
             }
 
-            //construct the return fields
-            let hostname = &fields[1];
-            let id = hostname.trim_end_matches(".coredevice.local").to_string();
-            let udid = fields[2].clone();
-            let model = if fields.len() > 4 { fields[4].clone() } else { "unknown".to_string() };
+            // Extract model and identifier.
+            // The identifier is always inside the *last* set of parentheses.
+            // Model keeps any parentheses (e.g. "iPhone (26.4.2)").
+            if let Some(last_open) = trimmed.rfind('(') {
+                if let Some(last_close) = trimmed.rfind(')') {
+                    if last_open < last_close {
+                        let id = trimmed[(last_open + 1)..last_close].trim().to_string();
+                        let model = trimmed[0..last_open].trim().to_string();
 
-            self.ios.push(IOSDevice {
-                model,
-                id,
-                udid,
-            });
+                        self.ios.push(IOSDevice {
+                            model,
+                            id,
+                        });
+                    }
+                }
+            }
         }
-        
+
         Ok(())
     }
 
@@ -212,7 +182,6 @@ impl Devices {
                     println!("Device {}:", index + 1);
                     println!("Model: {}", device.model);
                     println!("id: {}", device.id);
-                    println!("udid: {}", device.udid);
                 }
             }
         }

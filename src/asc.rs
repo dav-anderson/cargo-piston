@@ -356,7 +356,7 @@ impl AscClient {
         let token = self.generate_jwt()?;
         println!("Provisioning device {} for app '{}' (bundle {})", device_id, app_name, bundle_id);
         // // 1. Register device if missing
-        println!("checking if device is registered with ASC");
+        println!("checking if device {} is registered with ASC", device_id);
         let device_resource_id = {
             let check = ureq::get("https://api.appstoreconnect.apple.com/v1/devices")
                 .set("Authorization", &format!("Bearer {}", token))
@@ -369,6 +369,7 @@ impl AscClient {
 
             let json: serde_json::Value = check.into_json()
                 .map_err(|e| PistonError::IntoJSONError(e.to_string()))?;
+            println!("Device registration: {}", json);
 
             if let Some(existing) = json["data"].as_array().and_then(|a| a.first()) {
                 println!("Device already registered");
@@ -740,31 +741,34 @@ impl AscClient {
 
         let entitlements_path = format!("{}/entitlements.plist", app_bundle_parent.display());
 
-        if ios {
-            // ==================== iOS SIGNING (two-step) ====================
-            println!("   → Signing iOS executable...");
+        let provisioning_path = format!("{}/embedded.mobileprovision", app_bundle_parent.display());
+        println!("Provisioning Path: {:?}", provisioning_path);
 
-            let status = Command::new("codesign")
-                .args([
-                    "--force",
-                    "--sign", security_profile,
-                    "--identifier", bundle_id,
-                    "--entitlements", &entitlements_path,
-                    "--options", "runtime",
-                    "--timestamp",
-                    "--deep",
-                    "--generate-entitlement-der",
-                    &app_bundle_path.join(app_name).display().to_string(),
-                ])
-                .stdout(Stdio::inherit())
-                .stderr(Stdio::inherit())
-                .status()
-                .map_err(|e| PistonError::CodesignError(e.to_string()))?;
+        // if ios {
+        //     // ==================== iOS SIGNING (two-step) ====================
+        //     println!("   → Signing iOS executable...");
 
-            if !status.success() {
-                return Err(PistonError::CodesignError("Failed to sign executable".to_string()));
-            }
-        }
+        //     let status = Command::new("codesign")
+        //         .args([
+        //             "--force",
+        //             "--sign", security_profile,
+        //             "--identifier", bundle_id,
+        //             "--entitlements", &entitlements_path,
+        //             "--options", "runtime",
+        //             "--timestamp",
+        //             "--deep",
+        //             "--generate-entitlement-der",
+        //             &app_bundle_path.join(app_name).display().to_string(),
+        //         ])
+        //         .stdout(Stdio::inherit())
+        //         .stderr(Stdio::inherit())
+        //         .status()
+        //         .map_err(|e| PistonError::CodesignError(e.to_string()))?;
+
+        //     if !status.success() {
+        //         return Err(PistonError::CodesignError("Failed to sign executable".to_string()));
+        //     }
+        // }
 
         // ==================== COMMON BUNDLE SIGNING ====================
         println!("   → Signing outer bundle...");
@@ -801,6 +805,35 @@ impl AscClient {
                     .to_string(),
             ));
         }
+        // let security_path = "/Users/testor/key.p12";
+        // let code_resources_path = "/Users/testor/CodeResources";
+
+        // println!("   → Signing outer bundle...");
+
+        // let mut args = vec![
+        //     "--p12-file", &security_path,
+        //     "--p12-password", "password",
+        //     "--entitlements-xml-file", &entitlements_path,
+        //     "--timestamp-url", "http://timestamp.apple.com/ts01",
+        //     "--code-resources-file", &code_resources_path,
+        //     &bundle_path,
+        // ];
+
+        // let status = Command::new("rcodesign")
+        //     .arg("sign")
+        //     .args(&args)
+        //     .stdout(Stdio::inherit())
+        //     .stderr(Stdio::inherit())
+        //     .output()
+        //     .map_err(|e| PistonError::CodesignError(format!("Failed to sign outer bundle: {}", e)))?;
+
+        // if !status.status.success() {
+        //     return Err(PistonError::CodesignError(
+        //         String::from_utf8_lossy(&status.stderr)
+        //             .trim()
+        //             .to_string(),
+        //     ));
+        // }
 
         println!("✅ {} bundle signed successfully!", if ios { "iOS" } else { "macOS" });
         Ok(())
