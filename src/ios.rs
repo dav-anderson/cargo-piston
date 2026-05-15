@@ -454,9 +454,7 @@ impl IOSBuilder {
             AscClient::sign_app_bundle(&app_name, &output_path, &security_profile, &bundle_id, true, false)?;
             //remove any existing .ipa
             let parent = output_path.parent().unwrap();
-            println!("Parent path is: {}", parent.display());
             let ipa_path = parent.join(format!("{}.ipa", &capitalized));
-            println!("IPA path is: {}", ipa_path.display());
             self.ipa_path = Some(ipa_path.clone());
             if ipa_path.as_path().exists() {
                 remove_file(&ipa_path).map_err(|e| PistonError::RemoveFileError {
@@ -474,18 +472,30 @@ impl IOSBuilder {
                 path: payload_path.to_path_buf(),
                 source: e,
             })?;
-            //copy app bundle contents to payload dir
-            let dest = payload_path.join(&capitalized);
-            copy(&bundle_path, &dest).map_err(|e| PistonError::CopyFileError {
+            //recursively copy app bundle contents to payload dir
+            let dest = payload_path.join(format!("{}.app", &capitalized));
+            let status = Command::new("cp")
+                .arg("-r")
+                .arg(&output_path)
+                .arg(&dest)
+                .output()
+                .map_err(|e| PistonError::CopyFileError {
                 input_path: output_path.clone().to_path_buf(),
                 output_path: dest.clone().to_path_buf(),
                 source: e,
             })?;
-            //zip contents of the payload to create an .ipa
+
+            if !status.status.success() {
+                return Err(PistonError::Generic(
+                    format!("error copying {} to {} Error message: {}",output_path.clone().display(), dest.clone().display(), String::from_utf8_lossy(&status.stderr))
+                ))
+            }
+            
             let status = Command::new("zip")
                 .arg("-r")
                 .arg(&ipa_path)
-                .arg(&payload_path)
+                .arg("Payload")
+                .current_dir(parent)
                 .output()
                 .map_err(|e| PistonError::Generic(format!("Error zipping payload: {}", e)))?;
 
