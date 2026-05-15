@@ -720,7 +720,7 @@ impl AscClient {
 
     //sign an ios or macos app bundle for App Store distribution
     pub fn sign_app_bundle(
-        app_name: &str,
+        _app_name: &str,
         app_bundle_path: &PathBuf,
         security_profile: &str,
         bundle_id: &str,

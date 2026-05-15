@@ -16,8 +16,9 @@ pub struct IOSBuilder {
     target: String,
     cwd: PathBuf,
     output_path: Option<PathBuf>,
+    ipa_path: Option<PathBuf>,
     icon_path: Option<String>,
-    assets: String,
+    _assets: String,
     cargo_path: String,
     app_name: String,
     app_version: String,
@@ -51,7 +52,7 @@ impl IOSBuilder {
         op.post_build()?;
 
         //return bundle output path and bundle id from cargo.toml & plist
-        Ok((op.output_path.unwrap(), op.bundle_id))
+        Ok((op.ipa_path.unwrap(), op.bundle_id))
     }
 
     fn new(release: bool, target: String, cwd: PathBuf, env_vars: HashMap<String, String>, device_target: Option<IOSDevice>) -> Result<Self, PistonError> {
@@ -86,8 +87,9 @@ impl IOSBuilder {
             target: target.to_string(), 
             cwd: cwd, 
             output_path: None, 
+            ipa_path: None,
             icon_path: icon_path,
-            assets: assets,
+            _assets: assets,
             cargo_path: cargo_path,
             app_name: app_name,
             app_version: app_version, 
@@ -446,12 +448,54 @@ impl IOSBuilder {
                     let app_name = self.app_name.clone();
                     //provision device here
                     asc_client.provision_ios_device(&target_id, &bundle_id, &app_name, &security_profile, &output_path, &idp_path, &provision_cache)?;
-                    AscClient::sign_app_bundle(&app_name, &output_path, &security_profile, &bundle_id, true, false)?;
-                    return Ok(())
                 }
             }
-            //sign the app bundle for distribution
+            //sign the app bundle
             AscClient::sign_app_bundle(&app_name, &output_path, &security_profile, &bundle_id, true, false)?;
+            //remove any existing .ipa
+            let parent = output_path.parent().unwrap();
+            println!("Parent path is: {}", parent.display());
+            let ipa_path = parent.join(format!("{}.ipa", &capitalized));
+            println!("IPA path is: {}", ipa_path.display());
+            self.ipa_path = Some(ipa_path.clone());
+            if ipa_path.as_path().exists() {
+                remove_file(&ipa_path).map_err(|e| PistonError::RemoveFileError {
+                    path: ipa_path.to_path_buf(),
+                    source: e,
+                })?;
+            }
+            //remove any existing payload dir and its contents
+            let payload_path = parent.join("Payload");
+            if payload_path.exists() {
+                let _ = fs::remove_dir_all(&payload_path);
+            }
+            //create ~/Payload dir
+            create_dir_all(&payload_path).map_err(|e| PistonError::CreateDirAllError {
+                path: payload_path.to_path_buf(),
+                source: e,
+            })?;
+            //copy app bundle contents to payload dir
+            let dest = payload_path.join(&capitalized);
+            copy(&bundle_path, &dest).map_err(|e| PistonError::CopyFileError {
+                input_path: output_path.clone().to_path_buf(),
+                output_path: dest.clone().to_path_buf(),
+                source: e,
+            })?;
+            //zip contents of the payload to create an .ipa
+            let status = Command::new("zip")
+                .arg("-r")
+                .arg(&ipa_path)
+                .arg(&payload_path)
+                .output()
+                .map_err(|e| PistonError::Generic(format!("Error zipping payload: {}", e)))?;
+
+            if !status.status.success() {
+                return Err(PistonError::Generic(format!("Error zipping payload: {}", String::from_utf8_lossy(&status.stderr))))
+            }
+            //cleanup temp payload dir
+            let _ = std::fs::remove_dir_all(payload_path);
+
+            println!("Your app is available at: {:?}", &ipa_path.display());
         }
         Ok(())
     }
@@ -479,17 +523,12 @@ impl IOSRunner{
 
     //TODO this is currently broken 
     fn deploy_usb(device_id: &str, output_path: &str, bundle_id: &str) -> Result<(), PistonError> {
-        //Make a .ipa payload
-        //TODO empty temp payload dir if it exists
-        //create temp payload dir
-        //zip temp payload dir into an .ipa
-        //remove temp payload dir
-        //install the .ipa instead of the .app
+
         // Force-remove any old version of the app (same bundle ID)
         let _ = Command::new("xcrun")
             .args(["devicectl", "device", "uninstall", "app", "--device", device_id, "--bundle-id", bundle_id])
             .output();
-        println!("installing app ID: {} to device: {}", bundle_id, device_id);
+        println!("installing app ID: {} located at: {} to device: {}", bundle_id, output_path, device_id);
         let output = Command::new("xcrun")
             .args(["devicectl", "device", "install", "app", "--device", &device_id, &output_path])
             .output()

@@ -93,16 +93,16 @@ impl Devices {
             Err(e) => return Err(PistonError::XcrunDevicectlError(e.to_string())),
         };
 
-        // Convert the output to a UTF-8 string.
+        // Convert the output to a UTF-8 string
         let stdout = match str::from_utf8(&output.stdout){
             Ok(o) => o,
             Err(e) => return Err(PistonError::ParseUTF8Error(e.to_string())),
         };
 
-        // Split the output into lines (matching the style of the original function).
+        // Split the output into lines
         let lines: Vec<String> = stdout.lines().map(str::to_string).collect();
 
-        let mut in_devices_section = false;
+        let mut _in_devices_section: bool = false;
 
         for line in &lines {
             let trimmed = line.trim();
@@ -111,16 +111,16 @@ impl Devices {
             }
 
             if trimmed == "== Devices ==" {
-                in_devices_section = true;
+                _in_devices_section = true;
                 continue;
             }
 
             if trimmed == "== Devices Offline ==" {
-                in_devices_section = false;
-                break; // No need to process anything after the offline section
+                _in_devices_section = false;
+                break; //Does not process anything in the offline section
             }
 
-            if !in_devices_section {
+            if !_in_devices_section {
                 continue;
             }
 
@@ -131,7 +131,7 @@ impl Devices {
 
             // Extract model and identifier.
             // The identifier is always inside the *last* set of parentheses.
-            // Model keeps any parentheses (e.g. "iPhone (26.4.2)").
+            //keeps any parentheses (e.g. "iPhone (26.4.2)").
             if let Some(last_open) = trimmed.rfind('(') {
                 if let Some(last_close) = trimmed.rfind(')') {
                     if last_open < last_close {
