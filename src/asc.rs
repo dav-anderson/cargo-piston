@@ -461,8 +461,8 @@ impl AscClient {
             }
         };
 
-        // 3. Create Ad Hoc profile
-        let profile_name = format!("{}-AdHoc", app_name);
+        // 3. Create Ad Hoc profile with a timestamp suffix
+        let profile_name = format!("{}-AdHoc-{}", app_name, std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs());
         let profile_id = {
             println!("Checking for existing Ad Hoc profile for this bundle...");
 
@@ -479,6 +479,8 @@ impl AscClient {
 
             let json: serde_json::Value = check.into_json()
                 .map_err(|e| PistonError::IntoJSONError(e.to_string()))?;
+
+            println!("Existing Profiles: {:?}", json);
             // Look for an existing Ad Hoc profile
             if let Some(existing) = json["data"].as_array().and_then(|arr| {
                 arr.iter().find(|p| {
@@ -489,6 +491,41 @@ impl AscClient {
                 existing["id"].as_str().unwrap().to_string()
             } else {
                 println!("No matching profile found → creating new one...");
+                //format the certifcate name to match ASC display name convention
+                let cert_name_trim = certificate_id.replace("Apple Distribution: ", "").split('(').next().unwrap_or(&certificate_id).trim().to_string();
+                // Fetch internal certificate ID
+                let cert_list = ureq::get("https://api.appstoreconnect.apple.com/v1/certificates")
+                    .set("Authorization", &format!("Bearer {}", token))
+                    .query("filter[certificateType]", "DISTRIBUTION")
+                    .call()
+                    .map_err(|e| PistonError::ASCClientUreqError {
+                        endpoint: "list certificates".to_string(),
+                        e: format!("Failed to list certificates: {}", e),
+                    })?;
+
+                let cert_json: serde_json::Value = cert_list.into_json()
+                    .map_err(|e| PistonError::IntoJSONError(e.to_string()))?;
+
+                println!("Certificate list: {:?}", cert_json);
+
+                let certificate_internal_id = cert_json["data"]
+                    .as_array()
+                    .and_then(|arr| {
+                        arr.iter().find(|cert| {
+                            cert["attributes"]["displayName"]
+                                .as_str()
+                                .map_or(false, |name| name.contains(&cert_name_trim))
+                        })
+                    })
+                    .and_then(|cert| cert["id"].as_str())
+                    .ok_or_else(|| PistonError::ASCClientUreqError {
+                        endpoint: "find certificate".to_string(),
+                        e: format!(
+                            "Could not find a Distribution certificate matching '{}'",
+                            cert_name_trim
+                        ),
+                    })?
+                    .to_string();
 
                 let body = json!({
                     "data": {
@@ -499,20 +536,37 @@ impl AscClient {
                         },
                         "relationships": {
                             "bundleId": { "data": { "type": "bundleIds", "id": bundle_resource_id } },
-                            "certificates": { "data": [{ "type": "certificates", "id": certificate_id }] },
+                            "certificates": { "data": [{ "type": "certificates", "id": certificate_internal_id }] },
                             "devices": { "data": [{ "type": "devices", "id": device_resource_id }] }
                         }
                     }
                 });
 
-                let create_resp = ureq::post("https://api.appstoreconnect.apple.com/v1/profiles")
+                println!("Create profile request body: {:?}", body);
+
+                let create_result = ureq::post("https://api.appstoreconnect.apple.com/v1/profiles")
                     .set("Authorization", &format!("Bearer {}", token))
                     .set("Content-Type", "application/json")
-                    .send_json(&body)
-                    .map_err(|e| PistonError::ASCClientUreqError {
-                        endpoint: "create profile".to_string(),
-                        e: format!("Profile creation failed: {}", e),
-                    })?;
+                    .send_json(&body);
+                let create_resp = match create_result {
+                    Ok(resp) => resp,
+                    Err(ureq::Error::Status(code, resp)) => {
+                        let body = resp.into_string().unwrap_or_default();
+                        println!("❌ Apple returned HTTP {} when creating profile", code);
+                        println!("Response body:\n{}", body);
+
+                        return Err(PistonError::ASCClientUreqError {
+                            endpoint: "create profile".to_string(),
+                            e: format!("Status {}: {}", code, body),
+                        });
+                    }
+                    Err(e) => {
+                        return Err(PistonError::ASCClientUreqError {
+                            endpoint: "create profile".to_string(),
+                            e: format!("Profile creation failed: {}", e),
+                        });
+                    }
+                };
 
                 let json: serde_json::Value = create_resp.into_json()
                     .map_err(|e| PistonError::IntoJSONError(e.to_string()))?;
@@ -771,25 +825,39 @@ impl AscClient {
         // }
 
         // ==================== COMMON BUNDLE SIGNING ====================
-        println!("   → Signing outer bundle...");
+        //TODO uncomment this block
 
-        let mut args = vec![
-            "--force",
-            "--sign", security_profile,
-            "--identifier", bundle_id,
+        // println!("   → Signing outer bundle...");
+
+        // let mut args = vec![
+        //     "--force",
+        //     "--sign", security_profile,
+        //     "--identifier", bundle_id,
+        //     "--entitlements", &entitlements_path,
+        //     "--timestamp",
+        //     "--deep",
+        //     "--generate-entitlement-der",
+        //     "--verbose",
+        //     &bundle_path,
+        // ];
+
+        // //only macOS App Store builds should NOT use --options runtime
+        // if ios || external {
+        //     args.insert(7, "--options");
+        //     args.insert(8, "runtime");
+        // }
+        println!("About to sign : {:?}", bundle_path);
+        //TODO this is a test block
+        let args = vec![
+            "--force", "--deep", 
+            "--options=runtime", 
+            "--sign", security_profile, 
             "--entitlements", &entitlements_path,
-            "--timestamp",
-            "--deep",
+            "--timestamp=none",
             "--generate-entitlement-der",
-            "--verbose",
-            &bundle_path,
+            "--preserve-metadata=identifier,entitlements,flags,runtime",
+            &bundle_path
         ];
-
-        //only macOS App Store builds should NOT use --options runtime
-        if ios || external {
-            args.insert(7, "--options");
-            args.insert(8, "runtime");
-        }
 
         let status = Command::new("codesign")
             .args(&args)

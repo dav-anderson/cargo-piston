@@ -392,6 +392,12 @@ impl IOSBuilder {
     fn post_build(&mut self) -> Result <(), PistonError>{
         println!("post build for ios");
         let provision_cache = self.cwd.join("target").join("ios-cache").join("profiles");
+        if !provision_cache.exists() {
+            create_dir_all(&provision_cache).map_err(|e| PistonError::CreateDirAllError {
+                path: provision_cache.to_path_buf(),
+                source: e,
+            })?;
+        }
         let binary_path = self.cwd.join("target").join(self.target.clone()).join(if self.release {"release"} else {"debug"}).join(self.app_name.clone());
         let capitalized = Helper::capitalize_first(&self.app_name.clone());
         let bundle_path = self.output_path.as_ref().unwrap().join(&capitalized);
@@ -447,6 +453,7 @@ impl IOSBuilder {
                     println!("attempting to provision target device {:?}", self.device_target);
                     let app_name = self.app_name.clone();
                     //provision device here
+                    //TODO change the security_profile parameter here to instead be the ASC internal certificate id rather than keychain id
                     asc_client.provision_ios_device(&target_id, &bundle_id, &app_name, &security_profile, &output_path, &idp_path, &provision_cache)?;
                 }
             }
