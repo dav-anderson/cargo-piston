@@ -462,6 +462,14 @@ if you do not set a bundle_id in your `Cargo.toml`, the bundle ID will default t
 
 if you do not set a min_os_version in your `Cargo.toml`, the mininimumOSVersion will default to 17.5
 
+## Streaming Install to USB connected iPhone
+
+To stream install an app to a USB tethered iOS device, ensure you first enable developer mode. To do this, go to `Settings > Privacy & Security > Developer Mode` and toggle it on.
+
+Also ensure you "trust" the device after connecting it to your Mac via the pop up dialogue. 
+
+Piston should take care of the rest. 
+
 
 # Android Output Configuration
 
@@ -665,3 +673,11 @@ country=<Two letter country code, example: 'US' for United States>
 ```
 
 If any of these metadata values are not provided they are be left as "Unknown" in the dname subject field of the release key's signature.
+
+## Streaming install to USB connected Android Phone
+
+To stream install an app to a USB tethered Android device, ensure you first enable developer mode. To do this, go to `Settings` and then `About Phone`. You will then need to quickly tap `Build Number` 7 times in short succession. After that `Developer Options` will appear in your settings menu.
+
+Also ensure you "trust" the device after connecting it to your PC/Mac via the dialogue popup.
+
+Piston should take care of the rest. 
