@@ -480,7 +480,6 @@ impl AscClient {
             let json: serde_json::Value = check.into_json()
                 .map_err(|e| PistonError::IntoJSONError(e.to_string()))?;
 
-            println!("Existing Profiles: {:?}", json);
             // Look for an existing Ad Hoc profile
             if let Some(existing) = json["data"].as_array().and_then(|arr| {
                 arr.iter().find(|p| {
@@ -505,8 +504,6 @@ impl AscClient {
 
                 let cert_json: serde_json::Value = cert_list.into_json()
                     .map_err(|e| PistonError::IntoJSONError(e.to_string()))?;
-
-                println!("Certificate list: {:?}", cert_json);
 
                 let certificate_internal_id = cert_json["data"]
                     .as_array()
@@ -541,8 +538,6 @@ impl AscClient {
                         }
                     }
                 });
-
-                println!("Create profile request body: {:?}", body);
 
                 let create_result = ureq::post("https://api.appstoreconnect.apple.com/v1/profiles")
                     .set("Authorization", &format!("Bearer {}", token))
@@ -798,6 +793,8 @@ impl AscClient {
         let provisioning_path = format!("{}/embedded.mobileprovision", app_bundle_parent.display());
         println!("Provisioning Path: {:?}", provisioning_path);
 
+        //TODO some alternative signing logic, keep this for now, make sure the app store uploads work, then remove if no longer needed
+        
         // if ios {
         //     // ==================== iOS SIGNING (two-step) ====================
         //     println!("   → Signing iOS executable...");
@@ -825,7 +822,6 @@ impl AscClient {
         // }
 
         // ==================== COMMON BUNDLE SIGNING ====================
-        //TODO uncomment this block
 
         // println!("   → Signing outer bundle...");
 
@@ -841,13 +837,12 @@ impl AscClient {
         //     &bundle_path,
         // ];
 
-        // //only macOS App Store builds should NOT use --options runtime
+        // //only macOS App Store builds should NOT use --options runtime?
         // if ios || external {
         //     args.insert(7, "--options");
         //     args.insert(8, "runtime");
         // }
         println!("About to sign : {:?}", bundle_path);
-        //TODO this is a test block
         let args = vec![
             "--force", "--deep", 
             "--options=runtime", 
@@ -873,35 +868,6 @@ impl AscClient {
                     .to_string(),
             ));
         }
-        // let security_path = "/Users/testor/key.p12";
-        // let code_resources_path = "/Users/testor/CodeResources";
-
-        // println!("   → Signing outer bundle...");
-
-        // let mut args = vec![
-        //     "--p12-file", &security_path,
-        //     "--p12-password", "password",
-        //     "--entitlements-xml-file", &entitlements_path,
-        //     "--timestamp-url", "http://timestamp.apple.com/ts01",
-        //     "--code-resources-file", &code_resources_path,
-        //     &bundle_path,
-        // ];
-
-        // let status = Command::new("rcodesign")
-        //     .arg("sign")
-        //     .args(&args)
-        //     .stdout(Stdio::inherit())
-        //     .stderr(Stdio::inherit())
-        //     .output()
-        //     .map_err(|e| PistonError::CodesignError(format!("Failed to sign outer bundle: {}", e)))?;
-
-        // if !status.status.success() {
-        //     return Err(PistonError::CodesignError(
-        //         String::from_utf8_lossy(&status.stderr)
-        //             .trim()
-        //             .to_string(),
-        //     ));
-        // }
 
         println!("✅ {} bundle signed successfully!", if ios { "iOS" } else { "macOS" });
         Ok(())
