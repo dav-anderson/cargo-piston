@@ -419,16 +419,11 @@ Find the full name of your desired security certificate in your keychain with th
 
 `security find-identity -v -p codesigning | grep "Developer ID"`
 
-Provide the full name of the certificate returned by the above command (including the ID in parantheses) in your `.env`
+Provide the full name of the certificate returned by the above command (including the team ID in parantheses) in your `.env`
 
 Example:
 
 `external_cert=Developer ID Application: Organiation Name (A8BCD8EFGH)`
-
-<!-- TODO THIS 
-
-make use of this `--keychain-profile "DeveloperID-Notary"`
--->
 
 You can now build & sign MacOS apps for external release.
 

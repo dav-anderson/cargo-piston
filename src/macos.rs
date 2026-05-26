@@ -356,8 +356,9 @@ impl MacOSBuilder {
 
             if !submit.status.success() || String::from_utf8_lossy(&submit.stdout).contains("status: Invalid") {
                 return Err(PistonError::Generic(format!(
-                    "notarytool submit failed: {}",
-                    String::from_utf8_lossy(&submit.stderr).trim()
+                    "notarytool submit failed: {} : {}",
+                    String::from_utf8_lossy(&submit.stderr).trim(),
+                    String::from_utf8_lossy(&submit.stdout).trim(),
                 )));
             }
 

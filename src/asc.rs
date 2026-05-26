@@ -790,69 +790,32 @@ impl AscClient {
 
         let entitlements_path = format!("{}/entitlements.plist", app_bundle_parent.display());
 
-        let provisioning_path = format!("{}/embedded.mobileprovision", app_bundle_parent.display());
-        println!("Provisioning Path: {:?}", provisioning_path);
+        //macOS App Store releases (i.e. ios == false && external == false) should NOT use --options=runtime
+        let mut args = if !ios && !external {
+            println!("signing for MacOS app store bundle");
+            vec![
+                "--force", "--deep",
+                "--sign", security_profile,
+                "--entitlements", &entitlements_path,
+                "--timestamp",
+                "--generate-entitlement-der",
+                &bundle_path,
+            ]
+        //macos external releases and ios
+        } else {
+            vec![
+                "--force", "--deep", 
+                "--options=runtime", 
+                "--sign", security_profile, 
+                "--entitlements", &entitlements_path,
+                "--timestamp=none",
+                "--generate-entitlement-der",
+                "--preserve-metadata=identifier,entitlements,flags,runtime",
+                &bundle_path
+            ]
+        };
 
-        //TODO some alternative signing logic, keep this for now, make sure the app store uploads work, then remove if no longer needed
-        
-        // if ios {
-        //     // ==================== iOS SIGNING (two-step) ====================
-        //     println!("   → Signing iOS executable...");
-
-        //     let status = Command::new("codesign")
-        //         .args([
-        //             "--force",
-        //             "--sign", security_profile,
-        //             "--identifier", bundle_id,
-        //             "--entitlements", &entitlements_path,
-        //             "--options", "runtime",
-        //             "--timestamp",
-        //             "--deep",
-        //             "--generate-entitlement-der",
-        //             &app_bundle_path.join(app_name).display().to_string(),
-        //         ])
-        //         .stdout(Stdio::inherit())
-        //         .stderr(Stdio::inherit())
-        //         .status()
-        //         .map_err(|e| PistonError::CodesignError(e.to_string()))?;
-
-        //     if !status.success() {
-        //         return Err(PistonError::CodesignError("Failed to sign executable".to_string()));
-        //     }
-        // }
-
-        // ==================== COMMON BUNDLE SIGNING ====================
-
-        // println!("   → Signing outer bundle...");
-
-        // let mut args = vec![
-        //     "--force",
-        //     "--sign", security_profile,
-        //     "--identifier", bundle_id,
-        //     "--entitlements", &entitlements_path,
-        //     "--timestamp",
-        //     "--deep",
-        //     "--generate-entitlement-der",
-        //     "--verbose",
-        //     &bundle_path,
-        // ];
-
-        // //only macOS App Store builds should NOT use --options runtime?
-        // if ios || external {
-        //     args.insert(7, "--options");
-        //     args.insert(8, "runtime");
-        // }
-        println!("About to sign : {:?}", bundle_path);
-        let args = vec![
-            "--force", "--deep", 
-            "--options=runtime", 
-            "--sign", security_profile, 
-            "--entitlements", &entitlements_path,
-            "--timestamp=none",
-            "--generate-entitlement-der",
-            "--preserve-metadata=identifier,entitlements,flags,runtime",
-            &bundle_path
-        ];
+        println!("signing command: {:?}", args);
 
         let status = Command::new("codesign")
             .args(&args)
