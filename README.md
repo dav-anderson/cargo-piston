@@ -1,3 +1,5 @@
+`cargo build` gives you a binary. Cargo Piston gives you a signed, installable app for every platform -- from one `Cargo.toml`.
+
 # How to Use Cargo Piston
 
 Cargo piston is a utility tool for easily building & running rust binaries on MacOS and Linux host machines. Features are currently limited to MacOS host machines only. This crate supports building outputs for all of the listed compatiable Android, Linux, MacOS, iOS, and Windows targets. Development is planned to support building all outputs on a Linux host machine, with the exception of MacOS and iOS outputs.
