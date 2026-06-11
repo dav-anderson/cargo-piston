@@ -414,6 +414,39 @@ impl AndroidBuilder {
         if !ar_path.exists() {
             return Err(PistonError::BuildError(format!("AR not found at {}", ar_path.display())));
         }
+
+
+
+        // handle cc crate linker for rusqlite
+        //format target triple to aarch64_linux_android
+        let target_underscored = self.target.replace('-', "_");
+
+        let cxx_name = if self.target == "armv7-linux-androideabi" {
+            format!("armv7a-linux-androideabi{}-clang++", api_level)
+        } else {
+            format!("{}{}-clang++", self.target, api_level)
+        };
+
+        let cxx_path = ndk_path_buf
+            .join("toolchains/llvm/prebuilt")
+            .join(&host_platform)
+            .join("bin")
+            .join(cxx_name);
+
+        if !cxx_path.exists() {
+            return Err(PistonError::BuildError(format!(
+                "C++ compiler not found at {}",
+                cxx_path.display()
+            )));
+        }
+
+        //match the style Cargo uses
+        // CC_aarch64_linux_android
+        let cc_env_key   = format!("CC_{}", target_underscored);
+        let cxx_env_key  = format!("CXX_{}", target_underscored);
+        // also used by cc
+        let ar_env_key_cc = format!("AR_{}", target_underscored);
+
         let target_upper = self.target.to_uppercase().replace("-", "_");
         let linker_env_key = format!("CARGO_TARGET_{}_LINKER", target_upper);
         let ar_env_key = format!("CARGO_TARGET_{}_AR", target_upper);
@@ -429,6 +462,9 @@ impl AndroidBuilder {
             .env("NDK_HOME", self.ndk_path.clone())
             .env(&linker_env_key, linker_path.to_str().unwrap())
             .env(&ar_env_key, ar_path.to_str().unwrap())
+            .env(&cc_env_key, linker_path.to_str().unwrap())
+            .env(&cxx_env_key, cxx_path.to_str().unwrap())
+            .env(&ar_env_key_cc, ar_path.to_str().unwrap())
             .stdout(Stdio::inherit())
             .stderr(Stdio::inherit())
             .output()
