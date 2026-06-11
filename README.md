@@ -11,11 +11,15 @@ Cargo piston is a global cargo crate. There are two ways you can install it..
 2. Or Obtain the source code locally via `git clone https://github.com/dav-anderson/cargo-piston` and then run the following command with the proper path to the source code
 `cargo install --path </path/to/cargo-piston>`
 
-Once you have cargo-piston installed (either locally within a repo or globally) and your `.env` and `Cargo.toml` are properly configured, you can use cargo-piston to build and run for various rust targets. Your desired build targets should be installed via rustup.
+After installation you must properly setup your `.env` and project `Cargo.toml` (show below). You also must install your desired build targets via rustup.
 
-Example
+For example if you want to app bundles build for MacOS devices you would want to add the following build targets:
 
 `rustup target add aarch64-apple-darwin`
+
+and 
+
+`rustup target add x86_64-apple-darwin`
 
 ## Example commands for using piston
 
