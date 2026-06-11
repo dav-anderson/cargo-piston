@@ -2,18 +2,31 @@
 
 # How to Use Cargo Piston
 
-Cargo piston is a utility tool for easily building & running rust binaries on MacOS and Linux host machines. Features are currently limited to MacOS host machines only. This crate supports building outputs for all of the listed compatiable Android, Linux, MacOS, iOS, and Windows targets. Development is planned to support building all outputs on a Linux host machine, with the exception of MacOS and iOS outputs.
+Cargo piston is a utility tool for easily building & running rust binaries on MacOS and Linux host machines. Features are currently limited to MacOS host machines only. This crate supports building outputs for all of the listed compatible Android, Linux, MacOS, iOS, and Windows targets. Development is planned to support building all outputs on a Linux host machine, with the exception of MacOS and iOS outputs.
 
 HOST MACHINE | SUPPORTED OUTPUTS
 ++++++++++++++++++++++++++++++++
 MacOS        | Android, iOS, MacOS, Linux, Windows
 Linux        | Future support for Android, Linux, and Windows planned
 
-Once you have cargo-piston installed (either locally within a repo or globally) and your `.env` and `Cargo.toml` are properly configured, you can use cargo-piston to build and run for various rust targets. Your desired targets should be installed via rustup and should match your host system's architecture.
+## Installing Piston
+Cargo piston is a global cargo crate. There are two ways you can install it. Choose option one unless you have a reason not to.
 
-Example
+1. Globally install the crate directly with
+`cargo install cargo-piston`
+
+2. Or Obtain the source code locally via `git clone https://github.com/dav-anderson/cargo-piston` and then run the following command with the proper path to the source code
+`cargo install --path </path/to/cargo-piston>`
+
+After installation you must properly setup your `.env` and project `Cargo.toml` (show below). You also must install your desired build targets via rustup.
+
+For example if you want to app bundles build for MacOS devices you would want to add the following build targets:
 
 `rustup target add aarch64-apple-darwin`
+
+and
+
+`rustup target add x86_64-apple-darwin`
 
 ## Example commands for using piston
 
@@ -116,10 +129,6 @@ icon_path = absolute/path/to/icon.png
 [package.metadata]
 assets_path = absolute/path/to/assets/directory
 ```
-
-## Installing locally from source
-Run the following command within your rust project repo to install the package locally
-`cargo install --path ../path/to/cargo-piston`
 
 # Windows Output Configuration
 
