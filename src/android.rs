@@ -415,8 +415,6 @@ impl AndroidBuilder {
             return Err(PistonError::BuildError(format!("AR not found at {}", ar_path.display())));
         }
 
-
-
         // handle cc crate linker for rusqlite
         //format target triple to aarch64_linux_android
         let target_underscored = self.target.replace('-', "_");
