@@ -143,6 +143,9 @@ version = "0.0.1"
 icon_path = absolute/path/to/icon.png
 ```
 
+An app icon is not required. If you do not supply one, a placeholder will be 
+substituted.
+
 ### Including assets
 
 ```
@@ -156,7 +159,8 @@ assets_path = absolute/path/to/assets/directory
 
 `brew install mingw-w64`
 
-After installing mingw-w64, add the path to the linker to your global `~/.cargo.config.toml`
+After installing mingw-w64, add the path to the linker to your global `~/.cargo/config.toml`.
+Create the config.toml if it doesn't already exist, then write the following:
 
 ```
 [target.x86_64-pc-windows-gnu]
