@@ -1,29 +1,36 @@
+`cargo build` gives you a binary. Cargo Piston gives you a signed, installable app for every platform -- from one `Cargo.toml`.
+
 # How to Use Cargo Piston
 
-Cargo piston is a utility tool for easily building & running rust binaries on MacOS and Linux host machines. Features are currently limited to MacOS host machines only. This crate supports building outputs for all of the listed compatiable Android, Linux, MacOS, iOS, and Windows targets. Development is planned to support building all outputs on a Linux host machine, with the exception of MacOS and iOS outputs.
+Cargo piston is a utility tool for easily building & running rust binaries on MacOS and Linux host machines. Features are currently limited to MacOS host machines only. This crate supports building outputs for all of the listed compatible Android, Linux, MacOS, iOS, and Windows targets. Development is planned to support building all outputs on a Linux host machine, with the exception of MacOS and iOS outputs.
+
+HOST MACHINE | SUPPORTED OUTPUTS
+++++++++++++++++++++++++++++++++
+MacOS        | Android, iOS, MacOS, Linux, Windows
+Linux        | Future support for Android, Linux, and Windows planned
 
 ## Installing Piston
-Cargo piston is a global cargo crate. There are two ways you can install it..
+Cargo piston is a global cargo crate. There are two ways you can install it. Choose option one unless you have a reason not to.
 
 1. Globally install the crate directly with
 `cargo install cargo-piston`
 
-2. Or Obtain the source code locally via `git clone https://github.com/dav-anderson/cargo-piston` and then run the following command with the proper path to the source code
+2. Or obtain the source code locally via `git clone https://github.com/dav-anderson/cargo-piston` and then run the following command with the proper path to the source code
 `cargo install --path </path/to/cargo-piston>`
 
-After installation you must properly setup your `.env` and project `Cargo.toml` (show below). You also must install your desired build targets via rustup.
+After installation you must properly setup your `.env` and project `Cargo.toml` (shown below). You also must install your desired build targets via rustup.
 
-For example if you want to app bundles build for MacOS devices you would want to add the following build targets:
+For example if you want to build for MacOS devices you would want to add the following build targets:
 
 `rustup target add aarch64-apple-darwin`
 
-and 
+and
 
 `rustup target add x86_64-apple-darwin`
 
 ## Example commands for using piston
 
-Build an app bundle for a target architecture. This command will build a Macos binary within a dynamically created app bundle derived from the information contained within your `Cargo.toml` and `.env`. This includes ordinarily tedious minutia such as an Info.plist and app icon configuration.
+Build an app bundle for a target architecture. This command will build a MacOS binary within a dynamically created app bundle derived from the information contained within your `Cargo.toml` and `.env`. This includes ordinarily tedious minutia such as an Info.plist and app icon configuration.
 
 `cargo piston build --target aarch64-apple-darwin`
 
@@ -65,7 +72,7 @@ The above command will guess the appropriate ios device based on the reachable c
 
 ## Tested & Supported Build Targets
 
-In theory this tool should support build targets for all of the supported Operting Systems, but they will only be added explicitly after being tested. If you test any of the unsupported targets in main.rs please open an Issue or Pull Request on the github repository.
+In theory this tool should support build targets for all of the supported operating systems, but they will only be added explicitly after being tested. If you test any of the unsupported targets in main.rs please open an Issue or Pull Request on the github repository.
 
 ### Windows
 
@@ -99,8 +106,28 @@ In theory this tool should support build targets for all of the supported Operti
 
 ## .ENV configuration
 
-### Path to cargo binary (if not in your local PATH) example
+Cargo Piston reads its configuration from a `.env` file in your project root — the directory
+you run `cargo piston` from.
+
+Piston utilizes `cargo`, so it needs to be able to locate it. `cargo`'s file path needs to 
+match the file path in the .env. If `cargo` is on your PATH, Piston can usually find it
+automatically. Check with: 
+
+`which cargo`
+
+If that prints a path, cargo is on your PATH. If it prints nothing, set
+`cargo_path` in the .env so piston knows where to look:
+
+Replace `<username>` with your actual username (run `whoami` if you're unsure).
+
 `cargo_path=/Users/<username>/.cargo/bin/cargo`
+
+To verify, run that exact path with `--version`:
+
+`/Users/<username>/.cargo/bin/cargo --version`
+
+A printed cargo version means it's correct. "No such file or directory" means the
+path is wrong — compare it against the output of `which cargo`.
 
 ## General Cargo.toml configuration 
 
@@ -116,6 +143,9 @@ version = "0.0.1"
 icon_path = absolute/path/to/icon.png
 ```
 
+An app icon is not required. If you do not supply one, a placeholder will be 
+substituted.
+
 ### Including assets
 
 ```
@@ -129,7 +159,8 @@ assets_path = absolute/path/to/assets/directory
 
 `brew install mingw-w64`
 
-After installing mingw-w64, add the path to the linker to your global `~/.cargo.config.toml`
+After installing mingw-w64, add the path to the linker to your global `~/.cargo/config.toml`.
+Create the config.toml if it doesn't already exist, then write the following:
 
 ```
 [target.x86_64-pc-windows-gnu]
