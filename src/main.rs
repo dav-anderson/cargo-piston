@@ -368,6 +368,7 @@ let cwd = match env::current_dir(){
             println!("(Dry run mode enabled)");
         }
     }
+
     PistonSubCmd::Run(args) =>{
         let cmd = Subcommand::new(args.common.subcommand_args)
             .map_err(|e| PistonError::Generic(format!("Error parsing subcommand :{}", e)))?;
@@ -442,13 +443,9 @@ fn test_platform_from_target() {
     assert!(matches!(Platform::from_target("some-unknown-target"), Platform::Unknown));
 }
 
-//TODO refactor main to use custom error types and remove anyhow as a dep
-
 //TODO refactor most of main into a lib.rs
 
-//TODO implement automated signing for iOS*, MacOS, Windows, and Android outputs
-
-//*ios is impelemented, however, device deployment currently breaks on the install phase due to a misread of the Info.plist CFBUndleIdentifier, open issue
+//TODO implement automated signing for Windows
 
 //TODO extensive android permissions for intent filters
 //TODO extensive macos/ios permissions 
