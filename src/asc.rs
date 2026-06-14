@@ -20,24 +20,54 @@ pub struct AscApiKey {
 
 impl AscApiKey {
     //parse the ASC API key information from the .env
-    pub fn from_hm(env: &HashMap<String, String>) -> Result<Self, String> {
-        let key_id = env.get("asc_key_id")
-            .ok_or("Missing ASC_KEY_ID in .env")
+    pub fn from_hm(env: &HashMap<String, String>) -> Result<Self, PistonError> {
+        let key_id = env
+            .get("asc_key_id")
+            .ok_or_else(|| PistonError::Generic("Missing ASC_KEY_ID in .env".to_string()))?
             .clone();
 
-        let issuer_id = env.get("asc_issuer_id")
-            .ok_or("Missing ASC_ISSUER_ID in .env")
-            .clone();
-        
-        let p8_path = env.get("asc_key_path")
-            .ok_or("Missing ASC_KEY_PATH in .env")
+        let issuer_id = env
+            .get("asc_issuer_id")
+            .ok_or_else(|| PistonError::Generic("Missing ASC_ISSUER_ID in .env".to_string()))?
             .clone();
 
-        let priv_key = fs::read_to_string(&p8_path.unwrap())
-            .map_err(|e| format!("failed to read .p8 file at {:?}: {:?}", p8_path, e))?;
+        let p8_path = env
+            .get("asc_key_path")
+            .ok_or_else(|| PistonError::Generic("Missing ASC_KEY_PATH in .env".to_string()))?
+            .clone();
 
-        Ok(Self { key_id: key_id.unwrap().to_string(), issuer_id: issuer_id.unwrap().to_string(), priv_key: priv_key})
+        let priv_key = fs::read_to_string(&p8_path)
+            .map_err(|e| {
+                PistonError::Generic(format!(
+                    "failed to read .p8 file at {}: {}",
+                    p8_path, e
+                ))
+            })?;
+
+        Ok(Self {
+            key_id,
+            issuer_id,
+            priv_key,
+        })
     }
+    // pub fn from_hm(env: &HashMap<String, String>) -> Result<Self, String> {
+    //     let key_id = env.get("asc_key_id")
+    //         .ok_or("Missing ASC_KEY_ID in .env")
+    //         .clone();
+
+    //     let issuer_id = env.get("asc_issuer_id")
+    //         .ok_or("Missing ASC_ISSUER_ID in .env")
+    //         .clone();
+        
+    //     let p8_path = env.get("asc_key_path")
+    //         .ok_or("Missing ASC_KEY_PATH in .env")
+    //         .clone();
+
+    //     let priv_key = fs::read_to_string(&p8_path.unwrap())
+    //         .map_err(|e| format!("failed to read .p8 file at {:?}: {:?}", p8_path, e))?;
+
+    //     Ok(Self { key_id: key_id.unwrap().to_string(), issuer_id: issuer_id.unwrap().to_string(), priv_key: priv_key})
+    // }
 }
 
 #[derive(Debug)]
@@ -777,7 +807,7 @@ impl AscClient {
         _app_name: &str,
         app_bundle_path: &PathBuf,
         security_profile: &str,
-        bundle_id: &str,
+        _bundle_id: &str,
         ios: bool,
         external: bool,
     ) -> Result<(), PistonError> {
@@ -796,7 +826,7 @@ impl AscClient {
         let entitlements_path = format!("{}/entitlements.plist", app_bundle_parent.display());
 
         //macOS App Store releases (i.e. ios == false && external == false) should NOT use --options=runtime
-        let mut args = if !ios && !external {
+        let args = if !ios && !external {
             println!("signing for MacOS app store bundle");
             vec![
                 "--force", "--deep",
