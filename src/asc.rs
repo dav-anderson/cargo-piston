@@ -50,24 +50,6 @@ impl AscApiKey {
             priv_key,
         })
     }
-    // pub fn from_hm(env: &HashMap<String, String>) -> Result<Self, String> {
-    //     let key_id = env.get("asc_key_id")
-    //         .ok_or("Missing ASC_KEY_ID in .env")
-    //         .clone();
-
-    //     let issuer_id = env.get("asc_issuer_id")
-    //         .ok_or("Missing ASC_ISSUER_ID in .env")
-    //         .clone();
-        
-    //     let p8_path = env.get("asc_key_path")
-    //         .ok_or("Missing ASC_KEY_PATH in .env")
-    //         .clone();
-
-    //     let priv_key = fs::read_to_string(&p8_path.unwrap())
-    //         .map_err(|e| format!("failed to read .p8 file at {:?}: {:?}", p8_path, e))?;
-
-    //     Ok(Self { key_id: key_id.unwrap().to_string(), issuer_id: issuer_id.unwrap().to_string(), priv_key: priv_key})
-    // }
 }
 
 #[derive(Debug)]
