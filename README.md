@@ -330,7 +330,7 @@ After you've installed the X code app and command line tools, point xcode-select
 
 Any app that is compiled with piston will automatically be signed for apple app store distribution, provided automated signing is properly configured.
 
-First, create an App Store Connect API key through your apple developer portal at the following URL. This MUST be an admin key. A developer key will not have sufficient priveleges to access the device provisioning endpoints.
+First, create an App Store Connect API key through your apple developer portal at the following URL. **This MUST be an admin key**. A developer key will not have sufficient privileges to access the device provisioning endpoints.
 
 `appstoreconnect.apple.com/access/integrations/api`
 
