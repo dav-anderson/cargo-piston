@@ -336,51 +336,52 @@ First, create an App Store Connect API key through your apple developer portal a
 
 After creating and downloading the API key, add your `asc_key_path` to the `.env`
 
-When downloaded from apple developer portal, the key file will look like this
+When downloaded from apple developer portal, the key file will look like this:
 
-`~/Downloads/AuthKey_1AB23CDEFG.p8`
+`/Users/<user>/Downloads/AuthKey_H5W64CHCLD.p8`
 
 `asc_key_path=path/to/authkey`
 
-Also add the `asc_key_id` and the `asc_issuer_id` to the `.env`, these items are obtainable from `appstoreconnect.apple.com/access/integrations/api`. The `asc_issuer_ID` can be found at the top of the key list, and the  The `asc_key_id` can be found in the row corresponding to the key you've chosen. This `asc_key_id` should match the filename of the key you've selected in the `asc_key_path`.
+Also add the `asc_key_id` and the `asc_issuer_id` to the `.env`, these items are obtainable from `appstoreconnect.apple.com/access/integrations/api`. The `asc_issuer_id` can be found at the top of the key list, and the  The `asc_key_id` can be found in the row corresponding to the key you've chosen. This `asc_key_id` should match the filename of the key you've selected in the `asc_key_path`.
 
 Next provide your full legal name in the `.env`. This should match the full name associated with your apple developer account.
 
-`dev_name=my name`
+`dev_name=Bob Smith`
 
-Lastly provide the full path to your keystore in the `.env`
+Lastly provide the full path to your MacOS keychain directory in the `.env`:
 
-`keystore_path=/Users/<$USER>/Library/Keychains`
+`keystore_path=/Users/<username>/Library/Keychains`
 
 Eventually the rest of this should be automated, but for now...
 
-Download the apple developer worldwide security relations cert
+Download the Apple Worldwide Developer Relations cert:
 
-`curl -o full/path/to/keystore/AppleWWDRCA.cer https://www.apple.com/certificateauthority/AppleWWDRCAG3.cer`
+`curl -o /Users/<username>/Library/Keychains/AppleWWDRCA.cer https://www.apple.com/certificateauthority/AppleWWDRCAG3.cer`
 
-Add `AppleWWDRCA.cer` to the security chain
+Add `AppleWWDRCA.cer` to the security chain:
 
-`security import full/path/to/keystore/AppleWWDRCA.cer -k full/path/to/keystore/login.keychain-db`
+`security import /Users/<username>/Library/Keychains/AppleWWDRCA.cer -k /Users/<username>/Library/Keychains/login.keychain-db`
 
-Download the App Developer Worldwide Developer Relations Certification Authority Certificate
+Download the Apple Root CA cert:
 
-`curl -o full/path/to/keystore/AppleRootCA.cer https://www.apple.com/certificateauthority/AppleRootCA-G3.cer`
+`curl -o /Users/<username>/Library/Keychains/AppleRootCA.cer https://www.apple.com/certificateauthority/AppleRootCA-G3.cer`
 
-Add `AppleRootCA.cer` to the security chain
+Add `AppleRootCA.cer` to the security chain:
 
-`security import full/path/to/keystore/AppleRootCA.cer -k full/path/to/keystore/login.keychain-db`
+`security import /Users/<username>/Library/Keychains/AppleRootCA.cer -k /Users/<username>/Library/Keychains/login.keychain-db`
 
-Download the Developer ID Authority Certificate
+Download the Developer ID Authority Certificate:
 
-`curl -o full/path/to/keystore/AppleDevIDCA.cer https://www.apple.com/certificateauthority/DeveloperIDG2CA.cer`
+`curl -o /Users/<username>/Library/Keychains/AppleDevIDCA.cer https://www.apple.com/certificateauthority/DeveloperIDG2CA.cer`
 
-Add `AppleDevIDCA.cer` to the security chain
+Add `AppleDevIDCA.cer` to the security chain:
 
-`security import full/path/to/keystore/AppleDevIDCA.cer -k full/path/to/keystore/login.keychain-db`
+`security import /Users/<username>/Library/Keychains/AppleDevIDCA.cer -k /Users/<username>/Library/Keychains/login.keychain-db`
 
 ## Universal binary
 
-Universal binaries are automatically created via lipo when you pass in the `--release` flag to a macos target build command. For example running the following command will automatically create a universal binary in the output bundle that will run on either arm64 or x86_64 architecture.
+Universal binaries are automatically created via lipo when you pass in the `--release` flag to a macos target build command. For example running the following command will automatically create a universal binary in the output bundle that will run on either arm64 or x86_64 architecture. This is because
+the Apple App Store requires macOS apps satisfy both arm64 and x86_64 architectures.
 
 `cargo piston build --target aarch64-apple-darwin --release`
 
