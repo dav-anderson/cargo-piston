@@ -338,7 +338,7 @@ After creating and downloading the API key, add your `asc_key_path` to the `.env
 
 When downloaded from apple developer portal, the key file will look like this:
 
-`/Users/<user>/Downloads/AuthKey_H5W64CHCLD.p8`
+`/Users/<user>/Downloads/AuthKey_1AB23CDEFG.p8`
 
 `asc_key_path=path/to/authkey`
 
