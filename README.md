@@ -4,10 +4,12 @@
 
 Cargo piston is a utility tool for easily building & running rust binaries on MacOS and Linux host machines. Features are currently limited to MacOS host machines only. This crate supports building outputs for all of the listed compatible Android, Linux, MacOS, iOS, and Windows targets. Development is planned to support building all outputs on a Linux host machine, with the exception of MacOS and iOS outputs.
 
+```
 HOST MACHINE | SUPPORTED OUTPUTS
 ++++++++++++++++++++++++++++++++
 MacOS        | Android, iOS, MacOS, Linux, Windows
 Linux        | Future support for Android, Linux, and Windows planned
+```
 
 ## Installing Piston
 Cargo piston is a global cargo crate. There are two ways you can install it. Choose option one unless you have a reason not to.
@@ -328,57 +330,57 @@ After you've installed the X code app and command line tools, point xcode-select
 
 Any app that is compiled with piston will automatically be signed for apple app store distribution, provided automated signing is properly configured.
 
-First, create an App Store Connect API key through your apple developer portal at the following URL. This MUST be an admin key. A developer key will not have sufficient priveleges to access the device provisioning endpoints.
+First, create an App Store Connect API key through your apple developer portal at the following URL. **This MUST be an admin key**. A developer key will not have sufficient privileges to access the device provisioning endpoints.
 
 `appstoreconnect.apple.com/access/integrations/api`
 
 After creating and downloading the API key, add your `asc_key_path` to the `.env`
 
-When downloaded from apple developer portal, the key file will look like this
+When downloaded from apple developer portal, the key file will look like this:
 
-`~/Downloads/AuthKey_1AB23CDEFG.p8`
+`/Users/<user>/Downloads/AuthKey_1AB23CDEFG.p8`
 
 `asc_key_path=path/to/authkey`
 
-Also add the `asc_key_id` and the `asc_issuer_id` to the `.env`, these items are obtainable from `appstoreconnect.apple.com/access/integrations/api`. The `asc_issuer_ID` can be found at the top of the key list, and the  The `asc_key_id` can be found in the row corresponding to the key you've chosen. This `asc_key_id` should match the filename of the key you've selected in the `asc_key_path`.
+Also add the `asc_key_id` and the `asc_issuer_id` to the `.env`, these items are obtainable from `appstoreconnect.apple.com/access/integrations/api`. The `asc_issuer_id` can be found at the top of the key list, and the  The `asc_key_id` can be found in the row corresponding to the key you've chosen. This `asc_key_id` should match the filename of the key you've selected in the `asc_key_path`.
 
 Next provide your full legal name in the `.env`. This should match the full name associated with your apple developer account.
 
-`dev_name=my name`
+`dev_name=Bob Smith`
 
-Lastly provide the full path to your keystore in the `.env`
+Lastly provide the full path to your MacOS keychain directory in the `.env`:
 
-`keystore_path=/Users/<$USER>/Library/Keychains`
+`keystore_path=/Users/<username>/Library/Keychains`
 
 Eventually the rest of this should be automated, but for now...
 
-Download the apple developer worldwide security relations cert
+Download the Apple Worldwide Developer Relations cert:
 
-`curl -o full/path/to/keystore/AppleWWDRCA.cer https://www.apple.com/certificateauthority/AppleWWDRCAG3.cer`
+`curl -o /Users/<username>/Library/Keychains/AppleWWDRCA.cer https://www.apple.com/certificateauthority/AppleWWDRCAG3.cer`
 
-Add `AppleWWDRCA.cer` to the security chain
+Add `AppleWWDRCA.cer` to the security chain:
 
-`security import full/path/to/keystore/AppleWWDRCA.cer -k full/path/to/keystore/login.keychain-db`
+`security import /Users/<username>/Library/Keychains/AppleWWDRCA.cer -k /Users/<username>/Library/Keychains/login.keychain-db`
 
-Download the App Developer Worldwide Developer Relations Certification Authority Certificate
+Download the Apple Root CA cert:
 
-`curl -o full/path/to/keystore/AppleRootCA.cer https://www.apple.com/certificateauthority/AppleRootCA-G3.cer`
+`curl -o /Users/<username>/Library/Keychains/AppleRootCA.cer https://www.apple.com/certificateauthority/AppleRootCA-G3.cer`
 
-Add `AppleRootCA.cer` to the security chain
+Add `AppleRootCA.cer` to the security chain:
 
-`security import full/path/to/keystore/AppleRootCA.cer -k full/path/to/keystore/login.keychain-db`
+`security import /Users/<username>/Library/Keychains/AppleRootCA.cer -k /Users/<username>/Library/Keychains/login.keychain-db`
 
-Download the Developer ID Authority Certificate
+Download the Developer ID Authority Certificate:
 
-`curl -o full/path/to/keystore/AppleDevIDCA.cer https://www.apple.com/certificateauthority/DeveloperIDG2CA.cer`
+`curl -o /Users/<username>/Library/Keychains/AppleDevIDCA.cer https://www.apple.com/certificateauthority/DeveloperIDG2CA.cer`
 
-Add `AppleDevIDCA.cer` to the security chain
+Add `AppleDevIDCA.cer` to the security chain:
 
-`security import full/path/to/keystore/AppleDevIDCA.cer -k full/path/to/keystore/login.keychain-db`
+`security import /Users/<username>/Library/Keychains/AppleDevIDCA.cer -k /Users/<username>/Library/Keychains/login.keychain-db`
 
 ## Universal binary
 
-Universal binaries are automatically created via lipo when you pass in the `--release` flag to a macos target build command. For example running the following command will automatically create a universal binary in the output bundle that will run on either arm64 or x86_64 architecture.
+Universal binaries are automatically created via lipo when you pass in the `--release` flag to a macos target build command. For example running the following command will automatically create a universal binary in the output bundle that will run on either arm64 or x86_64 architecture. The Apple App store requires MacOS binaries to be universal.
 
 `cargo piston build --target aarch64-apple-darwin --release`
 
@@ -390,7 +392,7 @@ In order to sign apps for external release you must use a special macos specific
 
 To obtain the proper security certificate, you must access the AppStore Connect security certificate wizard via your organization's account holder. This process will not work with a child account, even with administrative priveleges. 
 
-First create a new keypair with openssl
+First create a new keypair with openssl:
 
 `openssl genrsa -out ~/<key_name>.key> 2048`
 
@@ -421,7 +423,7 @@ Convert this `.cer` file to a `.pem` file
 
 `openssl x509 -inform der -in ~/Downloads/developerID_application.cer -out ~/developerID_application.pem`
 
-Bundle the key and the converted security certificate into a .p12, remember the pasword, you'll need it the next step
+Bundle the key and the converted security certificate into a .p12, remember the password, you'll need it the next step
 
 ```
 openssl pkcs12 -export \
@@ -484,7 +486,7 @@ Install libimobile device via homebrew (if you wish to deploy directly to iOS de
 
 Set the path to libimobile device's `ideviceprovision` bin in your `.env` (if you wish to deploy directly to iOS devices via USB cable). 
 
-Note: this can be found in your homebrew bin dir typically `/opt/homebrew/bin` on sillicone architecture or `/usr/local/bin` on intel architecture.
+Note: this can be found in your homebrew bin dir typically `/opt/homebrew/bin` on silicon architecture or `/usr/local/bin` on intel architecture.
 
 `idp_path=/path/to/ideviceprovision`
 
