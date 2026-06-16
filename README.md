@@ -384,7 +384,7 @@ Universal binaries are automatically created via lipo when you pass in the `--re
 
 `cargo piston build --target aarch64-apple-darwin --release`
 
-## External Release
+## External Release (Optional)
 
 Distributing MacOS apps outside of the Apple App Store follows a different release process. This process cannot be fully automated via the ASC API key. 
 
@@ -470,7 +470,9 @@ Example:
 You can now build & sign MacOS apps for external release.
 
 
-## IOS Output Configuration (MACOS ONLY & after completing the MacOS setup above)
+## IOS Output Configuration (MACOS HOST ONLY & after completing the MacOS setup above)
+
+External release setup (above) is not required for iOS because iOS apps cannot be distributed outside of the App store.
 
 ### Install the Xcode IOS SDK
 
