@@ -392,7 +392,7 @@ In order to sign apps for external release you must use a special macos specific
 
 To obtain the proper security certificate, you must access the AppStore Connect security certificate wizard via your organization's account holder. This process will not work with a child account, even with administrative priveleges. 
 
-First create a new keypair with openssl
+First create a new keypair with openssl:
 
 `openssl genrsa -out ~/<key_name>.key> 2048`
 
@@ -423,7 +423,7 @@ Convert this `.cer` file to a `.pem` file
 
 `openssl x509 -inform der -in ~/Downloads/developerID_application.cer -out ~/developerID_application.pem`
 
-Bundle the key and the converted security certificate into a .p12, remember the pasword, you'll need it the next step
+Bundle the key and the converted security certificate into a .p12, remember the password, you'll need it the next step
 
 ```
 openssl pkcs12 -export \
@@ -486,7 +486,7 @@ Install libimobile device via homebrew (if you wish to deploy directly to iOS de
 
 Set the path to libimobile device's `ideviceprovision` bin in your `.env` (if you wish to deploy directly to iOS devices via USB cable). 
 
-Note: this can be found in your homebrew bin dir typically `/opt/homebrew/bin` on sillicone architecture or `/usr/local/bin` on intel architecture.
+Note: this can be found in your homebrew bin dir typically `/opt/homebrew/bin` on silicon architecture or `/usr/local/bin` on intel architecture.
 
 `idp_path=/path/to/ideviceprovision`
 
