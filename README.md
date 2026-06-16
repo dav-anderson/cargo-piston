@@ -380,7 +380,7 @@ Add `AppleDevIDCA.cer` to the security chain:
 
 ## Universal binary
 
-Universal binaries are automatically created via lipo when you pass in the `--release` flag to a macos target build command. For example running the following command will automatically create a universal binary in the output bundle that will run on either arm64 or x86_64 architecture. This is because
+Universal binaries are automatically created via lipo when you pass in the `--release` flag to a macos target build command. For example running the following command will automatically create a universal binary in the output bundle that will run on either arm64 or x86_64 architecture. The Apple App store requires MacOS binaries to be universal.
 the Apple App Store requires macOS apps satisfy both arm64 and x86_64 architectures.
 
 `cargo piston build --target aarch64-apple-darwin --release`
