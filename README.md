@@ -587,16 +587,23 @@ Download the file
 
 Create an install dir and unzip the file (replace $HOME with your absolute path)
 
-`mkdir <$HOME>/Android/sdk`
+`mkdir -p <$HOME>/Android/sdk`
 
 `unzip -o </path/to/downloads>/cmdline-tools.zip -d <$HOME>/Android/sdk`
 
+The cmdline-tools zip unpacks to a flat layout (`cmdline-tools/bin`, `cmdline-tools/lib`, ...), but sdkmanager requires the tools to live under a versioned `latest` directory. Restructure it:
+
+`cd <$HOME>/Android/sdk/cmdline-tools`
+
+`mkdir latest`
+
+`mv bin lib NOTICE.txt source.properties latest/`
 
 Accept android SDK licenses
 
-`yes | JAVA_HOME=<PATH/TO/JAVA> sudo <$HOME>/Android/sdk/cmdline-tools/bin/sdkmanager --licenses --sdk_root=<$HOME>/Android/sdk || echo "Failed to accept the license"`
+`yes | JAVA_HOME=<PATH/TO/JAVA> <$HOME>/Android/sdk/cmdline-tools/latest/bin/sdkmanager --licenses --sdk_root=<$HOME>/Android/sdk || echo "Failed to accept the license"`
 
-Note: if you installed java manually instead of using the installer you may need to set the JAVA_HOME var in your PATH or pass in the environment variabnle as shown above and below.
+Note: if you installed java manually instead of using the installer you may need to set the JAVA_HOME var in your PATH or pass in the environment variable as shown above and below.
 
 ## Install Android SDK & NDK
 
