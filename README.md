@@ -514,6 +514,13 @@ Also ensure you "trust" the device after connecting it to your Mac via the pop u
 
 Piston should take care of the rest. 
 
+If Developer Mode does not appear as an option under `Settings > Privacy & Security > Developer Mode`, run these two commands sequentially with your device connected via USB:
+
+`xcrun devicectl list devices`
+
+`xcrun xctrace list devices`
+
+After running these two commands you should see the toggle for Developer Mode in `Settings > Privacy & Security > Developer Mode`.
 
 # Android Output Configuration
 

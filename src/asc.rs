@@ -1,15 +1,14 @@
-use serde_json::json;
-use serde::{ Serialize, Deserialize };
-use std::collections::{ HashMap, HashSet };
-use std::fs;
-use std::path::PathBuf;
-use std::process::{ Command, Stdio };
-use ureq::Response;
-use base64::prelude::*;
-use std::time::{SystemTime, UNIX_EPOCH};
-use std::io::Write;
 use crate::PistonError;
-
+use base64::prelude::*;
+use serde::{Deserialize, Serialize};
+use serde_json::json;
+use std::collections::{HashMap, HashSet};
+use std::fs;
+use std::io::Write;
+use std::path::PathBuf;
+use std::process::{Command, Stdio};
+use std::time::{SystemTime, UNIX_EPOCH};
+use ureq::Response;
 
 #[derive(Debug, Clone)]
 pub struct AscApiKey {
@@ -36,13 +35,9 @@ impl AscApiKey {
             .ok_or_else(|| PistonError::Generic("Missing ASC_KEY_PATH in .env".to_string()))?
             .clone();
 
-        let priv_key = fs::read_to_string(&p8_path)
-            .map_err(|e| {
-                PistonError::Generic(format!(
-                    "failed to read .p8 file at {}: {}",
-                    p8_path, e
-                ))
-            })?;
+        let priv_key = fs::read_to_string(&p8_path).map_err(|e| {
+            PistonError::Generic(format!("failed to read .p8 file at {}: {}", p8_path, e))
+        })?;
 
         Ok(Self {
             key_id,
@@ -128,7 +123,7 @@ impl AscClient {
                 )));
             }
         };
-        return Ok(team_id)
+        return Ok(team_id);
     }
 
     // Creates or re-uses a universal security certificate
@@ -165,10 +160,14 @@ impl AscClient {
         let status = Command::new("security")
             .args(["show-keychain-info", &keychain_path])
             .output()
-            .map_err(|e| PistonError::KeyChainUnlockError(format!("Failed to check keychain: {}", e)))?;
+            .map_err(|e| {
+                PistonError::KeyChainUnlockError(format!("Failed to check keychain: {}", e))
+            })?;
 
         if String::from_utf8_lossy(&status.stdout).contains("locked") {
-            return Err(PistonError::KeyChainUnlockError("User cancelled keychain unlock".to_string()));
+            return Err(PistonError::KeyChainUnlockError(
+                "User cancelled keychain unlock".to_string(),
+            ));
         }
         println!("✅ Keychain unlocked");
 
@@ -176,18 +175,20 @@ impl AscClient {
 
         println!("Checking for existing {} certificate in ASC...", id_type);
 
-        let list_resp: Response = ureq::get("https://api.appstoreconnect.apple.com/v1/certificates")
-            .set("Authorization", &format!("Bearer {}", token))
-            .query("filter[certificateType]", cert_type)
-            .call()
-            .map_err(|e| PistonError::ASCClientUreqError {
-                endpoint: "list certificates".to_string(),
-                e: format!("Failed to list certificates: {}", e),
-            })?;
+        let list_resp: Response =
+            ureq::get("https://api.appstoreconnect.apple.com/v1/certificates")
+                .set("Authorization", &format!("Bearer {}", token))
+                .query("filter[certificateType]", cert_type)
+                .call()
+                .map_err(|e| PistonError::ASCClientUreqError {
+                    endpoint: "list certificates".to_string(),
+                    e: format!("Failed to list certificates: {}", e),
+                })?;
 
-        let json: serde_json::Value = list_resp.into_json()
+        let json: serde_json::Value = list_resp
+            .into_json()
             .map_err(|e| PistonError::IntoJSONError(e.to_string()))?;
-        
+
         //reuse existing certificate if possible
         if let Some(existing) = json["data"].as_array().and_then(|arr| arr.first()) {
             let cert_name = existing["attributes"]["name"]
@@ -195,20 +196,29 @@ impl AscClient {
                 .unwrap_or("Unknown")
                 .to_string();
 
-            println!("Found existing {} certificate in ASC: {}", id_type, cert_name);
+            println!(
+                "Found existing {} certificate in ASC: {}",
+                id_type, cert_name
+            );
 
             // Check if it actually exists locally in keychain
             let check = Command::new("security")
                 .args(["find-identity", "-v", "-p", "codesigning"])
                 .output()
-                .map_err(|e| PistonError::KeyChainImportError(format!("Failed to check keychain: {}", e)))?;
+                .map_err(|e| {
+                    PistonError::KeyChainImportError(format!("Failed to check keychain: {}", e))
+                })?;
 
             let output = String::from_utf8_lossy(&check.stdout);
 
-            if output.contains(&cert_name){
+            if output.contains(&cert_name) {
                 println!("✅ Certificate also found in local keychain → reusing");
                 //parse the team id from the local security profiles in the keychain if override is not set
-                let team_id = if team_id_override.is_none() {self.parse_team_id(&output, &cert_name)?} else {team_id_override.unwrap()};
+                let team_id = if team_id_override.is_none() {
+                    self.parse_team_id(&output, &cert_name)?
+                } else {
+                    team_id_override.unwrap()
+                };
                 //cache the security credentials locally
                 self.save_cert_cache(&team_id, &cert_name, &cache_dir);
                 return Ok((team_id, cert_name));
@@ -231,7 +241,16 @@ impl AscClient {
             .map_err(|e| PistonError::OpenSSLKeyGenError(format!("keygen failed: {}", e)))?;
 
         let _ = Command::new("openssl")
-            .args(["req", "-new", "-key", key_path, "-out", csr_path, "-subj", "/CN=Distribution Certificate"])
+            .args([
+                "req",
+                "-new",
+                "-key",
+                key_path,
+                "-out",
+                csr_path,
+                "-subj",
+                "/CN=Distribution Certificate",
+            ])
             .output()
             .map_err(|e| PistonError::OpenSSLCSRError(format!("csr failed: {}", e)))?;
 
@@ -254,11 +273,13 @@ impl AscClient {
             .set("Content-Type", "application/json")
             .send_json(&body)
             .map_err(|e| PistonError::ASCClientUreqError {
-                endpoint: "upload CSR: https://api.appstoreconnect.apple.com/v1/certificates".to_string(),
+                endpoint: "upload CSR: https://api.appstoreconnect.apple.com/v1/certificates"
+                    .to_string(),
                 e: format!("Upload failed: {}", e),
             })?;
 
-        let json: serde_json::Value = create_resp.into_json()
+        let json: serde_json::Value = create_resp
+            .into_json()
             .map_err(|e| PistonError::IntoJSONError(e.to_string()))?;
 
         println!("JSON RESP: {:?}", json);
@@ -273,7 +294,6 @@ impl AscClient {
             .as_str()
             .ok_or_else(|| PistonError::Generic("No certificateContent returned".to_string()))?;
 
-
         let cert_der = BASE64_STANDARD
             .decode(cert_b64)
             .map_err(|e| PistonError::Base64DecodeError(format!("Decode failed: {}", e)))?;
@@ -284,24 +304,42 @@ impl AscClient {
 
         // Import key + cert
         let import_key = Command::new("security")
-            .args(["import", key_path, "-k", &keychain_path, self.keystore_path.as_ref(), "-P", ""])
+            .args([
+                "import",
+                key_path,
+                "-k",
+                &keychain_path,
+                self.keystore_path.as_ref(),
+                "-P",
+                "",
+            ])
             .output()
             .map_err(|e| PistonError::KeyChainImportError(format!("Key import failed: {}", e)))?;
 
         if !import_key.status.success() {
             return Err(PistonError::KeyChainImportError(
-                String::from_utf8_lossy(&import_key.stderr).trim().to_string()
+                String::from_utf8_lossy(&import_key.stderr)
+                    .trim()
+                    .to_string(),
             ));
         }
 
         let import_cert = Command::new("security")
-            .args(["import", cer_path, "-k", &keychain_path, self.keystore_path.as_ref()])
+            .args([
+                "import",
+                cer_path,
+                "-k",
+                &keychain_path,
+                self.keystore_path.as_ref(),
+            ])
             .output()
             .map_err(|e| PistonError::KeyChainImportError(format!("Cert import failed: {}", e)))?;
 
         if !import_cert.status.success() {
             return Err(PistonError::KeyChainImportError(
-                String::from_utf8_lossy(&import_cert.stderr).trim().to_string()
+                String::from_utf8_lossy(&import_cert.stderr)
+                    .trim()
+                    .to_string(),
             ));
         }
 
@@ -309,16 +347,25 @@ impl AscClient {
         let check = Command::new("security")
             .args(["find-identity", "-v", "-p", "codesigning"])
             .output()
-            .map_err(|e| PistonError::KeyChainImportError(format!("Failed to check keychain: {}", e)))?;
+            .map_err(|e| {
+                PistonError::KeyChainImportError(format!("Failed to check keychain: {}", e))
+            })?;
         let output = String::from_utf8_lossy(&check.stdout);
-        let team_id = if team_id_override.is_none() {self.parse_team_id(&output, &cert_name)?} else {team_id_override.unwrap()};
+        let team_id = if team_id_override.is_none() {
+            self.parse_team_id(&output, &cert_name)?
+        } else {
+            team_id_override.unwrap()
+        };
 
         // Cleanup
         let _ = fs::remove_file(key_path);
         let _ = fs::remove_file(csr_path);
         let _ = fs::remove_file(cer_path);
 
-        println!("✅ New {} certificate created and imported (TEAM_ID: {}, CERT_NAME: {})", id_type, team_id, cert_name);
+        println!(
+            "✅ New {} certificate created and imported (TEAM_ID: {}, CERT_NAME: {})",
+            id_type, team_id, cert_name
+        );
         //cache the security credentials locally
         self.save_cert_cache(&team_id, &cert_name, &cache_dir);
         Ok((team_id, cert_name))
@@ -329,7 +376,8 @@ impl AscClient {
         let exp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
-            .as_secs() as usize + 1200;
+            .as_secs() as usize
+            + 1200;
 
         #[derive(Serialize, Deserialize)]
         struct Claims {
@@ -347,13 +395,18 @@ impl AscClient {
         let mut header = jsonwebtoken::Header::new(jsonwebtoken::Algorithm::ES256);
         header.kid = Some(self.api_key.as_ref().unwrap().key_id.clone());
 
-        let key = jsonwebtoken::EncodingKey::from_ec_pem(self.api_key.clone().unwrap().priv_key.as_bytes())
-            .map_err(|e| PistonError::ASCClientParseEncodingKeyError(format!("Invalid .pem key: {}", e)))?;
+        let key = jsonwebtoken::EncodingKey::from_ec_pem(
+            self.api_key.clone().unwrap().priv_key.as_bytes(),
+        )
+        .map_err(|e| {
+            PistonError::ASCClientParseEncodingKeyError(format!("Invalid .pem key: {}", e))
+        })?;
 
-        jsonwebtoken::encode(&header, &claims, &key).map_err(|e| PistonError::ASCClientJWTEncodeError(e.to_string()) )
+        jsonwebtoken::encode(&header, &claims, &key)
+            .map_err(|e| PistonError::ASCClientJWTEncodeError(e.to_string()))
     }
 
-    //Registers device if needed → creates/re-uses profile → 
+    //Registers device if needed → creates/re-uses profile →
     // downloads .mobileprovision → embeds it → installs to device → extracts entitlements.plist
     pub fn provision_ios_device(
         &self,
@@ -362,11 +415,14 @@ impl AscClient {
         app_name: &str,
         certificate_id: &str,
         app_bundle_path: &PathBuf,
-        ideviceprovision_path: &str, 
+        ideviceprovision_path: &str,
         provision_cache: &PathBuf,
     ) -> Result<(), PistonError> {
         let token = self.generate_jwt()?;
-        println!("Provisioning device {} for app '{}' (bundle {})", device_id, app_name, bundle_id);
+        println!(
+            "Provisioning device {} for app '{}' (bundle {})",
+            device_id, app_name, bundle_id
+        );
         // // 1. Register device if missing
         println!("checking if device {} is registered with ASC", device_id);
         let device_resource_id = {
@@ -379,7 +435,8 @@ impl AscClient {
                     e: format!("Device check failed: {}", e),
                 })?;
 
-            let json: serde_json::Value = check.into_json()
+            let json: serde_json::Value = check
+                .into_json()
                 .map_err(|e| PistonError::IntoJSONError(e.to_string()))?;
             println!("Device registration: {}", json);
 
@@ -398,20 +455,43 @@ impl AscClient {
                         }
                     }
                 });
-
-                let resp = ureq::post("https://api.appstoreconnect.apple.com/v1/devices")
+                let result = ureq::post("https://api.appstoreconnect.apple.com/v1/devices")
                     .set("Authorization", &format!("Bearer {}", token))
                     .set("Content-Type", "application/json")
-                    .send_json(&body)
-                    .map_err(|e| PistonError::ASCClientUreqError {
-                        endpoint: "register device".to_string(),
-                        e: format!("Registration failed: {}", e),
-                    })?;
+                    .send_json(&body);
 
-                let json: serde_json::Value = resp.into_json()
+                let resp = match result {
+                    Ok(r) => r,
+                    Err(ureq::Error::Status(code, response)) => {
+                        // This block runs on HTTP errors (4xx, 5xx)
+                        let body = response.into_string().unwrap_or_default();
+
+                        println!("=== APPLE ERROR RESPONSE ===");
+                        println!("Status: {}", code);
+                        println!("Body:\n{}", body);
+                        println!("============================");
+
+                        return Err(PistonError::ASCClientUreqError {
+                            endpoint: "register device".to_string(),
+                            e: format!("Apple returned {}: {}", code, body),
+                        });
+                    }
+                    Err(e) => {
+                        return Err(PistonError::ASCClientUreqError {
+                            endpoint: "register device".to_string(),
+                            e: format!("Request failed: {}", e),
+                        });
+                    }
+                };
+                // Success path
+                let json: serde_json::Value = resp
+                    .into_json()
                     .map_err(|e| PistonError::IntoJSONError(e.to_string()))?;
 
-                json["data"]["id"].as_str().unwrap().to_string()
+                println!("{}", serde_json::to_string_pretty(&json).unwrap());
+
+                let device_id = json["data"]["id"].as_str().unwrap().to_string();
+                device_id
             }
         };
         // 2. Get or create Bundle ID
@@ -427,7 +507,8 @@ impl AscClient {
                     e: format!("Bundle check failed, if the status code is 409, try setting a new and unique bundle id in your cargo.toml: {}", e),
                 })?;
 
-            let json: serde_json::Value = check.into_json()
+            let json: serde_json::Value = check
+                .into_json()
                 .map_err(|e| PistonError::IntoJSONError(e.to_string()))?;
 
             if let Some(existing) = json["data"].as_array().and_then(|a| a.first()) {
@@ -458,7 +539,8 @@ impl AscClient {
                 let status = resp.status();
 
                 if (200..300).contains(&status) {
-                    let json: serde_json::Value = resp.into_json()
+                    let json: serde_json::Value = resp
+                        .into_json()
                         .map_err(|e| PistonError::IntoJSONError(e.to_string()))?;
                     let id = json["data"]["id"].as_str().unwrap().to_string();
                     println!("✅ Bundle ID created successfully");
@@ -474,7 +556,14 @@ impl AscClient {
         };
 
         // 3. Create Ad Hoc profile with a timestamp suffix
-        let profile_name = format!("{}-AdHoc-{}", app_name, std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs());
+        let profile_name = format!(
+            "{}-AdHoc-{}",
+            app_name,
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_secs()
+        );
         let profile_id = {
             println!("Checking for existing Ad Hoc profile for this bundle...");
 
@@ -489,22 +578,28 @@ impl AscClient {
                 e: format!("Profile check failed: {}", e),
             })?;
 
-            let json: serde_json::Value = check.into_json()
+            let json: serde_json::Value = check
+                .into_json()
                 .map_err(|e| PistonError::IntoJSONError(e.to_string()))?;
 
             println!("Existing Profiles: {:?}", json);
             // Look for an existing Ad Hoc profile
             if let Some(existing) = json["data"].as_array().and_then(|arr| {
-                arr.iter().find(|p| {
-                    p["attributes"]["profileType"].as_str() == Some("IOS_APP_ADHOC")
-                })
+                arr.iter()
+                    .find(|p| p["attributes"]["profileType"].as_str() == Some("IOS_APP_ADHOC"))
             }) {
                 println!("✅ Existing matching Ad Hoc profile found");
                 existing["id"].as_str().unwrap().to_string()
             } else {
                 println!("No matching profile found → creating new one...");
                 //format the certifcate name to match ASC display name convention
-                let cert_name_trim = certificate_id.replace("Apple Distribution: ", "").split('(').next().unwrap_or(&certificate_id).trim().to_string();
+                let cert_name_trim = certificate_id
+                    .replace("Apple Distribution: ", "")
+                    .split('(')
+                    .next()
+                    .unwrap_or(&certificate_id)
+                    .trim()
+                    .to_string();
                 // Fetch internal certificate ID
                 let cert_list = ureq::get("https://api.appstoreconnect.apple.com/v1/certificates")
                     .set("Authorization", &format!("Bearer {}", token))
@@ -515,7 +610,8 @@ impl AscClient {
                         e: format!("Failed to list certificates: {}", e),
                     })?;
 
-                let cert_json: serde_json::Value = cert_list.into_json()
+                let cert_json: serde_json::Value = cert_list
+                    .into_json()
                     .map_err(|e| PistonError::IntoJSONError(e.to_string()))?;
 
                 println!("Certificate list: {:?}", cert_json);
@@ -580,7 +676,8 @@ impl AscClient {
                     }
                 };
 
-                let json: serde_json::Value = create_resp.into_json()
+                let json: serde_json::Value = create_resp
+                    .into_json()
                     .map_err(|e| PistonError::IntoJSONError(e.to_string()))?;
 
                 json["data"]["id"].as_str().unwrap().to_string()
@@ -599,14 +696,14 @@ impl AscClient {
             e: format!("Profile download failed: {}", e),
         })?;
 
-        let dl_json: serde_json::Value = dl_resp.into_json()
+        let dl_json: serde_json::Value = dl_resp
+            .into_json()
             .map_err(|e| PistonError::IntoJSONError(e.to_string()))?;
 
         let b64 = dl_json["data"]["attributes"]["profileContent"]
             .as_str()
             .ok_or_else(|| PistonError::Generic("No profileContent returned".to_string()))?;
 
-        
         let profile_data = BASE64_STANDARD
             .decode(b64)
             .map_err(|e| PistonError::Base64DecodeError(format!("Decode failed: {}", e)))?;
@@ -629,11 +726,13 @@ impl AscClient {
         let install = Command::new(ideviceprovision_path)
             .args(["install", &embedded_path, "--udid", device_id])
             .output()
-            .map_err(|e| PistonError::DeviceProvisionError(format!("ideviceprovision failed: {}", e)))?;
+            .map_err(|e| {
+                PistonError::DeviceProvisionError(format!("ideviceprovision failed: {}", e))
+            })?;
 
         if !install.status.success() {
             return Err(PistonError::DeviceProvisionError(
-                String::from_utf8_lossy(&install.stderr).trim().to_string()
+                String::from_utf8_lossy(&install.stderr).trim().to_string(),
             ));
         }
 
@@ -648,7 +747,10 @@ impl AscClient {
         // Cleanup
         let _ = fs::remove_file(profile_path);
 
-        println!("✅ Provisioning complete for '{}' → entitlements.plist ready", app_name);
+        println!(
+            "✅ Provisioning complete for '{}' → entitlements.plist ready",
+            app_name
+        );
         Ok(())
     }
 
@@ -670,11 +772,12 @@ impl AscClient {
             </dict>
             </plist>"#;
 
-            fs::write(&entitlements_path, content.trim())
-                .map_err(|e| PistonError::WriteFileError(format!("Failed to write entitlements.plist: {}", e)))?;
+            fs::write(&entitlements_path, content.trim()).map_err(|e| {
+                PistonError::WriteFileError(format!("Failed to write entitlements.plist: {}", e))
+            })?;
 
             println!("Created minimal entitlements.plist for Distribution");
-            return Ok(())
+            return Ok(());
         }
         //build entitlements for a target device based on an embedded.mobileprovision
         let cms = Command::new("security")
@@ -683,19 +786,31 @@ impl AscClient {
             .map_err(|e| PistonError::Generic(format!("security cms failed: {}", e)))?;
 
         let mut plutil = Command::new("plutil")
-            .args(["-extract", "Entitlements", "xml1", "-o", entitlements_path.to_str().unwrap(), "-"])
+            .args([
+                "-extract",
+                "Entitlements",
+                "xml1",
+                "-o",
+                entitlements_path.to_str().unwrap(),
+                "-",
+            ])
             .stdin(Stdio::piped())
             .spawn()
             .map_err(|e| PistonError::Generic(format!("plutil spawn failed: {}", e)))?;
 
         if let Some(mut stdin) = plutil.stdin.take() {
-            stdin.write_all(&cms.stdout).map_err(|e| PistonError::WritePlUtilError(format!("Failed to write plutil file: {}", e)))?;
+            stdin.write_all(&cms.stdout).map_err(|e| {
+                PistonError::WritePlUtilError(format!("Failed to write plutil file: {}", e))
+            })?;
         }
 
-        let result = plutil.wait_with_output()
+        let result = plutil
+            .wait_with_output()
             .map_err(|e| PistonError::Generic(format!("plutil failed: {}", e)))?;
         if !result.status.success() {
-            return Err(PistonError::Generic("Failed to extract entitlements.plist".to_string()));
+            return Err(PistonError::Generic(
+                "Failed to extract entitlements.plist".to_string(),
+            ));
         }
 
         println!("✅ Entitlements.plist extracted from embedded profile");
@@ -714,15 +829,17 @@ impl AscClient {
 
         // Look for ANY .mobileprovision in the bundle
         println!("reading contents of: {:?}", provision_cache.display());
-        let entries = fs::read_dir(provision_cache)
-            .map_err(|e| PistonError::ReadDirError { path: provision_cache.clone(), source: e })?;
+        let entries = fs::read_dir(provision_cache).map_err(|e| PistonError::ReadDirError {
+            path: provision_cache.clone(),
+            source: e,
+        })?;
 
         let mut profile_files = vec![];
         for entry in entries {
-            let entry = entry.map_err(|e| PistonError::MapDirError{
+            let entry = entry.map_err(|e| PistonError::MapDirError {
                 path: provision_cache.to_path_buf(),
                 source: e,
-        })?;
+            })?;
             let name = entry.file_name().to_string_lossy().into_owned();
             println!("found: {}", name);
             if name.ends_with(".mobileprovision") {
@@ -741,7 +858,7 @@ impl AscClient {
             let output = Command::new("security")
                 .args(["cms", "-D", "-i", profile_path.to_str().unwrap()])
                 .output()
-                .map_err(|e| PistonError::QueryProvisionError{
+                .map_err(|e| PistonError::QueryProvisionError {
                     path: profile_path.to_path_buf(),
                     source: e,
                 })?;
@@ -750,7 +867,10 @@ impl AscClient {
             let target = format!("<string>{}</string>", device_id);
             println!("Looking for {} in xml dump", target);
             if xml.contains(&target) {
-                println!("✅ Target device is listed in provisioning profile: {}", profile_path.display());
+                println!(
+                    "✅ Target device is listed in provisioning profile: {}",
+                    profile_path.display()
+                );
 
                 // Check if it's installed on the device
                 println!("checking if selected profile is installed on target device");
@@ -759,22 +879,33 @@ impl AscClient {
                     .output();
                 let list_res = list.unwrap();
                 if !list_res.status.success() {
-                    return Err(PistonError::Generic(format!("Failed to list provisioning profiles with IDP")))
+                    return Err(PistonError::Generic(format!(
+                        "Failed to list provisioning profiles with IDP"
+                    )));
                 }
                 let installed = String::from_utf8_lossy(&list_res.stdout);
                 println!("list response: {:?}", installed);
                 let target_partial = profile_path.file_name().unwrap().to_str().unwrap();
-                let target = target_partial.rsplit_once('.').map(|(stem, _extension)| stem.to_string()).unwrap_or(target_partial.to_string());
+                let target = target_partial
+                    .rsplit_once('.')
+                    .map(|(stem, _extension)| stem.to_string())
+                    .unwrap_or(target_partial.to_string());
                 println!("Checking if installed list contains: {:?}", target);
                 if installed.contains(&target) {
                     let target_path = app_bundle_path.join("embedded.mobileprovision");
-                    println!("Cached provisioning profile is valid, copying: {:?} to: {:?}", profile_path.display(), target_path.display());
-                    fs::copy(&profile_path, &target_path).map_err(|e| PistonError::CopyFileError {
-                        input_path: profile_path.clone(),
-                        output_path: target_path.clone(),
-                        source: e,
+                    println!(
+                        "Cached provisioning profile is valid, copying: {:?} to: {:?}",
+                        profile_path.display(),
+                        target_path.display()
+                    );
+                    fs::copy(&profile_path, &target_path).map_err(|e| {
+                        PistonError::CopyFileError {
+                            input_path: profile_path.clone(),
+                            output_path: target_path.clone(),
+                            source: e,
+                        }
                     })?;
-                    
+
                     return Ok(true);
                 }
             }
@@ -794,7 +925,12 @@ impl AscClient {
         external: bool,
     ) -> Result<(), PistonError> {
         let bundle_path = app_bundle_path.display().to_string();
-        println!("🔏 Signing {} bundle: {} with security profile: {}", if ios { "iOS" } else { "macOS" }, bundle_path, security_profile);
+        println!(
+            "🔏 Signing {} bundle: {} with security profile: {}",
+            if ios { "iOS" } else { "macOS" },
+            bundle_path,
+            security_profile
+        );
 
         // Remove any old signature
         let code_signature_dir = app_bundle_path.join("_CodeSignature");
@@ -811,9 +947,12 @@ impl AscClient {
         let args = if !ios && !external {
             println!("signing for MacOS app store bundle");
             vec![
-                "--force", "--deep",
-                "--sign", security_profile,
-                "--entitlements", &entitlements_path,
+                "--force",
+                "--deep",
+                "--sign",
+                security_profile,
+                "--entitlements",
+                &entitlements_path,
                 "--timestamp",
                 "--generate-entitlement-der",
                 &bundle_path,
@@ -821,14 +960,17 @@ impl AscClient {
         //macos external releases and ios
         } else {
             vec![
-                "--force", "--deep", 
-                "--options=runtime", 
-                "--sign", security_profile, 
-                "--entitlements", &entitlements_path,
+                "--force",
+                "--deep",
+                "--options=runtime",
+                "--sign",
+                security_profile,
+                "--entitlements",
+                &entitlements_path,
                 "--timestamp=none",
                 "--generate-entitlement-der",
                 "--preserve-metadata=identifier,entitlements,flags,runtime",
-                &bundle_path
+                &bundle_path,
             ]
         };
 
@@ -839,17 +981,21 @@ impl AscClient {
             .stdout(Stdio::inherit())
             .stderr(Stdio::inherit())
             .output()
-            .map_err(|e| PistonError::CodesignError(format!("Failed to sign outer bundle: {}", e)))?;
+            .map_err(|e| {
+                PistonError::CodesignError(format!("Failed to sign outer bundle: {}", e))
+            })?;
 
         if !status.status.success() {
             return Err(PistonError::CodesignError(
-                String::from_utf8_lossy(&status.stderr)
-                    .trim()
-                    .to_string(),
+                String::from_utf8_lossy(&status.stderr).trim().to_string(),
             ));
         }
 
-        println!("✅ {} bundle signed successfully!", if ios { "iOS" } else { "macOS" });
+        println!(
+            "✅ {} bundle signed successfully!",
+            if ios { "iOS" } else { "macOS" }
+        );
         Ok(())
     }
 }
+
