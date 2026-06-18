@@ -526,28 +526,32 @@ After running these two commands you should see the toggle for Developer Mode in
 
 ## Install Java
 
-Install Java and provide the path to the installation in your `.env` file
-
+Install the Java JDK and provide the path to the installation in your `.env` file.
+<!--
 One option is to download the Java installer
 
 `https://www.oracle.com/in/java/technologies/downloads/#jdk25-mac`
+-->
 
-
-Example terminal install command (Macos)
+The recommended way to get the Java JDK is to install OpenJDK 17 via Homebrew (Macos). Alternative versions, such as Oracle's JDK 25 are experimental:
 
 `brew install openjdk@17`
 
-set the path to the binary in your `.env`
+Homebrew is the Apple community's de facto package manager. If you do not yet have Homebrew installed, follow the instructions here:
+
+<https://brew.sh>
+
+Set the path to the binary in your `.env`:
 
 Example `.env` entries (Macos)
 
 macos arm64 installer
 `/usr/bin/java`
 
-aarch64 (homebrew)
-`java_path=/opt/homebrew/openjdk@17`
+arm64 (homebrew)
+`java_path=/opt/homebrew/opt/openjdk@17`
 
-silicone chipset (homebrew)
+Intel chipset (homebrew)
 `java_path=/usr/local/opt/openjdk@17`
 
 Example install command (Linux)
