@@ -89,12 +89,14 @@ impl Devices {
     }
 
     fn populate_ios(&mut self) -> Result<(), PistonError> {
+        // Run the command `xcrun xctrace list devices`
         let output = Command::new("xcrun")
             .args(["xctrace", "list", "devices"])
             .stdout(Stdio::piped())
             .output()
             .map_err(|e| PistonError::XcrunDevicectlError(e.to_string()))?;
 
+        // Convert the output to a UTF-8 string
         let stdout = str::from_utf8(&output.stdout)
             .map_err(|e| PistonError::ParseUTF8Error(e.to_string()))?;
 
@@ -129,6 +131,7 @@ impl Devices {
                 continue;
             }
 
+            // Extract model and identifier.
             // Extract model and ID from the last parentheses
             if let (Some(last_open), Some(last_close)) = (trimmed.rfind('('), trimmed.rfind(')')) {
                 if last_open < last_close {
@@ -182,4 +185,3 @@ impl Devices {
         }
     }
 }
-
