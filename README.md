@@ -514,33 +514,44 @@ Also ensure you "trust" the device after connecting it to your Mac via the pop u
 
 Piston should take care of the rest. 
 
+If Developer Mode does not appear as an option under `Settings > Privacy & Security > Developer Mode`, run these two commands sequentially with your device connected via USB:
+
+`xcrun devicectl list devices`
+
+`xcrun xctrace list devices`
+
+After running these two commands you should see the toggle for Developer Mode in `Settings > Privacy & Security > Developer Mode`.
 
 # Android Output Configuration
 
 ## Install Java
 
-Install Java and provide the path to the installation in your `.env` file
-
+Install the Java JDK and provide the path to the installation in your `.env` file.
+<!--
 One option is to download the Java installer
 
 `https://www.oracle.com/in/java/technologies/downloads/#jdk25-mac`
+-->
 
-
-Example terminal install command (Macos)
+The recommended way to get the Java JDK is to install OpenJDK 17 via Homebrew (Macos). Alternative versions, such as Oracle's JDK 25 are experimental:
 
 `brew install openjdk@17`
 
-set the path to the binary in your `.env`
+Homebrew is the Apple community's de facto package manager. If you do not yet have Homebrew installed, follow the instructions here:
+
+<https://brew.sh>
+
+Set the path to the binary in your `.env`:
 
 Example `.env` entries (Macos)
 
 macos arm64 installer
 `/usr/bin/java`
 
-aarch64 (homebrew)
-`java_path=/opt/homebrew/openjdk@17`
+arm64 (homebrew)
+`java_path=/opt/homebrew/opt/openjdk@17`
 
-silicone chipset (homebrew)
+Intel chipset (homebrew)
 `java_path=/usr/local/opt/openjdk@17`
 
 Example install command (Linux)
@@ -576,16 +587,23 @@ Download the file
 
 Create an install dir and unzip the file (replace $HOME with your absolute path)
 
-`mkdir <$HOME>/Android/sdk`
+`mkdir -p <$HOME>/Android/sdk`
 
 `unzip -o </path/to/downloads>/cmdline-tools.zip -d <$HOME>/Android/sdk`
 
+The cmdline-tools zip unpacks to a flat layout (`cmdline-tools/bin`, `cmdline-tools/lib`, ...), but sdkmanager requires the tools to live under a versioned `latest` directory. Restructure it:
+
+`cd <$HOME>/Android/sdk/cmdline-tools`
+
+`mkdir latest`
+
+`mv bin lib NOTICE.txt source.properties latest/`
 
 Accept android SDK licenses
 
-`yes | JAVA_HOME=<PATH/TO/JAVA> sudo <$HOME>/Android/sdk/cmdline-tools/bin/sdkmanager --licenses --sdk_root=<$HOME>/Android/sdk || echo "Failed to accept the license"`
+`yes | JAVA_HOME=<PATH/TO/JAVA> <$HOME>/Android/sdk/cmdline-tools/latest/bin/sdkmanager --licenses --sdk_root=<$HOME>/Android/sdk || echo "Failed to accept the license"`
 
-Note: if you installed java manually instead of using the installer you may need to set the JAVA_HOME var in your PATH or pass in the environment variabnle as shown above and below.
+Note: if you installed java manually instead of using the installer you may need to set the JAVA_HOME var in your PATH or pass in the environment variable as shown above and below.
 
 ## Install Android SDK & NDK
 

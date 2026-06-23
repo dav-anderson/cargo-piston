@@ -1,13 +1,13 @@
+use crate::error::PistonError;
 use std::collections::HashMap;
 use std::path::Path;
 use std::process::Command;
 use std::process::Stdio;
-use crate::error::PistonError;
 
 #[derive(Debug, Clone)]
 pub struct IOSDevice {
-pub model: String,
-pub id: String,
+    pub model: String,
+    pub id: String,
 }
 
 #[derive(Debug, Clone)]
@@ -23,7 +23,10 @@ pub struct Devices {
 }
 
 impl Devices {
-    pub fn list_devices(env_vars: HashMap<String, String>, silent: bool) -> Result<Self, PistonError> {
+    pub fn list_devices(
+        env_vars: HashMap<String, String>,
+        silent: bool,
+    ) -> Result<Self, PistonError> {
         //new devices struct
         let mut devices = Devices {
             ios: Vec::new(),
@@ -35,7 +38,7 @@ impl Devices {
         //query Android devices if adb_path is configured in .env
         if Path::new(&adb_path).exists() {
             devices.populate_android(adb_path)?;
-        }else{
+        } else {
             println!("Android installation not found");
         }
         //query iOS devices if on MacOS
@@ -50,7 +53,7 @@ impl Devices {
         Ok(devices)
     }
 
-    pub fn populate_android(&mut self, adb_path: String) -> Result<(), PistonError>{
+    pub fn populate_android(&mut self, adb_path: String) -> Result<(), PistonError> {
         //Run the command `adb devices`
         let output = match Command::new(adb_path).arg("devices").output() {
             Ok(o) => o,
@@ -83,65 +86,60 @@ impl Devices {
         }
 
         Ok(())
-
     }
 
     fn populate_ios(&mut self) -> Result<(), PistonError> {
         // Run the command `xcrun xctrace list devices`
-        let output = match Command::new("xcrun").args(["xctrace", "list", "devices"]).stdout(Stdio::piped()).output() {
-            Ok(o) => o,
-            Err(e) => return Err(PistonError::XcrunDevicectlError(e.to_string())),
-        };
+        let output = Command::new("xcrun")
+            .args(["xctrace", "list", "devices"])
+            .stdout(Stdio::piped())
+            .output()
+            .map_err(|e| PistonError::XcrunDevicectlError(e.to_string()))?;
 
         // Convert the output to a UTF-8 string
-        let stdout = match str::from_utf8(&output.stdout){
-            Ok(o) => o,
-            Err(e) => return Err(PistonError::ParseUTF8Error(e.to_string())),
-        };
+        let stdout = str::from_utf8(&output.stdout)
+            .map_err(|e| PistonError::ParseUTF8Error(e.to_string()))?;
 
-        // Split the output into lines
-        let lines: Vec<String> = stdout.lines().map(str::to_string).collect();
+        let mut in_devices_section = false;
 
-        let mut _in_devices_section: bool = false;
-
-        for line in &lines {
+        for line in stdout.lines() {
             let trimmed = line.trim();
+
             if trimmed.is_empty() {
                 continue;
             }
 
+            // Section tracking
             if trimmed == "== Devices ==" {
-                _in_devices_section = true;
+                in_devices_section = true;
+                continue;
+            }
+            if trimmed == "== Simulators ==" || trimmed == "== Devices Offline ==" {
+                in_devices_section = false;
                 continue;
             }
 
-            if trimmed == "== Devices Offline ==" {
-                _in_devices_section = false;
-                break; //Does not process anything in the offline section
-            }
-
-            if !_in_devices_section {
+            if !in_devices_section {
                 continue;
             }
 
-            // Only parse iPhones (following the original function's lowercase convention for filtering).
-            if !trimmed.to_lowercase().starts_with("iphone") {
+            // Must start with iPhone (case insensitive)
+            if !trimmed.to_lowercase().contains("iphone") {
+                println!("Checking for iphone");
                 continue;
             }
 
             // Extract model and identifier.
-            // The identifier is always inside the *last* set of parentheses.
-            //keeps any parentheses (e.g. "iPhone (26.4.2)").
-            if let Some(last_open) = trimmed.rfind('(') {
-                if let Some(last_close) = trimmed.rfind(')') {
-                    if last_open < last_close {
-                        let id = trimmed[(last_open + 1)..last_close].trim().to_string();
-                        let model = trimmed[0..last_open].trim().to_string();
+            // Extract model and ID from the last parentheses
+            if let (Some(last_open), Some(last_close)) = (trimmed.rfind('('), trimmed.rfind(')')) {
+                if last_open < last_close {
+                    let id = trimmed[(last_open + 1)..last_close].trim().to_string();
+                    let model = trimmed[0..last_open].trim().to_string();
 
-                        self.ios.push(IOSDevice {
-                            model,
-                            id,
-                        });
+                    // === Key filter ===
+                    // Only accept entries where the ID looks like a real device UDID (40 hex chars)
+                    if id.len() > 6 {
+                        self.ios.push(IOSDevice { model, id });
                     }
                 }
             }
@@ -149,7 +147,6 @@ impl Devices {
 
         Ok(())
     }
-
     pub fn print_devices(&self) {
         //empty device list
         if self.ios.is_empty() && self.android.is_empty() {
@@ -171,7 +168,6 @@ impl Devices {
                 }
                 if !self.ios.is_empty() {
                     println!();
-
                 }
             }
             //iOS device list
