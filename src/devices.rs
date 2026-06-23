@@ -104,7 +104,6 @@ impl Devices {
 
         for line in stdout.lines() {
             let trimmed = line.trim();
-            println!("New line: {}", trimmed);
 
             if trimmed.is_empty() {
                 continue;
@@ -112,7 +111,6 @@ impl Devices {
 
             // Section tracking
             if trimmed == "== Devices ==" {
-                println!("In devices");
                 in_devices_section = true;
                 continue;
             }
