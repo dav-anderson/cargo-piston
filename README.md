@@ -510,7 +510,9 @@ if you do not set a min_os_version in your `Cargo.toml`, the mininimumOSVersion 
 
 To stream install an app to a USB tethered iOS device, ensure you first enable developer mode. To do this, go to `Settings > Privacy & Security > Developer Mode` and toggle it on.
 
-Also ensure you "trust" the device after connecting it to your Mac via the pop up dialogue. 
+Also ensure you "trust" the device after connecting it to your Mac via the pop up dialogue.
+
+Your device MUST remain unlocked while working with cargo-piston. It is highly suggested to increase the screen lock time in your device settings.
 
 Piston should take care of the rest. 
 
@@ -741,5 +743,7 @@ If any of these metadata values are not provided they are be left as "Unknown" i
 To stream install an app to a USB tethered Android device, ensure you first enable developer mode. To do this, go to `Settings` and then `About Phone`. You will then need to quickly tap `Build Number` 7 times in short succession. After that `Developer Options` will appear in your settings menu.
 
 Also ensure you "trust" the device after connecting it to your PC/Mac via the dialogue popup.
+
+Your device MUST remain unlocked while working with cargo-piston. It is highly suggested to increase the screen lock time in your device settings.
 
 Piston should take care of the rest. 
