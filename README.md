@@ -655,7 +655,7 @@ Examples
 
 or
 
-`bundletool_path=/opt/homebrew/bundletool`
+`bundletool_path=/opt/homebrew/bin/bundletool`
 
 ## Android Cargo.Toml configuration
 
