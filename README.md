@@ -681,7 +681,7 @@ Optionally, you can configure the following metadata parameters inside of your `
 
 version_name is drawn automatically from your `Cargo.toml` within the `[package]` subheading. 
 
-target_sdk_version must be installed in your `~Android/sdk/platforms` path.
+target_sdk_version must be installed in your `~/Android/sdk/platforms` path.
 
 ```
 [package.metadata.android]
