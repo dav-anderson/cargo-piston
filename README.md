@@ -644,7 +644,8 @@ or install with brew on macos
 
 `brew install bundletool`
 
-It is reccomended that you install your bundletools .jar within your Android directory, something like
+It is recommended that you install your bundletools .jar within your Android directory, something like
+
 `$HOME/Android/sdk/bundle-tools`
 
 Set the path to your bundle tool `.jar` in your `.env`
