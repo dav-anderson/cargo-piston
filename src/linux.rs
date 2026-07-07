@@ -16,7 +16,7 @@ pub struct LinuxBuilder {
     target: String,
     cwd: PathBuf,
     output_path: Option<PathBuf>,
-    icon_path: Option<String>,
+    icon_path: String,
     assets: String,
     cargo_path: String,
     gpg_path: Option<String>,
@@ -59,7 +59,7 @@ impl LinuxBuilder {
             .exec()
             .map_err(|e| PistonError::CargoParseError(e.to_string()))?;
 
-        let icon_path = Helper::get_icon_path(&metadata);
+        let icon_path = Helper::get_icon_path(&metadata, &cwd);
         let assets = Helper::get_assets_path(&metadata);
         let app_name = Helper::get_app_name(&metadata)?;
         //parse the path to zigbuild if building on Macos
@@ -176,7 +176,7 @@ impl LinuxBuilder {
         //bundle path should be cwd + target + <target output> + <--release flag or None for debug> + <appname>.exe
         println!("binary path is: {}", &binary_path.display());
         println!("bundle path is: {}", &bundle_path.display());
-        let icon_path: Option<PathBuf> = if self.icon_path.is_none() {None} else {Some(PathBuf::from(self.icon_path.as_ref().unwrap()))};
+        let icon_path: PathBuf = PathBuf::from(self.icon_path.clone());
         let assets_str: &str = self.assets.as_ref();
         let assets_path: PathBuf = PathBuf::from(assets_str);
         let assets: Option<PathBuf> = if assets_path.exists() {Some(assets_path)} else {None};
@@ -351,7 +351,7 @@ pub struct AppImage {}
 //TODO need to bundle assets
 impl AppImage {
     /// Builds a complete, standalone AppImage and returns the path to the final file.
-    pub fn build(app_name: String, runtime_path: Option<String>, target: String, binary_path: PathBuf, output_dir: PathBuf, icon_path: Option<PathBuf>, description: Option<String>, assets: Option<PathBuf>) -> Result<PathBuf, PistonError> {
+    pub fn build(app_name: String, runtime_path: Option<String>, target: String, binary_path: PathBuf, output_dir: PathBuf, icon_path: PathBuf, description: Option<String>, assets: Option<PathBuf>) -> Result<PathBuf, PistonError> {
         println!("🔨 Building AppImage for {}", app_name);
 
         let appimage_name = format!("{}.AppImage", app_name);
@@ -428,35 +428,30 @@ Comment={}
         .map_err(|e|  PistonError::Generic(format!("Failed to push {}.desktop: {}", app_name, e)))?;
 
         // Icon + required AppImage symlinks
-        if let Some(icon) = &icon_path {
-            if icon.exists() {
-                let icon_dest = format!(
-                    "{appdir_prefix}/usr/share/icons/hicolor/256x256/apps/{}.png",
-                    app_name
-                );
+        let icon_dest = format!(
+            "{appdir_prefix}/usr/share/icons/hicolor/256x256/apps/{}.png",
+            app_name
+        );
 
-                {
-                    let file = fs::read(icon)
-                        .map_err(|e| PistonError::Generic(format!("Failed to read icon {}: {}", icon.display(), e)))?;
+        {
+            let file = fs::read(&icon_path)
+                .map_err(|e| PistonError::Generic(format!("Failed to read icon {}: {}", icon_path.display(), e)))?;
 
-                    let mut header = NodeHeader::default();
-                    header.permissions = 0o644;
+            let mut header = NodeHeader::default();
+            header.permissions = 0o644;
 
-                    fs.push_file(Cursor::new(file), &icon_dest, header)
-                        .map_err(|e| PistonError::Generic(format!("Failed to push icon into AppDir: {}", e)))?;
-                }
-
-                let dir_icon = format!("{appdir_prefix}/.DirIcon");
-                let root_icon = format!("{appdir_prefix}/{}.png", app_name);
-
-                fs.push_symlink(icon_dest.clone(), &dir_icon, NodeHeader { permissions: 0o755, ..NodeHeader::default() })
-                    .map_err(|e| PistonError::Generic(format!("Failed to create .DirIcon symlink: {}", e)))?;
-                fs.push_symlink(icon_dest, &root_icon, NodeHeader { permissions: 0o755, ..NodeHeader::default() })
-                    .map_err(|e| PistonError::Generic(format!("Failed to create root icon symlink: {}", e)))?;
-            } else {
-                println!("⚠️  Icon not found at {:?} — skipping icon", icon);
-            }
+            fs.push_file(Cursor::new(file), &icon_dest, header)
+                .map_err(|e| PistonError::Generic(format!("Failed to push icon into AppDir: {}", e)))?;
         }
+
+        let dir_icon = format!("{appdir_prefix}/.DirIcon");
+        let root_icon = format!("{appdir_prefix}/{}.png", app_name);
+
+        fs.push_symlink(icon_dest.clone(), &dir_icon, NodeHeader { permissions: 0o755, ..NodeHeader::default() })
+            .map_err(|e| PistonError::Generic(format!("Failed to create .DirIcon symlink: {}", e)))?;
+        fs.push_symlink(icon_dest, &root_icon, NodeHeader { permissions: 0o755, ..NodeHeader::default() })
+            .map_err(|e| PistonError::Generic(format!("Failed to create root icon symlink: {}", e)))?;
+        
 
         //bundle assets if they exist
         if let Some(assets) = &assets {

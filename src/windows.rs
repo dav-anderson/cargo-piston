@@ -13,7 +13,7 @@ pub struct WindowsBuilder {
     target: String,
     cwd: PathBuf,
     output_path: Option<PathBuf>,
-    icon_path: Option<String>,
+    icon_path: String,
     assets: String,
     embed_resources_ok: bool,
     cargo_path: String,
@@ -60,7 +60,7 @@ impl WindowsBuilder {
         } else {
             false
         };
-        let icon_path = Helper::get_icon_path(&metadata);
+        let icon_path = Helper::get_icon_path(&metadata, &cwd);
         let assets = Helper::get_assets_path(&metadata);
         let app_name = Helper::get_app_name(&metadata)?;
         Ok(WindowsBuilder{
@@ -113,11 +113,11 @@ impl WindowsBuilder {
         let assets_tgt = path.join("assets");
         Helper::sync_assets(assets_src, &assets_tgt)?;
         //if icon path was provided...embed
-        if !self.icon_path.is_none() && self.embed_resources_ok{
+        if self.embed_resources_ok{
             println!("icon path provided and embed resources installed, configuring icon");
             //convert the .png at icon_path to a .ico which resides in the app bundle
             let icon_output: PathBuf = cwd.join(rc_icon);
-            let img_path_clone = self.icon_path.clone().unwrap();
+            let img_path_clone = self.icon_path.clone();
             let img_path = Path::new(&img_path_clone);
             //open the image
             let img = image::open(img_path).map_err(|e| PistonError::OpenImageError {
@@ -142,7 +142,7 @@ impl WindowsBuilder {
                     64,
                     image::ExtendedColorType::Rgba8,
             ).map_err(|e| PistonError::WriteImageError(e))?;
-            println!("Converted {} to ICO ({}x{}) and saved as {}", self.icon_path.as_ref().unwrap(), 64, 64, icon_output.display());
+            println!("Converted {} to ICO ({}x{}) and saved as {}", self.icon_path, 64, 64, icon_output.display());
             let build_path: PathBuf = cwd.join("build.rs");
             //if a build.rs file exists, first remove it.
             if build_path.exists() {

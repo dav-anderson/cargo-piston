@@ -14,7 +14,7 @@ pub struct MacOSBuilder {
     target: String,
     cwd: PathBuf,
     output_path: Option<PathBuf>,
-    icon_path: Option<String>,
+    icon_path: String,
     assets: String,
     cargo_path: String,
     app_name: String,
@@ -61,7 +61,7 @@ impl MacOSBuilder {
             .exec()
             .map_err(|e| PistonError::CargoParseError(e.to_string()))?;
 
-        let icon_path = Helper::get_icon_path(&metadata);
+        let icon_path = Helper::get_icon_path(&metadata, &cwd);
         let assets = Helper::get_assets_path(&metadata);
         let app_name = Helper::get_app_name(&metadata)?;
         let app_version = Helper::get_app_version(&metadata)?;
@@ -204,21 +204,19 @@ impl MacOSBuilder {
         );
         plist_file.write_all(plist_content.as_bytes()).map_err(|e| PistonError::WriteFileError(e.to_string()))?;
         //if icon path was provided...convert
-        if !self.icon_path.is_none(){
-            println!("icon path provided, configuring icon");
-            //convert the .png at icon_path to an .icns which resides in the app bundle
-            let img_path_clone = self.icon_path.clone().unwrap();
-            let img_path = Path::new(&img_path_clone);
-            //Configure icon
-            Command::new("sips")
-                .args(["-s", "format", "icns", &img_path_clone, "--out", &icon_path.display().to_string()])
-                .output()
-                .map_err(|e| PistonError::MacOSIconError {
-                    input_path: img_path.to_path_buf(),
-                    output_path: icon_path,
-                    source: e,
-                })?;
-        }
+        println!("icon path provided, configuring icon");
+        //convert the .png at icon_path to an .icns which resides in the app bundle
+        let img_path_clone = self.icon_path.clone();
+        let img_path = Path::new(&img_path_clone);
+        //Configure icon
+        Command::new("sips")
+            .args(["-s", "format", "icns", &img_path_clone, "--out", &icon_path.display().to_string()])
+            .output()
+            .map_err(|e| PistonError::MacOSIconError {
+                input_path: img_path.to_path_buf(),
+                output_path: icon_path,
+                source: e,
+            })?;
         println!("done configuring MacOS bundle");
         Ok(())
         
