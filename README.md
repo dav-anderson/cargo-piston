@@ -669,7 +669,7 @@ android-activity = { version = "0.5", features = ["native-activity"] }
 log = "0.4"
 ```
 
-your `Cargo.toml` must have the following library designation 
+Your `Cargo.toml` must have the following library designation 
 
 ```
 [lib]
@@ -685,11 +685,11 @@ target_sdk_version must be installed in your `~/Android/sdk/platforms` path.
 
 ```
 [package.metadata.android]
-package=<com.example.appname>
-target_sdk_version=<34>
-min_sdk_version=<21>
-version_code=<1>
-app_label=<app_name>
+package="<com.example.appname>"
+target_sdk_version=34
+min_sdk_version=21
+version_code=1
+app_label="<app_name>"
 
 ```
 
