@@ -17,7 +17,7 @@ pub struct IOSBuilder {
     cwd: PathBuf,
     output_path: Option<PathBuf>,
     ipa_path: Option<PathBuf>,
-    icon_path: Option<String>,
+    icon_path: String,
     _assets: String,
     cargo_path: String,
     app_name: String,
@@ -68,7 +68,7 @@ impl IOSBuilder {
             .exec()
             .map_err(|e| PistonError::CargoParseError(e.to_string()))?;
 
-        let icon_path = Helper::get_icon_path(&metadata);
+        let icon_path = Helper::get_icon_path(&metadata, &cwd);
         let assets = Helper::get_assets_path(&metadata);
         let app_name = Helper::get_app_name(&metadata)?;
         let app_version = Helper::get_app_version(&metadata)?;
@@ -191,15 +191,12 @@ impl IOSBuilder {
         })?;
 
         //if icon path was provided...convert
-        if !self.icon_path.is_none(){
-            println!("icon path provided, configuring icon");
-            //resize the icon to both appropriate ios dimensions
-            let icon_path120: PathBuf = appicon_path.join("ios_icon120.png");
-            Helper::resize_png(&self.icon_path.as_ref().unwrap(), &icon_path120.display().to_string(), 120, 120)?;
-            let icon_path180: PathBuf = appicon_path.join("ios_icon180.png");
-            Helper::resize_png(&self.icon_path.as_ref().unwrap(), &icon_path180.display().to_string(), 180, 180)?;
-        }
-
+        println!("icon path provided, configuring icon");
+        //resize the icon to both appropriate ios dimensions
+        let icon_path120: PathBuf = appicon_path.join("ios_icon120.png");
+        Helper::resize_png(&self.icon_path.as_ref(), &icon_path120.display().to_string(), 120, 120)?;
+        let icon_path180: PathBuf = appicon_path.join("ios_icon180.png");
+        Helper::resize_png(&self.icon_path.as_ref(), &icon_path180.display().to_string(), 180, 180)?;
 
         //create Contents.json within Appicon.appiconset
         let contents_path: PathBuf = appicon_path.join("Contents.json");
@@ -453,7 +450,6 @@ impl IOSBuilder {
                     println!("attempting to provision target device {:?}", self.device_target);
                     let app_name = self.app_name.clone();
                     //provision device here
-                    //TODO change the security_profile parameter here to instead be the ASC internal certificate id rather than keychain id
                     asc_client.provision_ios_device(&target_id, &bundle_id, &app_name, &security_profile, &output_path, &idp_path, &provision_cache)?;
                 }
             }

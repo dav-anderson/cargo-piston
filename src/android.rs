@@ -133,7 +133,7 @@ pub struct AndroidBuilder {
     cwd: PathBuf,
     build_path: PathBuf,
     output_path: Option<PathBuf>,
-    icon_path: Option<String>,
+    icon_path: String,
     assets: String,
     key_path: String,
     key_pass: String,
@@ -218,7 +218,7 @@ impl AndroidBuilder {
             .map_err(|e| PistonError::CargoParseError(e.to_string()))?;
 
         let lib_name = Helper::get_lib_name(&metadata)?;
-        let icon_path = Helper::get_icon_path(&metadata);
+        let icon_path = Helper::get_icon_path(&metadata, &cwd);
         let assets = Helper::get_assets_path(&metadata);
         let app_name = Helper::get_app_name(&metadata)?;
         let app_version = Helper::get_app_version(&metadata)?;
@@ -320,15 +320,15 @@ impl AndroidBuilder {
         })?;
         //convert icon to various mipmaps
         let hdpi_target: PathBuf = hdpi_path.join("ic_launcher.png");
-        Helper::resize_png(&self.icon_path.as_ref().unwrap(), &hdpi_target.display().to_string(), 48, 48)?;
+        Helper::resize_png(&self.icon_path.as_ref(), &hdpi_target.display().to_string(), 48, 48)?;
         let mdpi_target: PathBuf = mdpi_path.join("ic_launcher.png");
-        Helper::resize_png(&self.icon_path.as_ref().unwrap(), &mdpi_target.display().to_string(), 72, 72)?;
+        Helper::resize_png(&self.icon_path.as_ref(), &mdpi_target.display().to_string(), 72, 72)?;
         let xhdpi_target: PathBuf = xhdpi_path.join("ic_launcher.png");
-        Helper::resize_png(&self.icon_path.as_ref().unwrap(), &xhdpi_target.display().to_string(), 96, 96)?;
+        Helper::resize_png(&self.icon_path.as_ref(), &xhdpi_target.display().to_string(), 96, 96)?;
         let xxhdpi_target: PathBuf = xxhdpi_path.join("ic_launcher.png");
-        Helper::resize_png(&self.icon_path.as_ref().unwrap(), &xxhdpi_target.display().to_string(), 144, 144)?;
+        Helper::resize_png(&self.icon_path.as_ref(), &xxhdpi_target.display().to_string(), 144, 144)?;
         let xxxhdpi_target: PathBuf = xxxhdpi_path.join("ic_launcher.png");
-        Helper::resize_png(&self.icon_path.as_ref().unwrap(), &xxxhdpi_target.display().to_string(), 192, 192)?;
+        Helper::resize_png(&self.icon_path.as_ref(), &xxxhdpi_target.display().to_string(), 192, 192)?;
         Ok(())
     }
 

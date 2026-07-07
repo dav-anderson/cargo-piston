@@ -310,12 +310,34 @@ impl Helper {
         Ok(lib_name)
     }
 
-    pub fn get_icon_path(metadata: &Metadata) -> Option<String> {
-        metadata.root_package()
-            .and_then(|pkg| pkg.metadata.get("icon_path"))
-            .and_then(Value::as_str)
-            .map(|s| s.to_string())
+pub fn get_icon_path(metadata: &Metadata, cwd: &PathBuf) -> String {
+    let res = metadata.root_package()
+        .and_then(|pkg| pkg.metadata.get("icon_path"))
+        .and_then(Value::as_str)
+        .map(|s| s.to_string());
+
+    // Return custom icon if it exists
+    if let Some(ref path) = res {
+        if Path::new(path).exists() {
+            return path.clone();
+        }
     }
+
+    // Otherwise use default icon from cwd
+    let default = cwd.join("icon.png");
+
+    if !default.exists() {
+        // Copy the icon that ships with this library
+        let crate_dir = env!("CARGO_MANIFEST_DIR");
+        let bundled_icon = Path::new(crate_dir).join("icon.png");
+
+        if bundled_icon.exists() {
+            let _ = std::fs::copy(&bundled_icon, &default);
+        }
+    }
+
+    default.to_string_lossy().to_string()
+}
 
     pub fn get_assets_path(metadata: &Metadata) -> String {
         metadata.root_package()
