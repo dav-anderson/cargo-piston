@@ -636,28 +636,38 @@ Examples (MacOS)
 
 ## Install Android Bundle tool
 
-Install Android bundletool
+Download Android bundletool at:
 
 `https://github.com/google/bundletool/releases`
 
+Under Assets, download the `bundletool-all-1.18.3.jar` or whatever version is current at the time of your download.
+
+<!--
 or install with brew on macos
 
 `brew install bundletool`
+-->
+Move your bundletool.jar to your Android directory:
 
-It is recommended that you install your bundletools .jar within your Android directory, something like
+`/Users/you/Android/sdk/bundle-tools/bundletool-all-1.18.3.jar`
 
-`$HOME/Android/sdk/bundle-tools`
+Don't forget to replace `you` in the file path above with the correct username.
 
-Set the path to your bundle tool `.jar` in your `.env`
+Set the path to your bundle tool `.jar` in your `.env`:
 
-Examples
+`bundletool_path=/Users/you/Android/sdk/bundle-tools/bundletool-all-1.18.3.jar`
 
-`bundletool_path=<$HOME>/Android/sdk/bundle-tools/bundletool.jar`
+Don't forget to replace `you` in the file path above with the correct username.
 
-or
+Note that if you upgrade `bundletool` in the future, you will need to update the .env to match your current version.
 
-`bundletool_path=/opt/homebrew/bin/bundletool`
+<!--
+or if installed via brew
 
+`bundletool_path=/opt/homebrew/Cellar/bundletool/1.18.3/libexec/bundletool-all.jar`
+
+Make sure to replace 1.18.3 with whatever version is current when you download.
+-->
 ## Android Cargo.Toml configuration
 
 Add the following dependencies
