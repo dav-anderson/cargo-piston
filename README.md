@@ -649,15 +649,11 @@ or install with brew on macos
 -->
 Move your bundletool.jar to your Android directory:
 
-`/Users/you/Android/sdk/bundle-tools/bundletool-all-1.18.3.jar`
-
-Don't forget to replace `you` in the file path above with the correct username.
+`/Users/<user>/Android/sdk/bundle-tools/bundletool-all-1.18.3.jar`
 
 Set the path to your bundle tool `.jar` in your `.env`:
 
-`bundletool_path=/Users/you/Android/sdk/bundle-tools/bundletool-all-1.18.3.jar`
-
-Don't forget to replace `you` in the file path above with the correct username.
+`bundletool_path=/Users/<user>/Android/sdk/bundle-tools/bundletool-all-1.18.3.jar`
 
 Note that if you upgrade `bundletool` in the future, you will need to update the .env to match your current version.
 
@@ -698,11 +694,15 @@ target_sdk_version must be installed in your `~/Android/sdk/platforms` path.
 [package.metadata.android]
 package="<com.example.appname>"
 target_sdk_version=34
-min_sdk_version=21
-version_code=1
+min_sdk_version=<21>
+version_code=<1>
 app_label="<app_name>"
 
 ```
+Use the default values for `min_sdk_version` and `version_code` unless you have reason not to. For example, feel free to increment `version_code`
+upon releasing version 2 of your program if need be. Technical minutia point: strictly speaking, only `package` is needed in the section `[package.metadata.android]`. 
+If you were to forego populating `target_sdk_version` through `app_label` the default values listed would be populated by Piston automatically.
+The Maintainers have decided to give the Users of Piston the option to populate their own values in the interest of Developer control.
 
 ## Create a Lib.rs in ~/src
 
