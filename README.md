@@ -636,27 +636,34 @@ Examples (MacOS)
 
 ## Install Android Bundle tool
 
-Install Android bundletool
+Download Android bundletool at:
 
 `https://github.com/google/bundletool/releases`
 
+Under Assets, download the `bundletool-all-1.18.3.jar` or whatever version is current at the time of your download.
+
+<!--
 or install with brew on macos
 
 `brew install bundletool`
+-->
+Move your bundletool.jar to your Android directory:
 
-It is reccomended that you install your bundletools .jar within your Android directory, something like
-`$HOME/Android/sdk/bundle-tools`
+`/Users/<user>/Android/sdk/bundle-tools/bundletool-all-1.18.3.jar`
 
-Set the path to your bundle tool `.jar` in your `.env`
+Set the path to your bundle tool `.jar` in your `.env`:
 
-Examples
+`bundletool_path=/Users/<user>/Android/sdk/bundle-tools/bundletool-all-1.18.3.jar`
 
-`bundletool_path=<$HOME>/Android/sdk/bundle-tools/bundletool.jar`
+Note that if you upgrade `bundletool` in the future, you will need to update the .env to match your current version.
 
-or
+<!--
+or if installed via brew
 
-`bundletool_path=/opt/homebrew/bundletool`
+`bundletool_path=/opt/homebrew/Cellar/bundletool/1.18.3/libexec/bundletool-all.jar`
 
+Make sure to replace 1.18.3 with whatever version is current when you download.
+-->
 ## Android Cargo.Toml configuration
 
 Add the following dependencies
@@ -669,7 +676,7 @@ android-activity = { version = "0.5", features = ["native-activity"] }
 log = "0.4"
 ```
 
-your `Cargo.toml` must have the following library designation 
+Your `Cargo.toml` must have the following library designation 
 
 ```
 [lib]
@@ -681,17 +688,21 @@ Optionally, you can configure the following metadata parameters inside of your `
 
 version_name is drawn automatically from your `Cargo.toml` within the `[package]` subheading. 
 
-target_sdk_version must be installed in your `~Android/sdk/platforms` path.
+target_sdk_version must be installed in your `~/Android/sdk/platforms` path.
 
 ```
 [package.metadata.android]
-package=<com.example.appname>
-target_sdk_version=<31>
+package="<com.example.appname>"
+target_sdk_version=34
 min_sdk_version=<21>
 version_code=<1>
-app_label=<app_name>
+app_label="<app_name>"
 
 ```
+Use the default values for `min_sdk_version` and `version_code` unless you have reason not to. For example, feel free to increment `version_code`
+upon releasing version 2 of your program if need be. Technical minutia point: strictly speaking, only `package` is needed in the section `[package.metadata.android]`. 
+If you were to forego populating `target_sdk_version` through `app_label` the default values listed would be populated by Piston automatically.
+The Maintainers have decided to give the Users of Piston the option to populate their own values in the interest of Developer control.
 
 ## Create a Lib.rs in ~/src
 
