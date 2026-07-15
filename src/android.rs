@@ -83,8 +83,10 @@ impl AndroidManifest {
                 android:versionName="{version_name}">
 
                 <uses-sdk android:minSdkVersion="{min_sdk}" android:targetSdkVersion="{target_sdk}" />
+                <uses-permission android:name="android.permission.CAMERA" />
+                <uses-feature android:name="android.hardware.camera" android:required="false" />
 
-                <application android:label="{label}" android:hasCode="false"{icon_attr}>
+                <application android:label="{label}" android:hasCode="true"{icon_attr}>
                     <activity android:name="android.app.NativeActivity"
                         android:label="{label}"
                         android:exported="true">
@@ -94,6 +96,8 @@ impl AndroidManifest {
                             <category android:name="android.intent.category.LAUNCHER" />
                         </intent-filter>
                     </activity>
+                    <activity android:name="com.maverick.photo.PhotoPickerActivity"
+                        android:exported="false" />
                 </application>
             </manifest>"#,
             package = Self::escape_xml(&self.package),
@@ -355,6 +359,8 @@ impl AndroidBuilder {
         Helper::sync_assets(&assets_src, &assets_base)?;
         //add the .so lib for a single lib
         self.add_lib(&base_dir, self.target.as_ref())?;
+        //add the photo picker activity dex
+        self.add_activity_dex(&base_dir)?;
         //zip base module
         let base_zip = self.build_path.join("base.zip");
         self.zip_base(&base_dir)?;
@@ -570,6 +576,24 @@ impl AndroidBuilder {
         let so_path = self.cwd.join("target").join(target).join(if self.release { "release" } else { "debug" }).join(&lib_file);
         copy(&so_path, lib_dir.join(&lib_file))
             .map_err(|e| PistonError::BuildError(format!("Failed to copy .so: {}", e)))?;
+
+        Ok(())
+    }
+
+    // Every app built by piston ships the PhotoPickerActivity dex (see src/android_activity/)
+    // so maverick_os's photo picker can resolve as a real, manifest-declared Activity capable
+    // of receiving onActivityResult.
+    fn add_activity_dex(&self, base_dir: &Path) -> Result<(), PistonError> {
+        println!("adding photo picker activity dex to base directory");
+        let dex_dir = base_dir.join("dex");
+        create_dir_all(&dex_dir).map_err(|e| PistonError::CreateDirAllError {
+        path: dex_dir.clone(),
+        source: e,
+        })?;
+
+        let dex_path = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/android_activity/classes.dex");
+        copy(&dex_path, dex_dir.join("classes.dex"))
+            .map_err(|e| PistonError::BuildError(format!("Failed to copy activity classes.dex: {}", e)))?;
 
         Ok(())
     }
