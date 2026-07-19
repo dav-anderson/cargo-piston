@@ -1,16 +1,16 @@
-use std::path::{ Path, PathBuf };
-use std::collections::HashMap;
-use cargo_metadata::{ Metadata, MetadataCommand };
-use std::fs::{ File, create_dir_all, copy, rename, remove_file};
-use std::io::{ Write, BufWriter };
-use std::process::{ Command, Stdio };
-use serde::Deserialize;
-use serde_json::Value;
 use crate::Helper;
 use crate::PistonError;
 use crate::devices::AndroidDevice;
+use cargo_metadata::{Metadata, MetadataCommand};
+use serde::Deserialize;
+use serde_json::Value;
+use std::collections::HashMap;
+use std::fs::{File, copy, create_dir_all, remove_file, rename};
+use std::io::{BufWriter, Write};
+use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
 
-//TODO build out intent filters with more robust cargo.toml parameters  
+//TODO build out intent filters with more robust cargo.toml parameters
 
 #[derive(Deserialize, Default)]
 struct AndroidMetadata {
@@ -25,7 +25,7 @@ struct AndroidMetadata {
     #[serde(default)]
     target_sdk_version: Option<u32>,
     #[serde(default)]
-    label: Option<String>
+    label: Option<String>,
 }
 
 #[derive(Deserialize, Default, Debug)]
@@ -41,31 +41,39 @@ struct AndroidManifest {
 }
 
 impl AndroidManifest {
-    pub fn build(metadata: &Metadata, app_name: &String, version: &String) -> Result<Self, PistonError> {
-        let package = metadata.root_package()
-            .ok_or_else(|| PistonError::ParseManifestError("No Root package found in metadata".to_string()))?;
+    pub fn build(
+        metadata: &Metadata,
+        app_name: &String,
+        version: &String,
+    ) -> Result<Self, PistonError> {
+        let package = metadata.root_package().ok_or_else(|| {
+            PistonError::ParseManifestError("No Root package found in metadata".to_string())
+        })?;
         let crate_name = package.name.clone();
         //extract [package.metadata.android] as JSON values
-        let android_meta_value: Value = package.metadata
+        let android_meta_value: Value = package
+            .metadata
             .get("android")
             .cloned()
             .unwrap_or(Value::Object(Default::default()));
         //Deserialize to structured metadata
-        let android_meta: AndroidMetadata = serde_json::from_value(android_meta_value)
-            .map_err(|e| PistonError::ParseManifestError(format!("Failed to deserialize [package.metadata.android: {}]", e)))?;
+        let android_meta: AndroidMetadata =
+            serde_json::from_value(android_meta_value).map_err(|e| {
+                PistonError::ParseManifestError(format!(
+                    "Failed to deserialize [package.metadata.android: {}]",
+                    e
+                ))
+            })?;
         //Build the manifest with extracted values or defaults
         let mut manifest = Self::default();
-        manifest.package = android_meta.package
+        manifest.package = android_meta
+            .package
             .unwrap_or(format!("com.example.{}", crate_name));
-        manifest.version_code = android_meta.version_code
-            .unwrap_or(1);
+        manifest.version_code = android_meta.version_code.unwrap_or(1);
         manifest.version_name = android_meta.version_name.unwrap_or(version.to_string());
-        manifest.min_sdk_version = android_meta.min_sdk_version
-            .unwrap_or(21);
-        manifest.target_sdk_version = android_meta.target_sdk_version
-            .unwrap_or(34);
-        manifest.app_label = android_meta.label
-            .unwrap_or(format!("{}", crate_name));
+        manifest.min_sdk_version = android_meta.min_sdk_version.unwrap_or(21);
+        manifest.target_sdk_version = android_meta.target_sdk_version.unwrap_or(34);
+        manifest.app_label = android_meta.label.unwrap_or(format!("{}", crate_name));
         manifest.app_name = app_name.to_string();
         manifest.icon = "@mipmap/ic_launcher".to_string();
 
@@ -102,18 +110,20 @@ impl AndroidManifest {
             min_sdk = self.min_sdk_version,
             target_sdk = self.target_sdk_version,
             label = Self::escape_xml(&self.app_label),
-            app_name = Self::escape_xml(&self.app_name),  // Using app_name for lib_name in meta-data
+            app_name = Self::escape_xml(&self.app_name), // Using app_name for lib_name in meta-data
             icon_attr = icon_attr,
         )
     }
 
     pub fn write_to(&self, dir: &Path) -> Result<(), PistonError> {
-        let file = File::create(&dir)
-            .map_err(|e| PistonError::CreateManifestError(format!("Failed to create manifest file: {}", e)))?;
-        
+        let file = File::create(&dir).map_err(|e| {
+            PistonError::CreateManifestError(format!("Failed to create manifest file: {}", e))
+        })?;
+
         let mut writer = BufWriter::new(file);
-        writer.write_all(self.to_xml().as_bytes())
-            .map_err(|e| PistonError::WriteManifestError(format!("Failed to write manifest file: {}", e)))?;
+        writer.write_all(self.to_xml().as_bytes()).map_err(|e| {
+            PistonError::WriteManifestError(format!("Failed to write manifest file: {}", e))
+        })?;
 
         Ok(())
     }
@@ -138,6 +148,7 @@ pub struct AndroidBuilder {
     key_path: String,
     key_pass: String,
     key_alias: String,
+    debug_keystore_path: String,
     app_name: String,
     lib_name: String,
     manifest: AndroidManifest,
@@ -158,7 +169,13 @@ pub struct AndroidBuilder {
 }
 
 impl AndroidBuilder {
-    pub fn start(release: bool, target: String, cwd: PathBuf, env_vars: HashMap<String, String>, device_target: Option<AndroidDevice>) -> Result<(PathBuf, String, String), PistonError>{
+    pub fn start(
+        release: bool,
+        target: String,
+        cwd: PathBuf,
+        env_vars: HashMap<String, String>,
+        device_target: Option<AndroidDevice>,
+    ) -> Result<(PathBuf, String, String), PistonError> {
         println!("building for android");
         let mut op = AndroidBuilder::new(release, target, cwd, env_vars, device_target)?;
 
@@ -175,8 +192,19 @@ impl AndroidBuilder {
         Ok((op.output_path.unwrap(), op.app_name, op.manifest.package))
     }
 
-    fn new(release: bool, target: String, cwd: PathBuf, env_vars: HashMap<String, String>, device_target: Option<AndroidDevice>) -> Result<Self, PistonError> {
-        println!("creating AndroidBuilder: release: {:?}, target: {:?}, cwd: {:?}", release, target.to_string(), cwd);
+    fn new(
+        release: bool,
+        target: String,
+        cwd: PathBuf,
+        env_vars: HashMap<String, String>,
+        device_target: Option<AndroidDevice>,
+    ) -> Result<Self, PistonError> {
+        println!(
+            "creating AndroidBuilder: release: {:?}, target: {:?}, cwd: {:?}",
+            release,
+            target.to_string(),
+            cwd
+        );
         //parse env vars
         let ndk_path: &String = Helper::get_or_err(&env_vars, "ndk_path")?;
         let sdk_path: &String = Helper::get_or_err(&env_vars, "sdk_path")?;
@@ -189,23 +217,56 @@ impl AndroidBuilder {
             .map_err(|e| PistonError::WhoAmIError(format!("Failed to run 'whoami': {}", e)))?;
 
         if !user_output.status.success() {
-            return Err(PistonError::WhoAmIError(format!("Failed to run 'whoami': {}", String::from_utf8_lossy(&user_output.stderr))))
+            return Err(PistonError::WhoAmIError(format!(
+                "Failed to run 'whoami': {}",
+                String::from_utf8_lossy(&user_output.stderr)
+            )));
         }
-        let user = String::from_utf8_lossy(&user_output.stdout).trim().to_string();
+        let user = String::from_utf8_lossy(&user_output.stdout)
+            .trim()
+            .to_string();
         if user.is_empty() {
-            return Err(PistonError::WhoAmIError(format!("Failed to obtain user id with whoami: {}", String::from_utf8_lossy(&user_output.stderr))))
+            return Err(PistonError::WhoAmIError(format!(
+                "Failed to obtain user id with whoami: {}",
+                String::from_utf8_lossy(&user_output.stderr)
+            )));
         }
         let default_path = format!("/Users/{}/.android/release.keystore", user);
+        let debug_keystore_path = format!("/Users/{}/.android/debug.keystore", user);
         //allow .env to override default key_path and key_pass and key_alias if it exists
-        let key_path: String = env_vars.get("aab_release_key").cloned().unwrap_or(default_path);
-        let key_pass: String = env_vars.get("aab_key_pass").cloned().unwrap_or("piston".to_string());
-        let key_alias: String = env_vars.get("aab_key_alias").cloned().unwrap_or("release-key".to_string());
+        let key_path: String = env_vars
+            .get("aab_release_key")
+            .cloned()
+            .unwrap_or(default_path);
+        let key_pass: String = env_vars
+            .get("aab_key_pass")
+            .cloned()
+            .unwrap_or("piston".to_string());
+        let key_alias: String = env_vars
+            .get("aab_key_alias")
+            .cloned()
+            .unwrap_or("release-key".to_string());
         //allow .env to ovverride default dname metadata if provided
-        let common_name: String = env_vars.get("common_name").cloned().unwrap_or("Unknown".to_string());
-        let org_unit: String = env_vars.get("org_unit").cloned().unwrap_or("Development".to_string());
-        let org: String = env_vars.get("org").cloned().unwrap_or("Unknown".to_string());
-        let locality: String = env_vars.get("locality").cloned().unwrap_or("Unknown".to_string());
-        let state: String = env_vars.get("state").cloned().unwrap_or("Unknown".to_string());
+        let common_name: String = env_vars
+            .get("common_name")
+            .cloned()
+            .unwrap_or("Unknown".to_string());
+        let org_unit: String = env_vars
+            .get("org_unit")
+            .cloned()
+            .unwrap_or("Development".to_string());
+        let org: String = env_vars
+            .get("org")
+            .cloned()
+            .unwrap_or("Unknown".to_string());
+        let locality: String = env_vars
+            .get("locality")
+            .cloned()
+            .unwrap_or("Unknown".to_string());
+        let state: String = env_vars
+            .get("state")
+            .cloned()
+            .unwrap_or("Unknown".to_string());
         let country: String = env_vars
             .get("country")
             .filter(|s| s.trim().len() == 2)
@@ -224,64 +285,69 @@ impl AndroidBuilder {
         let app_version = Helper::get_app_version(&metadata)?;
         //generate androidmanifest.xml
         let manifest = AndroidManifest::build(&metadata, &app_name, &app_version)?;
-        let build_path: PathBuf = cwd.join("target").join(if release {"release"} else {"debug"}).join("android").join("androidbuilder");
+        let build_path: PathBuf = cwd
+            .join("target")
+            .join(if release { "release" } else { "debug" })
+            .join("android")
+            .join("androidbuilder");
         println!("build path: {:?}", build_path);
         //empty dirs all build_path
         Helper::empty_directory(build_path.as_path(), &["assets"])?;
         //mkdir all build_path
         create_dir_all(&build_path).map_err(|e| PistonError::CreateDirAllError {
-        path: build_path.clone(),
-        source: e,
+            path: build_path.clone(),
+            source: e,
         })?;
         //manifest path is cwd/target/<release>/androidbuilder/android/manifest
         let manifest_path: PathBuf = build_path.join("AndroidManifest.xml");
         let resources_path: PathBuf = build_path.join("app").join("src").join("main").join("res");
         //write AndroidManifest.xml to file
         manifest.write_to(&manifest_path.as_path())?;
-        Ok(AndroidBuilder{
-            release: release, 
-            target: target.to_string(), 
-            cwd: cwd,
-            build_path: build_path, 
-            output_path: None, 
-            icon_path: icon_path, 
-            assets: assets,
-            key_path: key_path,
-            key_pass: key_pass,
-            key_alias: key_alias,
-            app_name: app_name, 
-            lib_name: lib_name,
-            manifest: manifest, 
-            manifest_path: manifest_path,
-            ndk_path: ndk_path.to_string(), 
-            sdk_path: sdk_path.to_string(), 
+        Ok(AndroidBuilder {
+            release,
+            target: target.to_string(),
+            cwd,
+            build_path,
+            output_path: None,
+            icon_path,
+            assets,
+            key_path,
+            key_pass,
+            key_alias,
+            debug_keystore_path,
+            app_name,
+            lib_name,
+            manifest,
+            manifest_path,
+            ndk_path: ndk_path.to_string(),
+            sdk_path: sdk_path.to_string(),
             java_path: java_path.to_string(),
             resources: resources_path,
-            build_tools_version: build_tools_version,
+            build_tools_version,
             bundletool_path: bundletool_path.to_string(),
-            common_name: common_name,
-            org_unit: org_unit,
-            org: org,
-            locality: locality,
-            state: state,
-            country: country,
-            device_target: device_target,
+            common_name,
+            org_unit,
+            org,
+            locality,
+            state,
+            country,
+            device_target,
         })
     }
 
-    fn pre_build(&mut self) -> Result <(), PistonError>{
+    fn pre_build(&mut self) -> Result<(), PistonError> {
         println!("pre build for android");
         println!("building the dynamic app bundle");
         let cwd: PathBuf = self.cwd.clone();
-        let release = if self.release {"release"} else {"debug"};
+        let release = if self.release { "release" } else { "debug" };
         //set the absolute build path
         let path = self.resources.as_path();
         //Empty the directory if it already exists
         Helper::empty_directory(path, &[])?;
         //create the target directories
         create_dir_all(&self.resources).map_err(|e| PistonError::CreateDirAllError {
-        path: self.resources.clone(),
-        source: e,
+            path: self.resources.clone(),
+            source: e,
         })?;
         //set the output path
         let partial_output_path: PathBuf = format!("target/{}/android", release).into();
@@ -289,7 +355,7 @@ impl AndroidBuilder {
         self.output_path = Some(output_path.clone());
         //check for valid output path
         if self.output_path.as_ref().is_none() {
-            return Err(PistonError::Generic("output path not provided".to_string()))
+            return Err(PistonError::Generic("output path not provided".to_string()));
         }
         //establish absolute paths for  mipmap dirs
         let hdpi_path: PathBuf = self.resources.join("mipmap-hdpi");
@@ -299,40 +365,65 @@ impl AndroidBuilder {
         let xxxhdpi_path: PathBuf = self.resources.join("mipmap-xxxhdpi");
         //create mipmap dirs
         create_dir_all(&hdpi_path).map_err(|e| PistonError::CreateDirAllError {
-        path: hdpi_path.clone(),
-        source: e,
+            path: hdpi_path.clone(),
+            source: e,
         })?;
         create_dir_all(&mdpi_path).map_err(|e| PistonError::CreateDirAllError {
-        path: mdpi_path.clone(),
-        source: e,
+            path: mdpi_path.clone(),
+            source: e,
         })?;
         create_dir_all(&xhdpi_path).map_err(|e| PistonError::CreateDirAllError {
-        path: xhdpi_path.clone(),
-        source: e,
+            path: xhdpi_path.clone(),
+            source: e,
         })?;
         create_dir_all(&xxhdpi_path).map_err(|e| PistonError::CreateDirAllError {
-        path: xxhdpi_path.clone(),
-        source: e,
+            path: xxhdpi_path.clone(),
+            source: e,
         })?;
         create_dir_all(&xxxhdpi_path).map_err(|e| PistonError::CreateDirAllError {
-        path: xxxhdpi_path.clone(),
-        source: e,
+            path: xxxhdpi_path.clone(),
+            source: e,
         })?;
         //convert icon to various mipmaps
         let hdpi_target: PathBuf = hdpi_path.join("ic_launcher.png");
-        Helper::resize_png(&self.icon_path.as_ref(), &hdpi_target.display().to_string(), 48, 48)?;
+        Helper::resize_png(
+            &self.icon_path.as_ref(),
+            &hdpi_target.display().to_string(),
+            48,
+            48,
+        )?;
         let mdpi_target: PathBuf = mdpi_path.join("ic_launcher.png");
-        Helper::resize_png(&self.icon_path.as_ref(), &mdpi_target.display().to_string(), 72, 72)?;
+        Helper::resize_png(
+            &self.icon_path.as_ref(),
+            &mdpi_target.display().to_string(),
+            72,
+            72,
+        )?;
         let xhdpi_target: PathBuf = xhdpi_path.join("ic_launcher.png");
-        Helper::resize_png(&self.icon_path.as_ref(), &xhdpi_target.display().to_string(), 96, 96)?;
+        Helper::resize_png(
+            &self.icon_path.as_ref(),
+            &xhdpi_target.display().to_string(),
+            96,
+            96,
+        )?;
         let xxhdpi_target: PathBuf = xxhdpi_path.join("ic_launcher.png");
-        Helper::resize_png(&self.icon_path.as_ref(), &xxhdpi_target.display().to_string(), 144, 144)?;
+        Helper::resize_png(
+            &self.icon_path.as_ref(),
+            &xxhdpi_target.display().to_string(),
+            144,
+            144,
+        )?;
         let xxxhdpi_target: PathBuf = xxxhdpi_path.join("ic_launcher.png");
-        Helper::resize_png(&self.icon_path.as_ref(), &xxxhdpi_target.display().to_string(), 192, 192)?;
+        Helper::resize_png(
+            &self.icon_path.as_ref(),
+            &xxxhdpi_target.display().to_string(),
+            192,
+            192,
+        )?;
         Ok(())
     }
 
-    fn build(&mut self) -> Result <PathBuf, PistonError>{
+    fn build(&mut self) -> Result<PathBuf, PistonError> {
         println!("building for android");
         //build the android .so with cargo
         self.build_so()?;
@@ -343,8 +434,8 @@ impl AndroidBuilder {
         //empty the dir if it exists
         Helper::empty_directory(&base_dir, &["assets"])?;
         create_dir_all(&base_dir).map_err(|e| PistonError::CreateDirAllError {
-        path: base_dir.clone(),
-        source: e,
+            path: base_dir.clone(),
+            source: e,
         })?;
         //link manifest and resources with aapt2
         self.link_manifest_and_resources(&resources, &base_dir)?;
@@ -363,36 +454,47 @@ impl AndroidBuilder {
         let aab_path = output_bind.join(format!("{}.aab", self.app_name));
         self.build_bundle(&base_zip, &aab_path)?;
 
-        println!("Success in building Android App Bundle. Bundle is available at: {:?}", aab_path);
+        println!(
+            "Success in building Android App Bundle. Bundle is available at: {:?}",
+            aab_path
+        );
 
         Ok(aab_path)
     }
 
-    fn post_build(&mut self, aab_path: PathBuf) -> Result <(), PistonError>{
-        println!("post build for android");
-        //create a release key if none specified in .env and release flag is true
-        let key_path_exists = Path::new(&self.key_path).to_path_buf().exists();
-        let key_alias_exists = self.verify_key_alias()?;
-        if self.release && (!key_path_exists || !key_alias_exists){
-            //create a release key
-            self.create_release_key()?;
-        }else if self.release{
-            println!("release key found at: {}", self.key_path);
-        }
-        //sign the completed AAB with release key if release flag is true
-        if self.release{
-            //sign the bundle
+    //This function is a Coordinator. Corrdinators are Deciders. Deciders read state.
+    //Contrast this with create_signing_key(), a worker.
+    fn post_build(&mut self, aab_path: PathBuf) -> Result<(), PistonError> {
+        if self.release {
+            println!("Posting release build for Android.");
+            let key_path_exists = Path::new(&self.key_path).exists();
+            let key_alias_exists = self.verify_key_alias()?;
+
+            if !key_path_exists || !key_alias_exists {
+                //create a release key
+                self.create_signing_key(true)?;
+            } else {
+                println!("release key found at: {}", self.key_path);
+            }
             self.sign_aab(aab_path)?;
+        } else {
+            println!("Posting debug build for Android.");
+            let debug_keystore_exists = Path::new(&self.debug_keystore_path).exists();
+            if !debug_keystore_exists {
+                self.create_signing_key(false)?;
+            } else {
+                println!("debug keystore found at: {}", self.debug_keystore_path);
+            }
         }
-        //TODO if a device target is provided, check if the target device is provisioned
-        if !self.device_target.is_none() {
-            println!("");
-            //NOTE: this feature will be implemented when Android adds requirements for provisioning 
-        }
+        // //TODO if a device target is provided, check if the target device is provisioned
+        // if !self.device_target.is_none() {
+        //     println!("");
+        //     //NOTE: this feature will be implemented when Android adds requirements for provisioning
+        // }
         Ok(())
     }
 
-    fn build_so(&mut self) -> Result<(), PistonError>{
+    fn build_so(&mut self) -> Result<(), PistonError> {
         println!("building the .so library");
         //build the .so with cargo
         let host_platform = Helper::get_host_platform(self.ndk_path.as_ref())?;
@@ -405,14 +507,28 @@ impl AndroidBuilder {
             format!("{}{}-clang", self.target, api_level)
         };
         let ndk_path_buf = PathBuf::from(&self.ndk_path);
-        let linker_path = ndk_path_buf.join("toolchains/llvm/prebuilt").join(&host_platform).join("bin").join(linker_name);
-        let ar_path = ndk_path_buf.join("toolchains/llvm/prebuilt").join(&host_platform).join("bin").join("llvm-ar");
+        let linker_path = ndk_path_buf
+            .join("toolchains/llvm/prebuilt")
+            .join(&host_platform)
+            .join("bin")
+            .join(linker_name);
+        let ar_path = ndk_path_buf
+            .join("toolchains/llvm/prebuilt")
+            .join(&host_platform)
+            .join("bin")
+            .join("llvm-ar");
         // Check if paths exists
         if !linker_path.exists() {
-            return Err(PistonError::BuildError(format!("Linker not found at {}", linker_path.display())));
+            return Err(PistonError::BuildError(format!(
+                "Linker not found at {}",
+                linker_path.display()
+            )));
         }
         if !ar_path.exists() {
-            return Err(PistonError::BuildError(format!("AR not found at {}", ar_path.display())));
+            return Err(PistonError::BuildError(format!(
+                "AR not found at {}",
+                ar_path.display()
+            )));
         }
 
         // handle cc crate linker for rusqlite
@@ -440,16 +556,16 @@ impl AndroidBuilder {
 
         //match the style Cargo uses
         // CC_aarch64_linux_android
-        let cc_env_key   = format!("CC_{}", target_underscored);
-        let cxx_env_key  = format!("CXX_{}", target_underscored);
+        let cc_env_key = format!("CC_{}", target_underscored);
+        let cxx_env_key = format!("CXX_{}", target_underscored);
         // also used by cc
         let ar_env_key_cc = format!("AR_{}", target_underscored);
 
         let target_upper = self.target.to_uppercase().replace("-", "_");
         let linker_env_key = format!("CARGO_TARGET_{}_LINKER", target_upper);
         let ar_env_key = format!("CARGO_TARGET_{}_AR", target_upper);
-        let release = if self.release {"--release"} else {""};
-        let cargo_command = format!("cargo build --target {}  {} --lib", self.target, release); 
+        let release = if self.release { "--release" } else { "" };
+        let cargo_command = format!("cargo build --target {}  {} --lib", self.target, release);
         //run the cargo build command
         let builder = Command::new("bash")
             .arg("-c")
@@ -468,7 +584,10 @@ impl AndroidBuilder {
             .output()
             .map_err(|e| PistonError::BuildError(format!("Cargo build failed: {}", e)))?;
         if !builder.status.success() {
-            return Err(PistonError::BuildError(format!("Cargo build failed: {}", String::from_utf8_lossy(&builder.stderr))))
+            return Err(PistonError::BuildError(format!(
+                "Cargo build failed: {}",
+                String::from_utf8_lossy(&builder.stderr)
+            )));
         }
         Ok(())
     }
@@ -506,11 +625,23 @@ impl AndroidBuilder {
         Ok(compiled_res)
     }
 
-    fn link_manifest_and_resources(&self, compiled_res: &Path, base_dir: &Path) -> Result<(), PistonError> {
-        let aapt2_path: PathBuf = PathBuf::from(self.sdk_path.clone()).join(format!("build-tools/{}/aapt2", self.build_tools_version));
-        let android_jar: PathBuf = PathBuf::from(self.sdk_path.clone()).join(format!("platforms/android-{}/android.jar", self.manifest.target_sdk_version));
-        
-        let res_arg = if compiled_res.exists() { format!(" {}", compiled_res.display()) } else { String::new() };
+    fn link_manifest_and_resources(
+        &self,
+        compiled_res: &Path,
+        base_dir: &Path,
+    ) -> Result<(), PistonError> {
+        let aapt2_path: PathBuf = PathBuf::from(self.sdk_path.clone())
+            .join(format!("build-tools/{}/aapt2", self.build_tools_version));
+        let android_jar: PathBuf = PathBuf::from(self.sdk_path.clone()).join(format!(
+            "platforms/android-{}/android.jar",
+            self.manifest.target_sdk_version
+        ));
+
+        let res_arg = if compiled_res.exists() {
+            format!(" {}", compiled_res.display())
+        } else {
+            String::new()
+        };
         println!("linking manifest & resources");
         let link_command = format!(
             "{} link --proto-format --output-to-dir -o {} --manifest {} -I {} {}",
@@ -536,18 +667,22 @@ impl AndroidBuilder {
             let manifest_dir = base_dir.join("manifest");
             //empty the dir if it exists
             Helper::empty_directory(&manifest_dir, &[])?;
-            create_dir_all(&manifest_dir)
-                .map_err(|e| PistonError::CreateDirAllError {
-                    path: manifest_dir.clone(),
-                    source: e,
-                })?;
-            rename(&proto_manifest_root, manifest_dir.join("AndroidManifest.xml"))
-                .map_err(|e| PistonError::RenameFileError {
-                    path: proto_manifest_root.clone(),
-                    source: e,
-                })?;
+            create_dir_all(&manifest_dir).map_err(|e| PistonError::CreateDirAllError {
+                path: manifest_dir.clone(),
+                source: e,
+            })?;
+            rename(
+                &proto_manifest_root,
+                manifest_dir.join("AndroidManifest.xml"),
+            )
+            .map_err(|e| PistonError::RenameFileError {
+                path: proto_manifest_root.clone(),
+                source: e,
+            })?;
         } else {
-            return Err(PistonError::ProtoLinkError("Proto AndroidManifest.xml not generated and linked by AAPT2".to_string()))
+            return Err(PistonError::ProtoLinkError(
+                "Proto AndroidManifest.xml not generated and linked by AAPT2".to_string(),
+            ));
         }
         Ok(())
     }
@@ -557,17 +692,26 @@ impl AndroidBuilder {
         let abi = match target {
             "aarch64-linux-android" => "arm64-v8a",
             //Add more mappings here as required if updating android support for other outputs
-            _ => return Err(PistonError::UnsupportedTargetError(format!("Unsupported target {}", target).to_string())),
+            _ => {
+                return Err(PistonError::UnsupportedTargetError(
+                    format!("Unsupported target {}", target).to_string(),
+                ));
+            }
         };
         let lib_dir = base_dir.join("lib").join(abi);
         Helper::empty_directory(&lib_dir, &[])?;
         create_dir_all(&lib_dir).map_err(|e| PistonError::CreateDirAllError {
-        path: lib_dir.clone(),
-        source: e,
+            path: lib_dir.clone(),
+            source: e,
         })?;
 
         let lib_file = format!("lib{}.so", self.lib_name);
-        let so_path = self.cwd.join("target").join(target).join(if self.release { "release" } else { "debug" }).join(&lib_file);
+        let so_path = self
+            .cwd
+            .join("target")
+            .join(target)
+            .join(if self.release { "release" } else { "debug" })
+            .join(&lib_file);
         copy(&so_path, lib_dir.join(&lib_file))
             .map_err(|e| PistonError::BuildError(format!("Failed to copy .so: {}", e)))?;
 
@@ -583,10 +727,7 @@ impl AndroidBuilder {
             })?;
         }
         println!("zipping base dir");
-        let zip_command = format!(
-            "cd {} && zip -r ../base.zip *",
-            base_dir.display()
-        );
+        let zip_command = format!("cd {} && zip -r ../base.zip *", base_dir.display());
 
         Command::new("bash")
             .arg("-c")
@@ -627,54 +768,112 @@ impl AndroidBuilder {
         Ok(())
     }
 
-    fn create_release_key(&self) -> Result<(), PistonError>{
+    fn create_signing_key(&self, release: bool) -> Result<(), PistonError> {
+        //these four values in the tuple need to be different depending on debug or release build.
+        let (keystore_path, pass, alias, dname) = if release {
+            (
+                self.key_path.clone(),
+                self.key_pass.clone(),
+                self.key_alias.clone(),
+                format!(
+                    "CN={}, OU={}, O={}, L={}, S={}, C={}",
+                    self.common_name,
+                    self.org_unit,
+                    self.org,
+                    self.locality,
+                    self.state,
+                    self.country
+                ),
+            )
+        } else {
+            (
+                self.debug_keystore_path.clone(),
+                "android".to_string(),
+                "androiddebugkey".to_string(),
+                "CN=Android Debug,O=Android,C=US".to_string(),
+            )
+        };
+
         //proceed to key creation, state the reason for the user
-        println!("creating release key at path: {} with the alias: {}", self.key_path, self.key_alias);
+        println!(
+            "creating {} key at path: {} with the alias: {}",
+            if release { "Release" } else { "Debug" },
+            keystore_path,
+            alias
+        );
         //check if .android exists, if not create
-        if let Some(parent) = Path::new(&self.key_path).parent() {
-            create_dir_all(parent)
-                .map_err(|e| PistonError::CreateDirAllError {
-                    path: Path::new(&self.key_path).to_path_buf(),
-                    source: e,
-                })?;
+        if let Some(parent) = Path::new(&keystore_path).parent() {
+            create_dir_all(parent).map_err(|e| PistonError::CreateDirAllError {
+                path: Path::new(parent).to_path_buf(),
+                source: e,
+            })?;
         }
 
-        //create release key with keytool
-        let output = Command::new("keytool")
+        let keytool = format!("{}/bin/keytool", self.java_path);
+
+        //create release or debug key with keytool
+        let output = Command::new(&keytool)
             .arg("-genkeypair")
             .arg("-v")
-            .arg("-keystore").arg(self.key_path.clone())
-            .arg("-storepass").arg(self.key_pass.clone())
-            .arg("-keypass").arg(self.key_pass.clone())
-            .arg("-alias").arg(self.key_alias.clone())
-            .arg("-keyalg").arg("RSA")
-            .arg("-keysize").arg("2048")
-            .arg("-validity").arg("10000")
-            .arg("-dname").arg(format!("CN={}, OU={}, O={}, L={}, S={}, C={}", self.common_name, self.org_unit, self.org, self.locality, self.state, self.country))
+            .arg("-keystore")
+            .arg(&keystore_path)
+            .arg("-storepass")
+            .arg(&pass)
+            .arg("-keypass")
+            .arg(&pass)
+            .arg("-alias")
+            .arg(&alias)
+            .arg("-keyalg")
+            .arg("RSA")
+            .arg("-keysize")
+            .arg("2048")
+            .arg("-validity")
+            .arg("10000")
+            .arg("-dname")
+            .arg(&dname)
             .output()
-            .map_err(|e| PistonError::KeyToolError(format!("Failed to generate release key with keytool: {}", e)))?;
+            .map_err(|e| {
+                PistonError::KeyToolError(format!(
+                    "Failed to generate {} key with keytool: {}",
+                    if release { "Release" } else { "Debug" },
+                    e
+                ))
+            })?;
 
         if !output.status.success() {
-            return Err(PistonError::KeyToolError(format!("Failed to generate release key: {}", String::from_utf8_lossy(&output.stderr))))
+            return Err(PistonError::KeyToolError(format!(
+                "Failed to generate {} key: {}",
+                if release { "Release" } else { "Debug" },
+                String::from_utf8_lossy(&output.stderr)
+            )));
         }
 
-        println!("Release key successfully created at: {}", self.key_path);
+        println!(
+            "{} key successfully created at: {}",
+            if release { "Release" } else { "Debug" },
+            keystore_path
+        );
         Ok(())
     }
 
     fn verify_key_alias(&self) -> Result<bool, PistonError> {
+        let keytool = format!("{}/bin/keytool", self.java_path);
         //verify the key alias on record exists by querying the keystore
-        let output = Command::new("keytool")
+        let output = Command::new(keytool)
             .arg("-list")
             .arg("-v")
-            .arg("-keystore").arg(self.key_path.clone())
-            .arg("-storepass").arg(self.key_pass.clone())
+            .arg("-keystore")
+            .arg(self.key_path.clone())
+            .arg("-storepass")
+            .arg(self.key_pass.clone())
             .output()
-            .map_err(|e| PistonError::KeyToolError(format!("Failed to list keystore contents: {}", e)))?;
+            .map_err(|e| {
+                PistonError::KeyToolError(format!("Failed to list keystore contents: {}", e))
+            })?;
 
         if !output.status.success() {
             // let stderr = String::from_utf8_lossy(&output.stderr);
-            return Ok(false)
+            return Ok(false);
             // return Err(PistonError::KeyToolError(format!("Could not use keytool to list keystore contents: {}", stderr)))
         }
 
@@ -684,35 +883,46 @@ impl AndroidBuilder {
         for line in stdout.lines() {
             if let Some(found) = line.strip_prefix("Alias name:") {
                 if found.trim() == self.key_alias {
-                    return Ok(true)
+                    return Ok(true);
                 } else {
-                    return Ok(false)
+                    return Ok(false);
                 }
             }
         }
         Ok(false)
-
     }
 
     fn sign_aab(&self, aab_path: PathBuf) -> Result<(), PistonError> {
         //sign the AAB with key_path, key_pass, and key_alias on record
         let sdk = PathBuf::from(&self.sdk_path);
-        let apksigner_path = sdk.join(format!("build-tools/{}/apksigner", self.build_tools_version));
+        let apksigner_path = sdk.join(format!(
+            "build-tools/{}/apksigner",
+            self.build_tools_version
+        ));
         let api_level = self.manifest.min_sdk_version.to_string();
 
         let output = Command::new(&apksigner_path)
+            .env("JAVA_HOME", self.java_path.clone())
             .arg("sign")
-            .arg("--ks").arg(self.key_path.clone())
-            .arg("--ks-key-alias").arg(self.key_alias.clone())
-            .arg("--ks-pass").arg(format!("pass:{}", self.key_pass.clone()))
-            .arg("--key-pass").arg(format!("pass:{}", self.key_pass.clone()))
-            .arg("--min-sdk-version").arg(&api_level)
+            .arg("--ks")
+            .arg(self.key_path.clone())
+            .arg("--ks-key-alias")
+            .arg(self.key_alias.clone())
+            .arg("--ks-pass")
+            .arg(format!("pass:{}", self.key_pass.clone()))
+            .arg("--key-pass")
+            .arg(format!("pass:{}", self.key_pass.clone()))
+            .arg("--min-sdk-version")
+            .arg(&api_level)
             .arg(&aab_path)
             .output()
             .map_err(|e| PistonError::APKSignerError(format!("Error signing AAB: {}", e)))?;
-        
+
         if !output.status.success() {
-            return Err(PistonError::APKSignerError(format!("Error signing AAB: {}", String::from_utf8_lossy(&output.stderr))))
+            return Err(PistonError::APKSignerError(format!(
+                "Error signing AAB: {}",
+                String::from_utf8_lossy(&output.stderr)
+            )));
         }
 
         //validate the signature, useful for debugging
@@ -726,32 +936,62 @@ impl AndroidBuilder {
         //     return Err(PistonError::Generic(format!("Error verifying signature: {}", String::from_utf8_lossy(&output.stderr))))
         // }
         // println!("Signature verifcation: {:?}", output);
-        
-        println!("AAB: {} successfully signed for release", aab_path.display());
+
+        println!(
+            "AAB: {} successfully signed for release",
+            aab_path.display()
+        );
         Ok(())
     }
-
 }
 
-pub struct AndroidRunner{}
+pub struct AndroidRunner {}
 
-impl AndroidRunner{
-
-    pub fn start(release: bool, cwd: PathBuf, env_vars: HashMap<String, String>, device: &AndroidDevice) -> Result<(), PistonError> {
+impl AndroidRunner {
+    pub fn start(
+        release: bool,
+        cwd: PathBuf,
+        env_vars: HashMap<String, String>,
+        device: &AndroidDevice,
+    ) -> Result<(), PistonError> {
         println!("Running for Android");
         let target_string = "aarch64-linux-android".to_string();
         let env_vars_bind = env_vars.clone();
         //build the app bundle
-        let builder = AndroidBuilder::start(release, target_string, cwd.clone(), env_vars, Some(device.clone()))?;
+        let builder = AndroidBuilder::start(
+            release,
+            target_string,
+            cwd.clone(),
+            env_vars,
+            Some(device.clone()),
+        )?;
 
         //deploy the app bundle to the target device
-        AndroidRunner::deploy_usb(device.id.as_ref(), builder.0, builder.1, cwd.clone(), builder.2, env_vars_bind)?;
+        AndroidRunner::deploy_usb(
+            device.id.as_ref(),
+            builder.0,
+            builder.1,
+            cwd.clone(),
+            builder.2,
+            env_vars_bind,
+        )?;
 
         Ok(())
     }
 
-    fn deploy_usb(device_id: &str, output_path: PathBuf, app_name: String, cwd: PathBuf, package: String, env_vars: HashMap<String, String>) -> Result<(), PistonError> {
-        println!("Deploying bundle at: {} to device: {}", output_path.display(), device_id);
+    fn deploy_usb(
+        device_id: &str,
+        output_path: PathBuf,
+        app_name: String,
+        cwd: PathBuf,
+        package: String,
+        env_vars: HashMap<String, String>,
+    ) -> Result<(), PistonError> {
+        println!(
+            "Deploying bundle at: {} to device: {}",
+            output_path.display(),
+            device_id
+        );
         let aab_path = output_path.join(format!("{}.aab", app_name));
         let bundletool_path: &String = Helper::get_or_err(&env_vars, "bundletool_path")?;
         let java_path: &String = Helper::get_or_err(&env_vars, "java_path")?;
@@ -759,13 +999,12 @@ impl AndroidRunner{
         let adb_path: String = format!("{}/platform-tools/adb", sdk_path);
         let apk_path = cwd.join(format!("{}.apks", app_name));
         //extract .apk from completed aab provided by androidbuilder
-         let bundle_cmd = format!(
+        let bundle_cmd = format!(
             "java -jar {} build-apks --bundle={} --output={} --connected-device --overwrite --adb {}",
             &bundletool_path,
             &aab_path.display(),
             &apk_path.display(),
             &adb_path
-
         );
         println!("bundletool command: {}", bundle_cmd);
 
@@ -776,9 +1015,14 @@ impl AndroidRunner{
             .stdout(Stdio::inherit())
             .stderr(Stdio::inherit())
             .output()
-            .map_err(|e| PistonError::ExtractAPKError(format!("Bundletool failed to extract the APK: {}", e)))?;
+            .map_err(|e| {
+                PistonError::ExtractAPKError(format!("Bundletool failed to extract the APK: {}", e))
+            })?;
         if !output.status.success() {
-            return Err(PistonError::ExtractAPKError(format!("Bundletool failed to extract APK: {}", String::from_utf8_lossy(&output.stderr))))
+            return Err(PistonError::ExtractAPKError(format!(
+                "Bundletool failed to extract APK: {}",
+                String::from_utf8_lossy(&output.stderr)
+            )));
         }
         //stream install the extracted .apk to the target device
         let bundle_cmd = format!(
@@ -796,17 +1040,18 @@ impl AndroidRunner{
             .stdout(Stdio::inherit())
             .stderr(Stdio::inherit())
             .output()
-            .map_err(|e| PistonError::InstallAPKError(format!("Bundletool failed to install the APK: {}", e)))?;
+            .map_err(|e| {
+                PistonError::InstallAPKError(format!("Bundletool failed to install the APK: {}", e))
+            })?;
         if !output.status.success() {
-            return Err(PistonError::InstallAPKError(format!("Bundletool failed to install APK: {}", String::from_utf8_lossy(&output.stderr))))
+            return Err(PistonError::InstallAPKError(format!(
+                "Bundletool failed to install APK: {}",
+                String::from_utf8_lossy(&output.stderr)
+            )));
         }
         //run the app
         let launch = format!("{}/android.app.NativeActivity", package);
-        let adb_cmd = format!(
-            "{} shell am start -n {}",
-            &adb_path,
-            &launch,
-        );
+        let adb_cmd = format!("{} shell am start -n {}", &adb_path, &launch,);
 
         let output = Command::new("bash")
             .arg("-c")
@@ -816,7 +1061,10 @@ impl AndroidRunner{
             .output()
             .map_err(|e| PistonError::RunAPKError(format!("ADB failed to run the APK: {}", e)))?;
         if !output.status.success() {
-            return Err(PistonError::RunAPKError(format!("ADB failed to run APK: {}", String::from_utf8_lossy(&output.stderr))))
+            return Err(PistonError::RunAPKError(format!(
+                "ADB failed to run APK: {}",
+                String::from_utf8_lossy(&output.stderr)
+            )));
         }
 
         Ok(())
