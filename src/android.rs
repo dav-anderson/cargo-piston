@@ -137,6 +137,124 @@ impl AndroidManifest {
     }
 }
 
+struct KeySet {
+    key_path: String,
+    key_pass: String,
+    key_alias: String,
+    common_name: String,
+    org_unit: String,
+    org: String,
+    locality: String,
+    state: String,
+    country: String,
+}
+
+impl KeySet {
+    fn new(release: bool, env_vars: &HashMap<String, String>) -> Result<KeySet, PistonError> {
+        let user_output = Command::new("whoami")
+            .output()
+            .map_err(|e| PistonError::WhoAmIError(format!("Failed to run 'whoami': {}", e)))?;
+
+        if !user_output.status.success() {
+            return Err(PistonError::WhoAmIError(format!(
+                "Failed to run 'whoami': {}",
+                String::from_utf8_lossy(&user_output.stderr)
+            )));
+        }
+        let user = String::from_utf8_lossy(&user_output.stdout)
+            .trim()
+            .to_string();
+        if user.is_empty() {
+            return Err(PistonError::WhoAmIError(format!(
+                "Failed to obtain user id with whoami: {}",
+                String::from_utf8_lossy(&user_output.stderr)
+            )));
+        }
+
+        let default_path = if release {
+            format!("/Users/{}/.android/release.keystore", user)
+        } else {
+            format!("/Users/{}/.android/debug.keystore", user)
+        };
+
+        let (default_pass, default_alias, default_cn, default_org) = if release {
+            ("piston", "release-key", "Unknown", "Unknown")
+        } else {
+            ("android", "androiddebugkey", "Android Debug", "Android")
+        };
+
+        let key_pass = if release {
+            env_vars
+                .get("aab_key_pass")
+                .cloned()
+                .unwrap_or(default_pass.to_string())
+        } else {
+            default_pass.to_string()
+        };
+
+        let key_path = if release {
+            env_vars
+                .get("aab_release_key")
+                .cloned()
+                .unwrap_or(default_path)
+        } else {
+            default_path
+        };
+
+        let key_alias = if release {
+            env_vars
+                .get("aab_key_alias")
+                .cloned()
+                .unwrap_or(default_alias.to_string())
+        } else {
+            default_alias.to_string()
+        };
+
+        let common_name = env_vars
+            .get("common_name")
+            .cloned()
+            .unwrap_or(default_cn.to_string());
+
+        let org = env_vars
+            .get("org")
+            .cloned()
+            .unwrap_or(default_org.to_string());
+
+        let org_unit = env_vars
+            .get("org_unit")
+            .cloned()
+            .unwrap_or("Development".to_string());
+
+        let locality = env_vars
+            .get("locality")
+            .cloned()
+            .unwrap_or("Unknown".to_string());
+
+        let state = env_vars
+            .get("state")
+            .cloned()
+            .unwrap_or("Unknown".to_string());
+
+        let country: String = env_vars
+            .get("country")
+            .filter(|s| s.trim().len() == 2)
+            .map(|s| s.trim().to_uppercase().to_string())
+            .unwrap_or_else(|| "US".to_string());
+
+        Ok(KeySet {
+            key_path,
+            key_pass,
+            key_alias,
+            common_name,
+            org_unit,
+            org,
+            locality,
+            state,
+            country,
+        })
+    }
+}
+
 pub struct AndroidBuilder {
     release: bool,
     target: String,
@@ -145,26 +263,17 @@ pub struct AndroidBuilder {
     output_path: Option<PathBuf>,
     icon_path: String,
     assets: String,
-    key_path: String,
-    key_pass: String,
-    key_alias: String,
-    debug_keystore_path: String,
     app_name: String,
     lib_name: String,
     manifest: AndroidManifest,
     manifest_path: PathBuf,
+    key_set: KeySet,
     ndk_path: String,
     sdk_path: String,
     java_path: String,
     resources: PathBuf,
     build_tools_version: String,
     bundletool_path: String,
-    common_name: String,
-    org_unit: String,
-    org: String,
-    locality: String,
-    state: String,
-    country: String,
     device_target: Option<AndroidDevice>,
 }
 
@@ -211,67 +320,7 @@ impl AndroidBuilder {
         let java_path: &String = Helper::get_or_err(&env_vars, "java_path")?;
         let bundletool_path: &String = Helper::get_or_err(&env_vars, "bundletool_path")?;
         let build_tools_version: String = Helper::get_build_tools_version(&sdk_path)?;
-        //obtain default path for keystore
-        let user_output = Command::new("whoami")
-            .output()
-            .map_err(|e| PistonError::WhoAmIError(format!("Failed to run 'whoami': {}", e)))?;
-
-        if !user_output.status.success() {
-            return Err(PistonError::WhoAmIError(format!(
-                "Failed to run 'whoami': {}",
-                String::from_utf8_lossy(&user_output.stderr)
-            )));
-        }
-        let user = String::from_utf8_lossy(&user_output.stdout)
-            .trim()
-            .to_string();
-        if user.is_empty() {
-            return Err(PistonError::WhoAmIError(format!(
-                "Failed to obtain user id with whoami: {}",
-                String::from_utf8_lossy(&user_output.stderr)
-            )));
-        }
-        let default_path = format!("/Users/{}/.android/release.keystore", user);
-        let debug_keystore_path = format!("/Users/{}/.android/debug.keystore", user);
-        //allow .env to override default key_path and key_pass and key_alias if it exists
-        let key_path: String = env_vars
-            .get("aab_release_key")
-            .cloned()
-            .unwrap_or(default_path);
-        let key_pass: String = env_vars
-            .get("aab_key_pass")
-            .cloned()
-            .unwrap_or("piston".to_string());
-        let key_alias: String = env_vars
-            .get("aab_key_alias")
-            .cloned()
-            .unwrap_or("release-key".to_string());
-        //allow .env to ovverride default dname metadata if provided
-        let common_name: String = env_vars
-            .get("common_name")
-            .cloned()
-            .unwrap_or("Unknown".to_string());
-        let org_unit: String = env_vars
-            .get("org_unit")
-            .cloned()
-            .unwrap_or("Development".to_string());
-        let org: String = env_vars
-            .get("org")
-            .cloned()
-            .unwrap_or("Unknown".to_string());
-        let locality: String = env_vars
-            .get("locality")
-            .cloned()
-            .unwrap_or("Unknown".to_string());
-        let state: String = env_vars
-            .get("state")
-            .cloned()
-            .unwrap_or("Unknown".to_string());
-        let country: String = env_vars
-            .get("country")
-            .filter(|s| s.trim().len() == 2)
-            .map(|s| s.trim().to_uppercase().to_string())
-            .unwrap_or_else(|| "US".to_string());
+        let key_set = KeySet::new(release, &env_vars)?;
         //parse cargo.toml
         let metadata: Metadata = MetadataCommand::new()
             .current_dir(cwd.clone())
@@ -311,26 +360,17 @@ impl AndroidBuilder {
             output_path: None,
             icon_path,
             assets,
-            key_path,
-            key_pass,
-            key_alias,
-            debug_keystore_path,
             app_name,
             lib_name,
             manifest,
             manifest_path,
+            key_set,
             ndk_path: ndk_path.to_string(),
             sdk_path: sdk_path.to_string(),
             java_path: java_path.to_string(),
             resources: resources_path,
             build_tools_version,
             bundletool_path: bundletool_path.to_string(),
-            common_name,
-            org_unit,
-            org,
-            locality,
-            state,
-            country,
             device_target,
         })
     }
@@ -467,23 +507,23 @@ impl AndroidBuilder {
     fn post_build(&mut self, aab_path: PathBuf) -> Result<(), PistonError> {
         if self.release {
             println!("Posting release build for Android.");
-            let key_path_exists = Path::new(&self.key_path).exists();
+            let key_path_exists = Path::new(&self.key_set.key_path).exists();
             let key_alias_exists = self.verify_key_alias()?;
 
             if !key_path_exists || !key_alias_exists {
                 //create a release key
-                self.create_signing_key(true)?;
+                self.create_signing_key()?;
             } else {
-                println!("release key found at: {}", self.key_path);
+                println!("release key found at: {}", self.key_set.key_path);
             }
             self.sign_aab(aab_path)?;
         } else {
             println!("Posting debug build for Android.");
-            let debug_keystore_exists = Path::new(&self.debug_keystore_path).exists();
+            let debug_keystore_exists = Path::new(&self.key_set.key_path).exists();
             if !debug_keystore_exists {
-                self.create_signing_key(false)?;
+                self.create_signing_key()?;
             } else {
-                println!("debug keystore found at: {}", self.debug_keystore_path);
+                println!("debug keystore found at: {}", self.key_set.key_path);
             }
         }
         // //TODO if a device target is provided, check if the target device is provisioned
@@ -768,36 +808,24 @@ impl AndroidBuilder {
         Ok(())
     }
 
-    fn create_signing_key(&self, release: bool) -> Result<(), PistonError> {
-        //these four values in the tuple need to be different depending on debug or release build.
-        let (keystore_path, pass, alias, dname) = if release {
-            (
-                self.key_path.clone(),
-                self.key_pass.clone(),
-                self.key_alias.clone(),
-                format!(
-                    "CN={}, OU={}, O={}, L={}, S={}, C={}",
-                    self.common_name,
-                    self.org_unit,
-                    self.org,
-                    self.locality,
-                    self.state,
-                    self.country
-                ),
-            )
-        } else {
-            (
-                self.debug_keystore_path.clone(),
-                "android".to_string(),
-                "androiddebugkey".to_string(),
-                "CN=Android Debug,O=Android,C=US".to_string(),
-            )
-        };
+    fn create_signing_key(&self) -> Result<(), PistonError> {
+        let keystore_path = self.key_set.key_path.clone();
+        let pass = self.key_set.key_pass.clone();
+        let alias = self.key_set.key_alias.clone();
+        let dname = format!(
+            "CN={}, OU={}, O={}, L={}, S={}, C={}",
+            self.key_set.common_name,
+            self.key_set.org_unit,
+            self.key_set.org,
+            self.key_set.locality,
+            self.key_set.state,
+            self.key_set.country
+        );
 
         //proceed to key creation, state the reason for the user
         println!(
             "creating {} key at path: {} with the alias: {}",
-            if release { "Release" } else { "Debug" },
+            if self.release { "Release" } else { "Debug" },
             keystore_path,
             alias
         );
@@ -835,7 +863,7 @@ impl AndroidBuilder {
             .map_err(|e| {
                 PistonError::KeyToolError(format!(
                     "Failed to generate {} key with keytool: {}",
-                    if release { "Release" } else { "Debug" },
+                    if self.release { "Release" } else { "Debug" },
                     e
                 ))
             })?;
@@ -843,14 +871,14 @@ impl AndroidBuilder {
         if !output.status.success() {
             return Err(PistonError::KeyToolError(format!(
                 "Failed to generate {} key: {}",
-                if release { "Release" } else { "Debug" },
+                if self.release { "Release" } else { "Debug" },
                 String::from_utf8_lossy(&output.stderr)
             )));
         }
 
         println!(
             "{} key successfully created at: {}",
-            if release { "Release" } else { "Debug" },
+            if self.release { "Release" } else { "Debug" },
             keystore_path
         );
         Ok(())
@@ -863,9 +891,9 @@ impl AndroidBuilder {
             .arg("-list")
             .arg("-v")
             .arg("-keystore")
-            .arg(self.key_path.clone())
+            .arg(self.key_set.key_path.clone())
             .arg("-storepass")
-            .arg(self.key_pass.clone())
+            .arg(self.key_set.key_pass.clone())
             .output()
             .map_err(|e| {
                 PistonError::KeyToolError(format!("Failed to list keystore contents: {}", e))
@@ -882,7 +910,7 @@ impl AndroidBuilder {
         //search for the alias on record in the keystore
         for line in stdout.lines() {
             if let Some(found) = line.strip_prefix("Alias name:") {
-                if found.trim() == self.key_alias {
+                if found.trim() == self.key_set.key_alias {
                     return Ok(true);
                 } else {
                     return Ok(false);
@@ -905,13 +933,13 @@ impl AndroidBuilder {
             .env("JAVA_HOME", self.java_path.clone())
             .arg("sign")
             .arg("--ks")
-            .arg(self.key_path.clone())
+            .arg(self.key_set.key_path.clone())
             .arg("--ks-key-alias")
-            .arg(self.key_alias.clone())
+            .arg(self.key_set.key_alias.clone())
             .arg("--ks-pass")
-            .arg(format!("pass:{}", self.key_pass.clone()))
+            .arg(format!("pass:{}", self.key_set.key_pass.clone()))
             .arg("--key-pass")
-            .arg(format!("pass:{}", self.key_pass.clone()))
+            .arg(format!("pass:{}", self.key_set.key_pass.clone()))
             .arg("--min-sdk-version")
             .arg(&api_level)
             .arg(&aab_path)
