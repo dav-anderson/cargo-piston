@@ -502,30 +502,24 @@ impl AndroidBuilder {
         Ok(aab_path)
     }
 
-    //This function is a Coordinator. Corrdinators are Deciders. Deciders read state.
-    //Contrast this with create_signing_key(), a worker.
     fn post_build(&mut self, aab_path: PathBuf) -> Result<(), PistonError> {
-        if self.release {
-            println!("Posting release build for Android.");
-            let key_path_exists = Path::new(&self.key_set.key_path).exists();
-            let key_alias_exists = self.verify_key_alias()?;
+        println!(
+            "Post {} build for Android.",
+            if self.release { "release" } else { "debug" }
+        );
+        let key_path_exists = Path::new(&self.key_set.key_path).exists();
+        let key_alias_exists = self.verify_key_alias()?;
 
-            if !key_path_exists || !key_alias_exists {
-                //create a release key
-                self.create_signing_key()?;
-            } else {
-                println!("release key found at: {}", self.key_set.key_path);
-            }
-            self.sign_aab(aab_path)?;
+        if !key_path_exists || !key_alias_exists {
+            self.create_signing_key()?;
         } else {
-            println!("Posting debug build for Android.");
-            let debug_keystore_exists = Path::new(&self.key_set.key_path).exists();
-            if !debug_keystore_exists {
-                self.create_signing_key()?;
-            } else {
-                println!("debug keystore found at: {}", self.key_set.key_path);
-            }
+            println!(
+                "{} key found at: {}",
+                if self.release { "release" } else { "debug" },
+                self.key_set.key_path
+            );
         }
+        self.sign_aab(aab_path)?;
         // //TODO if a device target is provided, check if the target device is provisioned
         // if !self.device_target.is_none() {
         //     println!("");
