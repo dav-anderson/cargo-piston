@@ -1,12 +1,12 @@
-use std::path::{ Path, PathBuf };
-use std::collections::HashMap;
-use cargo_metadata::{ Metadata, MetadataCommand };
-use std::fs::{ File, create_dir_all, copy, remove_file};
-use std::io::Write;
-use std::process::{ Command, Stdio };
 use crate::Helper;
 use crate::PistonError;
-use crate::asc::{ AscApiKey, AscClient };
+use crate::asc::{AscApiKey, AscClient};
+use cargo_metadata::{Metadata, MetadataCommand};
+use std::collections::HashMap;
+use std::fs::{File, copy, create_dir_all, remove_file};
+use std::io::Write;
+use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
 
 pub struct MacOSBuilder {
     release: bool,
@@ -23,15 +23,24 @@ pub struct MacOSBuilder {
     asc_api_key: Option<AscApiKey>,
     keystore_path: Option<String>,
     external_cert: Option<String>,
-    team_id: Option<String>
+    team_id: Option<String>,
 }
 
 impl MacOSBuilder {
-    pub fn start(release: bool, external: bool, target: String, cwd: PathBuf, env_vars: HashMap<String, String>) -> Result<(), PistonError> {
+    pub fn start(
+        release: bool,
+        external: bool,
+        target: String,
+        cwd: PathBuf,
+        env_vars: HashMap<String, String>,
+    ) -> Result<(), PistonError> {
         println!("building for MacOS");
         //check operating system (requires MacOS)
-        if std::env::consts::OS != "macos"{
-            return Err(PistonError::UnsupportedOSError{os: std::env::consts::OS.to_string(), target: target})
+        if std::env::consts::OS != "macos" {
+            return Err(PistonError::UnsupportedOSError {
+                os: std::env::consts::OS.to_string(),
+                target: target,
+            });
         }
         //set release to true if external is true
         let mut op = MacOSBuilder::new(release, external, target, cwd, env_vars)?;
@@ -48,10 +57,24 @@ impl MacOSBuilder {
         Ok(())
     }
 
-    fn new(release: bool, external: bool, target: String, cwd: PathBuf, env_vars: HashMap<String, String>) -> Result<Self, PistonError> {
-        println!("creating MacOSBuilder: release: {:?}, target: {:?}, cwd: {:?}", release, target.to_string(), cwd);
+    fn new(
+        release: bool,
+        external: bool,
+        target: String,
+        cwd: PathBuf,
+        env_vars: HashMap<String, String>,
+    ) -> Result<Self, PistonError> {
+        println!(
+            "creating MacOSBuilder: release: {:?}, target: {:?}, cwd: {:?}",
+            release,
+            target.to_string(),
+            cwd
+        );
         //parse env vars
-        let cargo_path = env_vars.get("cargo_path").cloned().unwrap_or("cargo".to_string());
+        let cargo_path = env_vars
+            .get("cargo_path")
+            .cloned()
+            .unwrap_or("cargo".to_string());
         let keystore_path = env_vars.get("keystore_path").cloned();
         let external_cert = env_vars.get("external_cert").cloned();
         let team_id = env_vars.get("team_id").cloned();
@@ -70,22 +93,25 @@ impl MacOSBuilder {
         let asc_api_key: Option<AscApiKey> = match AscApiKey::from_hm(&env_vars) {
             Ok(key) => Some(key),
             Err(e) => {
-                println!("Failed to obtain AscApiKey, check .env configuration: {}", e);
+                println!(
+                    "Failed to obtain AscApiKey, check .env configuration: {}",
+                    e
+                );
                 None
             }
         };
-        Ok(MacOSBuilder{
-            release: release, 
+        Ok(MacOSBuilder {
+            release: release,
             external: external,
-            target: target.to_string(), 
-            cwd: cwd, 
-            output_path: None, 
-            icon_path: icon_path, 
+            target: target.to_string(),
+            cwd: cwd,
+            output_path: None,
+            icon_path: icon_path,
             assets: assets,
-            cargo_path: cargo_path, 
-            app_name: app_name, 
+            cargo_path: cargo_path,
+            app_name: app_name,
             bundle_id: bundle_id,
-            app_version: app_version, 
+            app_version: app_version,
             asc_api_key: asc_api_key,
             keystore_path: keystore_path,
             external_cert: external_cert,
@@ -93,20 +119,28 @@ impl MacOSBuilder {
         })
     }
 
-     fn pre_build(&mut self) -> Result <(), PistonError>{
+    fn pre_build(&mut self) -> Result<(), PistonError> {
         //TODO check xcode for updates
         //TODO allow user to specify a security cert for offline signing?
         println!("Pre build for macos");
         //check for xcode installation
         let xcode_app = "/Applications/Xcode.app";
         if !Path::new(xcode_app).exists() {
-            return Err(PistonError::XcodeInstallError(format!("Xcode installation not found at {} Please download xcode from the apple app store at https://apps.apple.com/us/app/xcode/id497799835", xcode_app)))?;
+            return Err(PistonError::XcodeInstallError(format!(
+                "Xcode installation not found at {} Please download xcode from the apple app store at https://apps.apple.com/us/app/xcode/id497799835",
+                xcode_app
+            )))?;
         }
         //Check for xcode-select command line tools installation and pathing
         let xcode_select = Command::new("xcode-select")
             .arg("-p")
             .output()
-            .map_err(|e| PistonError::XcodeSelectInstallError(format!("Failed to verify xcode tools installation: {}", e)));
+            .map_err(|e| {
+                PistonError::XcodeSelectInstallError(format!(
+                    "Failed to verify xcode tools installation: {}",
+                    e
+                ))
+            });
 
         let expected_path = format!("{}/Contents/Developer", xcode_app);
 
@@ -117,9 +151,12 @@ impl MacOSBuilder {
         //verify that xcode-select path matches the expected query
         if path == expected_path {
             println!("xcode-select path match")
-        }else {
-            return Err(PistonError::XcodeSelectPathingError(format!("Xcode-select path query of {} does not match the expected value of {}...set the path with 'sudo xcode-select -s /Applications/Xcode.app/Contents/Developer'",path, expected_path)))
-        }   
+        } else {
+            return Err(PistonError::XcodeSelectPathingError(format!(
+                "Xcode-select path query of {} does not match the expected value of {}...set the path with 'sudo xcode-select -s /Applications/Xcode.app/Contents/Developer'",
+                path, expected_path
+            )));
+        }
         let cwd: PathBuf = self.cwd.clone();
         let capitalized = Helper::capitalize_first(&self.app_name.clone());
         let release = if self.external {
@@ -130,9 +167,9 @@ impl MacOSBuilder {
             "debug"
         };
         let true_bundle_path: PathBuf = if self.release {
-            format!("target/{}/macos/{}.app",release, capitalized).into()
-        }else {
-            format!("target/{}/macos/{}.app",release, capitalized).into()
+            format!("target/{}/macos/{}.app", release, capitalized).into()
+        } else {
+            format!("target/{}/macos/{}.app", release, capitalized).into()
         };
         let contents_path: PathBuf = true_bundle_path.join("Contents");
         //establish ~/target/release/macos/Appname.app/Contents/Resources
@@ -146,8 +183,8 @@ impl MacOSBuilder {
         Helper::empty_directory(path, &["assets"])?;
         //create the target directories
         create_dir_all(path).map_err(|e| PistonError::CreateDirAllError {
-        path: self.output_path.as_ref().unwrap().to_path_buf(),
-        source: e,
+            path: self.output_path.as_ref().unwrap().to_path_buf(),
+            source: e,
         })?;
         //create binary directories
         create_dir_all(macos_path).map_err(|e| PistonError::CreateDirAllError {
@@ -170,7 +207,8 @@ impl MacOSBuilder {
             })?;
         }
         //create a new Info.plist file
-        let mut plist_file = File::create(&plist_path).map_err(|e| PistonError::CreateFileError {
+        let mut plist_file =
+            File::create(&plist_path).map_err(|e| PistonError::CreateFileError {
                 path: plist_path.clone().to_path_buf(),
                 source: e,
             })?;
@@ -202,7 +240,9 @@ impl MacOSBuilder {
             &self.bundle_id.clone(),
             &self.app_version.clone(),
         );
-        plist_file.write_all(plist_content.as_bytes()).map_err(|e| PistonError::WriteFileError(e.to_string()))?;
+        plist_file
+            .write_all(plist_content.as_bytes())
+            .map_err(|e| PistonError::WriteFileError(e.to_string()))?;
         //if icon path was provided...convert
         println!("icon path provided, configuring icon");
         //convert the .png at icon_path to an .icns which resides in the app bundle
@@ -210,7 +250,14 @@ impl MacOSBuilder {
         let img_path = Path::new(&img_path_clone);
         //Configure icon
         Command::new("sips")
-            .args(["-s", "format", "icns", &img_path_clone, "--out", &icon_path.display().to_string()])
+            .args([
+                "-s",
+                "format",
+                "icns",
+                &img_path_clone,
+                "--out",
+                &icon_path.display().to_string(),
+            ])
             .output()
             .map_err(|e| PistonError::MacOSIconError {
                 input_path: img_path.to_path_buf(),
@@ -219,13 +266,16 @@ impl MacOSBuilder {
             })?;
         println!("done configuring MacOS bundle");
         Ok(())
-        
     }
 
-    fn build(&mut self) -> Result<(), PistonError>{
+    fn build(&mut self) -> Result<(), PistonError> {
         println!("build for macos");
         //build the binary for the specified target
-        let cargo_args = format!("build --target {} {}", self.target, if self.release {"--release"} else {""});
+        let cargo_args = format!(
+            "build --target {} {}",
+            self.target,
+            if self.release { "--release" } else { "" }
+        );
         let cargo_cmd = format!("{} {}", self.cargo_path, cargo_args);
         let builder = Command::new("bash")
             .arg("-c")
@@ -236,12 +286,23 @@ impl MacOSBuilder {
             .output()
             .map_err(|e| PistonError::BuildError(format!("Cargo build failed: {}", e)))?;
         if !builder.status.success() {
-            return Err(PistonError::BuildError(format!("Cargo build failed: {}", String::from_utf8_lossy(&builder.stderr))))
+            return Err(PistonError::BuildError(format!(
+                "Cargo build failed: {}",
+                String::from_utf8_lossy(&builder.stderr)
+            )));
         }
         //second target triple for universal binary build
-        if self.release{
-            let secondary = if self.target.contains("aarch64") {"x86_64-apple-darwin"} else {"aarch64-apple-darwin"};
-            let cargo_args_second = format!("build --target {} {}", secondary, if self.release {"--release"} else {""});
+        if self.release {
+            let secondary = if self.target.contains("aarch64") {
+                "x86_64-apple-darwin"
+            } else {
+                "aarch64-apple-darwin"
+            };
+            let cargo_args_second = format!(
+                "build --target {} {}",
+                secondary,
+                if self.release { "--release" } else { "" }
+            );
             let cargo_cmd_second = format!("{} {}", self.cargo_path, cargo_args_second);
             let builder_second = Command::new("bash")
                 .arg("-c")
@@ -250,21 +311,37 @@ impl MacOSBuilder {
                 .stdout(Stdio::inherit())
                 .stderr(Stdio::inherit())
                 .output()
-                .map_err(|e| PistonError::BuildError(format!("Second Cargo build failed: {}", e)))?;
+                .map_err(|e| {
+                    PistonError::BuildError(format!("Second Cargo build failed: {}", e))
+                })?;
             if !builder_second.status.success() {
-                return Err(PistonError::BuildError(format!("Second Cargo build failed: {}", String::from_utf8_lossy(&builder.stderr))))
+                return Err(PistonError::BuildError(format!(
+                    "Second Cargo build failed: {}",
+                    String::from_utf8_lossy(&builder.stderr)
+                )));
             }
         }
 
         Ok(())
     }
 
-    fn post_build(&mut self) -> Result<(), PistonError>{
+    fn post_build(&mut self) -> Result<(), PistonError> {
         println!("post build for macos");
         //binary_path: /Users/<user>/<appname>/target/<target-triple>/<release>/<appname>
-        let binary_path = self.cwd.join("target").join(self.target.clone()).join(if self.release {"release"} else {"debug"}).join(self.app_name.clone());
+        let binary_path = self
+            .cwd
+            .join("target")
+            .join(self.target.clone())
+            .join(if self.release { "release" } else { "debug" })
+            .join(self.app_name.clone());
         //binary_tgt_path: /Users/<user>/<appname>/target/<release>/macos/<Appname>.app/Contents/MacOS/<appname>
-        let binary_target_path = self.output_path.as_ref().unwrap().join("Contents").join("MacOS").join(self.app_name.clone());
+        let binary_target_path = self
+            .output_path
+            .as_ref()
+            .unwrap()
+            .join("Contents")
+            .join("MacOS")
+            .join(self.app_name.clone());
         //if release flag false, copy target triple only
         if !self.release {
             //bundle path should be cwd + target + <target output> + <--release flag or None for debug> + <appname>.exe
@@ -275,12 +352,24 @@ impl MacOSBuilder {
                 output_path: binary_target_path.clone().to_path_buf(),
                 source: e,
             })?;
-            println!("MacOS app bundle available at: {}", &binary_target_path.display());
+            println!(
+                "MacOS app bundle available at: {}",
+                &binary_target_path.display()
+            );
         //if release flag true, build universal binary
         } else {
             println!("creating universal binary in the app bundle");
-            let secondary = if self.target.contains("aarch64") {"x86_64-apple-darwin"} else {"aarch64-apple-darwin"};
-            let secondary_path = self.cwd.join("target").join(secondary).join("release").join(self.app_name.clone());
+            let secondary = if self.target.contains("aarch64") {
+                "x86_64-apple-darwin"
+            } else {
+                "aarch64-apple-darwin"
+            };
+            let secondary_path = self
+                .cwd
+                .join("target")
+                .join(secondary)
+                .join("release")
+                .join(self.app_name.clone());
             //secondary_path: /Users/<user>/<appname>/target/<secondary-target-triple>/<release>/<appname>
             let lipo = Command::new("lipo")
                 .arg("-create")
@@ -289,38 +378,51 @@ impl MacOSBuilder {
                 .arg("-output")
                 .arg(&binary_target_path)
                 .output()
-                .map_err(|e| PistonError::LipoError{
+                .map_err(|e| PistonError::LipoError {
                     first_binary: binary_path.clone(),
                     second_binary: secondary_path.clone(),
-                    source: e.to_string()
+                    source: e.to_string(),
                 })?;
             if !lipo.status.success() {
-                return Err(PistonError::LipoError{
+                return Err(PistonError::LipoError {
                     first_binary: binary_path,
                     second_binary: secondary_path,
-                    source: String::from_utf8_lossy(&lipo.stderr).to_string()         
-                })
+                    source: String::from_utf8_lossy(&lipo.stderr).to_string(),
+                });
             }
-            println!("Universal MacOS app bundle available at: {}", &binary_target_path.display());
+            println!(
+                "Universal MacOS app bundle available at: {}",
+                &binary_target_path.display()
+            );
         }
 
         //automated signing
         if self.keystore_path.is_none() || self.asc_api_key.is_none() {
-            println!("Either the Keystore path or ASC API key missing from .env, skipping automated signing");
+            println!(
+                "Either the Keystore path or ASC API key missing from .env, skipping automated signing"
+            );
         //sign for external release outside of apple app store ecosystem
         } else if self.external {
             //if external-release not properly configured, throw error
             if self.external_cert.is_none() {
-                return Err(PistonError::Generic("external-release certificate is not properly configured, see documentation".to_string()))
+                return Err(PistonError::Generic(
+                    "external-release certificate is not properly configured, see documentation"
+                        .to_string(),
+                ));
             }
             //perform external release sign if properly configured
-            AscClient::sign_app_bundle(&self.app_name, &self.output_path.as_ref().unwrap(), &self.external_cert.as_ref().unwrap(), self.bundle_id.as_ref(), false, true)?;
+            AscClient::sign_app_bundle(
+                &self.app_name,
+                &self.output_path.as_ref().unwrap(),
+                &self.external_cert.as_ref().unwrap(),
+                self.bundle_id.as_ref(),
+                false,
+                true,
+            )?;
             let working_path = &self.output_path.as_ref().unwrap();
-            let parent = working_path
-                .parent()
-                .map(PathBuf::from)
-                .ok_or_else(|| PistonError::Generic("Failed to determine zip path via parent method".to_string()
-            ))?;
+            let parent = working_path.parent().map(PathBuf::from).ok_or_else(|| {
+                PistonError::Generic("Failed to determine zip path via parent method".to_string())
+            })?;
             let zip_str = format!("{}.zip", &self.app_name);
             let zip_path = parent.join(zip_str);
 
@@ -332,27 +434,27 @@ impl MacOSBuilder {
                 .arg(&zip_path)
                 .output()
                 .map_err(|e| PistonError::Generic(format!("Ditto failed to execute: {}", e)))?;
-            
+
             if !zip.status.success() {
                 return Err(PistonError::Generic(format!(
-                    "ditto failed: {}", String::from_utf8_lossy(&zip.stderr)
+                    "ditto failed: {}",
+                    String::from_utf8_lossy(&zip.stderr)
                 )));
             }
 
             //Submit for notarization (using stored keychain profile)
             let submit = Command::new("xcrun")
-                .args([
-                    "notarytool", "submit",])
+                .args(["notarytool", "submit"])
                 .arg(&zip_path)
-                .args([
-                     "--keychain-profile", 
-                     "DeveloperID-Notary",
-                    "--wait"
-                ])
+                .args(["--keychain-profile", "DeveloperID-Notary", "--wait"])
                 .output()
-                .map_err(|e| PistonError::Generic(format!("notarytool submit failed to execute: {}", e)))?;
+                .map_err(|e| {
+                    PistonError::Generic(format!("notarytool submit failed to execute: {}", e))
+                })?;
 
-            if !submit.status.success() || String::from_utf8_lossy(&submit.stdout).contains("status: Invalid") {
+            if !submit.status.success()
+                || String::from_utf8_lossy(&submit.stdout).contains("status: Invalid")
+            {
                 return Err(PistonError::Generic(format!(
                     "notarytool submit failed: {} : {}",
                     String::from_utf8_lossy(&submit.stderr).trim(),
@@ -374,11 +476,17 @@ impl MacOSBuilder {
                 )));
             }
 
-            println!("Successfully signed & notarized the app bundle available at {}", working_path.display());
+            println!(
+                "Successfully signed & notarized the app bundle available at {}",
+                working_path.display()
+            );
         //sign for app store release
-        }else {
+        } else {
             println!("keystore path & ASC API key properly configured");
-            let asc = AscClient{ api_key: self.asc_api_key.clone(), keystore_path: self.keystore_path.clone().unwrap()};
+            let asc = AscClient {
+                api_key: self.asc_api_key.clone(),
+                keystore_path: self.keystore_path.clone().unwrap(),
+            };
             //obtain certificate
             let security_cert = asc.create_or_find_security_cert(self.team_id.clone())?;
             let security_profile = format!("{} ({})", security_cert.1, security_cert.0);
@@ -387,22 +495,31 @@ impl MacOSBuilder {
 
             let app_name = self.app_name.clone();
             //sign the app bundle for distribution
-            AscClient::sign_app_bundle(&app_name, &output_path, &security_profile, self.bundle_id.as_ref(), false, false)?;
-
+            AscClient::sign_app_bundle(
+                &app_name,
+                &output_path,
+                &security_profile,
+                self.bundle_id.as_ref(),
+                false,
+                false,
+            )?;
         }
         Ok(())
     }
 }
 
-pub struct MacOSRunner{
-release: bool,
-cwd: PathBuf,
-cargo_path: String,
+pub struct MacOSRunner {
+    release: bool,
+    cwd: PathBuf,
+    cargo_path: String,
 }
 
 impl MacOSRunner {
-
-    pub fn start(release: bool, cwd: PathBuf, env_vars: HashMap<String, String>) -> Result<(), PistonError> {
+    pub fn start(
+        release: bool,
+        cwd: PathBuf,
+        env_vars: HashMap<String, String>,
+    ) -> Result<(), PistonError> {
         println!("Initializing runner for MacOS");
         let mut op = MacOSRunner::new(release, cwd, env_vars)?;
 
@@ -410,19 +527,32 @@ impl MacOSRunner {
 
         Ok(())
     }
-    fn new(release: bool, cwd: PathBuf, env_vars: HashMap<String, String>) -> Result<Self, PistonError> {
-        println!("Creating MacOS Runner: release flag: {:?}, cwd: {:?}", release, cwd);
+    fn new(
+        release: bool,
+        cwd: PathBuf,
+        env_vars: HashMap<String, String>,
+    ) -> Result<Self, PistonError> {
+        println!(
+            "Creating MacOS Runner: release flag: {:?}, cwd: {:?}",
+            release, cwd
+        );
         //parse env vars
-        let cargo_path = env_vars.get("cargo_path").cloned().unwrap_or("cargo".to_string());
+        let cargo_path = env_vars
+            .get("cargo_path")
+            .cloned()
+            .unwrap_or("cargo".to_string());
 
-        Ok(MacOSRunner{release: release, cwd: cwd, cargo_path: cargo_path})
-        
+        Ok(MacOSRunner {
+            release: release,
+            cwd: cwd,
+            cargo_path: cargo_path,
+        })
     }
 
     fn run(&mut self) -> Result<(), PistonError> {
         println!("Running for MacOS");
         //Run the binary for MacOS
-        let cargo_args = format!("run {}", if self.release {"--release"} else {""});
+        let cargo_args = format!("run {}", if self.release { "--release" } else { "" });
         let cargo_cmd = format!("{} {}", self.cargo_path, cargo_args);
         Command::new("bash")
             .arg("-c")
