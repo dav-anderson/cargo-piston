@@ -190,7 +190,7 @@ OriginalFilename = "<appname>.exe"
 
 # Linux Output Configuration
 
-## Cofingure paths in .env (MACOS HOST ONLY)
+## Configure paths in .env (MACOS HOST ONLY)
 `zigbuild_path=/Users/<username>/.cargo/bin/cargo-zigbuild`
 
 `homebrew_path=/opt/homebrew/bin`
