@@ -198,10 +198,6 @@ OriginalFilename = "<appname>.exe"
 ## Install zigbuild via (MACOS HOST ONLY)
 `cargo install cargo-zigbuild`
 
-Provide a path to your cargo dependency binaries in the `.env` (somewhere like `~/.cargo/bin`)
-
-`zigbuild_path=/Users/<username>/.cargo/bin/cargo-zigbuild`
-
 ## Install Zig via homebrew (MACOS HOST ONLY)
 
 provide a path to your homebrew binaries (somewhere like `/opt/homebrew/bin`) in your `.env`
