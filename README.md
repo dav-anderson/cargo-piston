@@ -195,14 +195,14 @@ OriginalFilename = "<appname>.exe"
 
 `homebrew_path=/opt/homebrew/bin`
 
-## Install zigbuild via (MACOS HOST ONLY)
-`cargo install cargo-zigbuild`
-
 ## Install Zig via homebrew (MACOS HOST ONLY)
 
 provide a path to your homebrew binaries (somewhere like `/opt/homebrew/bin`) in your `.env`
 
 `homebrew_path=/opt/homebrew/bin`
+
+## Install zigbuild via (MACOS HOST ONLY)
+`cargo install cargo-zigbuild`
 
 ## Automated Signing
 
