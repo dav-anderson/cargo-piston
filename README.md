@@ -191,17 +191,19 @@ OriginalFilename = "<appname>.exe"
 # Linux Output Configuration
 
 ## Configure paths in .env (MACOS HOST ONLY)
+
 `zigbuild_path=/Users/<username>/.cargo/bin/cargo-zigbuild`
 
 `homebrew_path=/opt/homebrew/bin`
 
 ## Install Zig via homebrew (MACOS HOST ONLY)
 
-provide a path to your homebrew binaries (somewhere like `/opt/homebrew/bin`) in your `.env`
+Provide a path to your homebrew binaries (somewhere like `/opt/homebrew/bin`) in your `.env`
 
 `homebrew_path=/opt/homebrew/bin`
 
-## Install zigbuild via (MACOS HOST ONLY)
+## Install zigbuild (MACOS HOST ONLY)
+
 `cargo install cargo-zigbuild`
 
 ## Automated Signing
@@ -339,10 +341,6 @@ When downloaded from apple developer portal, the key file will look like this:
 `asc_key_path=path/to/authkey`
 
 Also add the `asc_key_id` and the `asc_issuer_id` to the `.env`, these items are obtainable from `appstoreconnect.apple.com/access/integrations/api`. The `asc_issuer_id` can be found at the top of the key list, and the  The `asc_key_id` can be found in the row corresponding to the key you've chosen. This `asc_key_id` should match the filename of the key you've selected in the `asc_key_path`.
-
-Next provide your full legal name in the `.env`. This should match the full name associated with your apple developer account.
-
-`dev_name=Bob Smith`
 
 Lastly provide the full path to your MacOS keychain directory in the `.env`:
 
